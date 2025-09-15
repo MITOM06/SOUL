@@ -16,6 +16,8 @@ class CreateOrdersTable extends Migration
             $table->string('payment_method', 100)->nullable();
             $table->timestamps(6);
 
+       
+
             $table->index('user_id', 'idx_orders_user_id');
             $table->index('status', 'idx_orders_status');
             $table->index('created_at', 'idx_orders_created_at');

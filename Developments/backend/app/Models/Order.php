@@ -38,6 +38,8 @@ class Order extends Model
     /**
      * There may be multiple payments for a single order (e.g. retries).
      */
+
+     
     public function payments()
     {
         return $this->hasMany(Payment::class, 'order_id');
