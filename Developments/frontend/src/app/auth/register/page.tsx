@@ -1,12 +1,12 @@
 // frontend/src/app/auth/register/page.tsx
-'use client';
+"use client";
 
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@/contexts/AuthContext';
 import { EyeIcon, EyeSlashIcon } from '@heroicons/react/24/outline';
 import { useForm } from 'react-hook-form';
+import toast from 'react-hot-toast';
 
 interface RegisterForm {
   name: string;
@@ -18,7 +18,6 @@ interface RegisterForm {
 
 const RegisterPage = () => {
   const router = useRouter();
-  const { register: registerUser } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -34,17 +33,38 @@ const RegisterPage = () => {
 
   const onSubmit = async (data: RegisterForm) => {
     setIsLoading(true);
-    const success = await registerUser({
-      name: data.name,
-      email: data.email,
-      password: data.password,
-      password_confirmation: data.password_confirmation
-    });
-    
-    if (success) {
-      router.push('/');
+    try {
+      const response = await fetch('/api/v1/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: data.name,
+          email: data.email,
+          password: data.password
+        }),
+        credentials: 'include'
+      });
+
+      const result = await response.json();
+
+      if (response.ok && result.success) {
+        toast.success(result.message || 'Registration successful. Please log in.');
+        router.push('/auth/login');
+      } else {
+        if (result.errors) {
+          // Flatten validation errors
+          const messages = Object.values(result.errors).flat().join(' ');
+          toast.error(messages || 'Registration failed');
+        } else {
+          toast.error(result.message || 'Registration failed');
+        }
+      }
+    } catch (error) {
+      console.error('Register error:', error);
+      toast.error('An error occurred during registration');
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   };
 
   return (
@@ -53,15 +73,15 @@ const RegisterPage = () => {
         {/* Header */}
         <div>
           <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            Tạo tài khoản mới
+            Create a new account
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600">
-            Hoặc{' '}
+            Or{' '}
             <Link
               href="/auth/login"
               className="font-medium text-blue-600 hover:text-blue-500"
             >
-              đăng nhập tài khoản hiện có
+              sign in to an existing account
             </Link>
           </p>
         </div>
@@ -72,19 +92,19 @@ const RegisterPage = () => {
             {/* Name */}
             <div>
               <label htmlFor="name" className="block text-sm font-medium text-gray-700">
-                Họ và tên
+                Full name
               </label>
               <input
                 {...register('name', {
-                  required: 'Họ và tên là bắt buộc',
+                  required: 'Full name is required',
                   minLength: {
                     value: 2,
-                    message: 'Tên phải có ít nhất 2 ký tự'
+                    message: 'Name must be at least 2 characters'
                   }
                 })}
                 type="text"
                 className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                placeholder="Nhập họ và tên"
+                placeholder="Enter your full name"
               />
               {errors.name && (
                 <p className="mt-1 text-sm text-red-600">{errors.name.message}</p>
@@ -98,15 +118,15 @@ const RegisterPage = () => {
               </label>
               <input
                 {...register('email', {
-                  required: 'Email là bắt buộc',
+                  required: 'Email is required',
                   pattern: {
                     value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
-                    message: 'Email không hợp lệ'
+                    message: 'Invalid email address'
                   }
                 })}
                 type="email"
                 className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                placeholder="Nhập email của bạn"
+                placeholder="Enter your email"
               />
               {errors.email && (
                 <p className="mt-1 text-sm text-red-600">{errors.email.message}</p>
@@ -116,20 +136,20 @@ const RegisterPage = () => {
             {/* Password */}
             <div>
               <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-                Mật khẩu
+                Password
               </label>
               <div className="mt-1 relative">
                 <input
                   {...register('password', {
-                    required: 'Mật khẩu là bắt buộc',
+                    required: 'Password is required',
                     minLength: {
                       value: 8,
-                      message: 'Mật khẩu phải có ít nhất 8 ký tự'
+                      message: 'Password must be at least 8 characters'
                     }
                   })}
                   type={showPassword ? 'text' : 'password'}
                   className="block w-full px-3 py-2 pr-10 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Nhập mật khẩu"
+                  placeholder="Enter your password"
                 />
                 <button
                   type="button"
@@ -151,18 +171,18 @@ const RegisterPage = () => {
             {/* Confirm Password */}
             <div>
               <label htmlFor="password_confirmation" className="block text-sm font-medium text-gray-700">
-                Xác nhận mật khẩu
+                Confirm password
               </label>
               <div className="mt-1 relative">
                 <input
                   {...register('password_confirmation', {
-                    required: 'Vui lòng xác nhận mật khẩu',
+                    required: 'Please confirm your password',
                     validate: (value) =>
-                      value === password || 'Mật khẩu xác nhận không khớp'
+                      value === password || 'Password confirmation does not match'
                   })}
                   type={showConfirmPassword ? 'text' : 'password'}
                   className="block w-full px-3 py-2 pr-10 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Nhập lại mật khẩu"
+                  placeholder="Re-enter your password"
                 />
                 <button
                   type="button"
@@ -186,7 +206,7 @@ const RegisterPage = () => {
           <div className="flex items-center">
             <input
               {...register('terms', {
-                required: 'Vui lòng đồng ý với điều khoản sử dụng'
+                required: 'You must agree to the terms of use'
               })}
               id="terms"
               name="terms"
@@ -194,13 +214,13 @@ const RegisterPage = () => {
               className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
             />
             <label htmlFor="terms" className="ml-2 block text-sm text-gray-900">
-              Tôi đồng ý với{' '}
+              I agree to the{' '}
               <Link href="/terms" className="text-blue-600 hover:text-blue-500">
-                điều khoản sử dụng
+                Terms of Use
               </Link>{' '}
-              và{' '}
+              and the{' '}
               <Link href="/privacy" className="text-blue-600 hover:text-blue-500">
-                chính sách bảo mật
+                Privacy Policy
               </Link>
             </label>
           </div>
@@ -218,7 +238,7 @@ const RegisterPage = () => {
               {isLoading ? (
                 <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
               ) : (
-                'Đăng ký'
+                'Register'
               )}
             </button>
           </div>

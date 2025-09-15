@@ -3,7 +3,8 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '../../../contexts/AuthContext';
+import toast from 'react-hot-toast';
 import { EyeIcon, EyeSlashIcon } from '@heroicons/react/24/outline';
 import { useForm } from 'react-hook-form';
 
@@ -26,12 +27,19 @@ const LoginPage = () => {
 
   const onSubmit = async (data: LoginForm) => {
     setIsLoading(true);
-    const success = await login(data);
-    
-    if (success) {
-      router.push('/');
+    try {
+      const success = await login({ email: data.email, password: data.password });
+      if (success) {
+        router.push('/');
+      } else {
+        toast.error('Login failed. Please check your credentials.');
+      }
+    } catch (error) {
+      console.error('Login error:', error);
+      toast.error('An error occurred while logging in');
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   };
 
   return (
@@ -40,7 +48,7 @@ const LoginPage = () => {
         {/* Header */}
         <div>
           <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            Đăng nhập tài khoản
+            Sign in to your account
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600">
             Hoặc{' '}
@@ -71,7 +79,7 @@ const LoginPage = () => {
                 })}
                 type="email"
                 className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                placeholder="Nhập email của bạn"
+                placeholder="Enter your email"
               />
               {errors.email && (
                 <p className="mt-1 text-sm text-red-600">{errors.email.message}</p>
@@ -81,7 +89,7 @@ const LoginPage = () => {
             {/* Password */}
             <div>
               <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-                Mật khẩu
+                Password
               </label>
               <div className="mt-1 relative">
                 <input
@@ -94,7 +102,7 @@ const LoginPage = () => {
                   })}
                   type={showPassword ? 'text' : 'password'}
                   className="block w-full px-3 py-2 pr-10 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Nhập mật khẩu"
+                  placeholder="Enter your password"
                 />
                 <button
                   type="button"
@@ -124,17 +132,12 @@ const LoginPage = () => {
                 className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
               />
               <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-900">
-                Ghi nhớ đăng nhập
+                Remember me
               </label>
             </div>
 
             <div className="text-sm">
-              <Link
-                href="/auth/forgot-password"
-                className="font-medium text-blue-600 hover:text-blue-500"
-              >
-                Quên mật khẩu?
-              </Link>
+                <Link href="/auth/forgot-password" className="font-medium text-blue-600 hover:text-blue-500">Forgot password?</Link>
             </div>
           </div>
 
@@ -148,7 +151,7 @@ const LoginPage = () => {
               {isLoading ? (
                 <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
               ) : (
-                'Đăng nhập'
+                'Sign in'
               )}
             </button>
           </div>

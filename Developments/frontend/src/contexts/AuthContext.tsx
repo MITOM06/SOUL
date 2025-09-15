@@ -30,61 +30,61 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Kiểm tra token khi load trang
   useEffect(() => {
-    const token = Cookies.get('auth_token');
-    if (token) {
-      refreshUser();
-    } else {
-      setIsLoading(false);
-    }
+    // For session-based auth (Sanctum), check by calling /user endpoint.
+    refreshUser();
   }, []);
 
   const login = async (credentials: { email: string; password: string }) => {
     try {
       const response = await authAPI.login(credentials);
-      const data: ApiResponse<AuthResponse> = response.data;
-      
-      if (data.success && data.data) {
-        // Lưu token
-        Cookies.set('auth_token', data.data.access_token, { expires: 7 });
-        
-        // Set user state
-        setUser(data.data.user);
-        setSubscriptionLevel(data.data.subscription_level);
-        
-        toast.success('Đăng nhập thành công!');
+      const data: ApiResponse<any> = response.data;
+
+      if (response.status === 200 && data.success && data.data) {
+        // Backend uses session cookie (Sanctum). We don't expect access_token.
+        setUser({
+          id: data.data.id,
+          name: data.data.name,
+          email: data.data.email,
+        });
+        // subscription_level may not exist; keep default if absent
+        if (data.data.subscription_level) setSubscriptionLevel(data.data.subscription_level);
+        toast.success('Login successful!');
         return true;
+      } else {
+        toast.error(data.message || 'Login failed');
+        return false;
       }
-      return false;
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Đăng nhập thất bại');
+      toast.error(error.response?.data?.message || 'Login failed');
       return false;
     }
   };
 
   const register = async (userData: {
-    name: string;
+    name?: string;
     email: string;
     password: string;
-    password_confirmation: string;
+    password_confirmation?: string;
   }) => {
     try {
       const response = await authAPI.register(userData);
-      const data: ApiResponse<AuthResponse> = response.data;
-      
-      if (data.success && data.data) {
-        // Lưu token
-        Cookies.set('auth_token', data.data.access_token, { expires: 7 });
-        
-        // Set user state
-        setUser(data.data.user);
-        setSubscriptionLevel(data.data.subscription_level);
-        
-        toast.success('Đăng ký thành công!');
+      const data: ApiResponse<any> = response.data;
+
+      if ((response.status === 200 || response.status === 201) && data.success && data.data) {
+        // Backend created user; do not assume an access token is returned.
+        setUser({
+          id: data.data.id,
+          name: data.data.name,
+          email: data.data.email,
+        });
+        if (data.data.subscription_level) setSubscriptionLevel(data.data.subscription_level);
+        toast.success('Registration successful!');
         return true;
       }
+      toast.error(data.message || 'Registration failed');
       return false;
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Đăng ký thất bại');
+      toast.error(error.response?.data?.message || 'Registration failed');
       return false;
     }
   };
@@ -98,21 +98,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       Cookies.remove('auth_token');
       setUser(null);
       setSubscriptionLevel('free');
-      toast.success('Đăng xuất thành công');
+      toast.success('Logged out');
     }
   };
 
   const refreshUser = async () => {
     try {
       const response = await authAPI.me();
-      const data: ApiResponse<{ user: User; subscription_level: string }> = response.data;
-      
-      if (data.success && data.data) {
-        setUser(data.data.user);
-        setSubscriptionLevel(data.data.subscription_level);
+      const data: ApiResponse<any> = response.data;
+
+      if (response.status === 200 && data.success && data.data) {
+        // Backend returns user object in data
+        setUser({
+          id: data.data.id,
+          name: data.data.name,
+          email: data.data.email,
+        });
+        if (data.data.subscription_level) setSubscriptionLevel(data.data.subscription_level);
+      } else {
+        Cookies.remove('auth_token');
+        setUser(null);
       }
     } catch (error) {
       Cookies.remove('auth_token');
+      setUser(null);
     } finally {
       setIsLoading(false);
     }

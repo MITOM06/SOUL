@@ -1,37 +1,71 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\Api\AuthController;
-use App\Http\Controllers\Api\CategoryController;
+use App\Http\Controllers\Api\V1\Auth\LoginController;
+use App\Http\Controllers\Api\V1\Auth\RegisterController;
+use App\Http\Controllers\Api\V1\Auth\AuthController;
 use App\Http\Controllers\Api\ProductController;
 use App\Http\Controllers\Api\OrderController;
-use App\Http\Controllers\Api\FileController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\DashboardController;
 
+// Các controller còn lại giữ nguyên nếu có
+
+
+Route::get('/health', fn () => response()->json(['ok' => true, 'ts' => now()->toISOString()]));
+
 Route::prefix('v1')->group(function () {
-    // Public
-    Route::post('register', [AuthController::class,'register']);
-    Route::post('login', [AuthController::class,'login']);
 
-    Route::get('categories', [CategoryController::class,'index']);
-    Route::get('categories/{category}', [CategoryController::class,'show']);
-    Route::get('products', [ProductController::class,'index']);
-    Route::get('products/{product}', [ProductController::class,'show']);
-
-    // Protected
+    // Auth
+    Route::post('register', [RegisterController::class, 'register']); 
+    Route::post('login',    [LoginController::class, 'login']); 
+    
+    // Auth routes
     Route::middleware('auth:sanctum')->group(function () {
-        Route::post('logout', [AuthController::class,'logout']);
-        Route::get('me', [AuthController::class,'me']);
-        Route::post('upload', [FileController::class,'upload']);
-        Route::apiResource('orders', OrderController::class)->only(['index','store','show']);
+        Route::post('logout', [AuthController::class, 'logout']);
+        Route::get('user', [AuthController::class, 'getUser']);
+        Route::post('change-password', [AuthController::class, 'changePassword']);
+        Route::post('update-profile', [AuthController::class, 'updateProfile']);
+    });
 
-        // Admin protected
-        Route::middleware('admin')->prefix('admin')->group(function () {
-            Route::apiResource('products', ProductController::class)->except(['index','show']);
-            Route::apiResource('categories', CategoryController::class)->only(['store','update','destroy']);
-            Route::apiResource('users', UserController::class);
-            Route::get('stats', [DashboardController::class,'stats']);
-        });
+    // Public product routes
+    Route::get('products',                [ProductController::class, 'index']); 
+    Route::get('products/{product}',      [ProductController::class, 'show']);
+
+    // ...existing code...
+
+    // Authenticated user routes
+    Route::middleware('auth:sanctum')->group(function () {
+        // Orders
+        Route::get('orders',            [OrderController::class, 'index']);
+        Route::post('orders',           [OrderController::class, 'store']);
+        Route::get('orders/{order}',    [OrderController::class, 'show']);
+
+        // Product secured file download
+        Route::get('products/{product}/files/{file}/download', [ProductController::class, 'downloadFile']);
+    });
+
+    // Admin routes
+    Route::prefix('admin')->middleware(['auth:sanctum', 'admin'])->group(function () {
+        // Dashboard / stats
+        Route::get('stats', [DashboardController::class, 'stats']);
+
+        // Users management
+        Route::get('users',           [UserController::class, 'index']);
+        Route::get('users/{user}',    [UserController::class, 'show']);
+        Route::put('users/{user}',    [UserController::class, 'update']);
+        Route::delete('users/{user}', [UserController::class, 'destroy']);
+
+        // Products (write)
+        Route::post('products',                 [ProductController::class, 'store']);
+        Route::put('products/{product}',        [ProductController::class, 'update']);
+        Route::delete('products/{product}',     [ProductController::class, 'destroy']);
+
+    // ...existing code...
+    });
+
+    // Fallback for unknown endpoints within /v1
+    Route::fallback(function () {
+        return response()->json(['message' => 'Endpoint not found'], 404);
     });
 });

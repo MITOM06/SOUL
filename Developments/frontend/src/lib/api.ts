@@ -11,12 +11,17 @@ const api = axios.create({
     'Content-Type': 'application/json',
     'Accept': 'application/json',
   },
+  // allow sending/receiving cookies for session-based auth (Sanctum)
+  withCredentials: true,
 });
 
 // Interceptor để tự động thêm token
+// We rely on cookie-based session authentication (Laravel Sanctum).
+// Keep the request interceptor in case an auth token exists, but do not require it.
 api.interceptors.request.use((config) => {
   const token = Cookies.get('auth_token');
   if (token) {
+    config.headers = config.headers || {};
     config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
@@ -39,19 +44,21 @@ export default api;
 
 // Auth API
 export const authAPI = {
+  // Backend routes use /v1/* under /api prefix (e.g. /api/v1/login)
   login: (credentials: { email: string; password: string }) =>
-    api.post('/auth/login', credentials),
-  
+    api.post('/v1/login', credentials),
+
   register: (userData: {
-    name: string;
+    name?: string;
     email: string;
     password: string;
-    password_confirmation: string;
-  }) => api.post('/auth/register', userData),
-  
-  logout: () => api.post('/auth/logout'),
-  
-  me: () => api.get('/auth/me'),
+    password_confirmation?: string;
+  }) => api.post('/v1/register', userData),
+
+  logout: () => api.post('/v1/logout'),
+
+  // Get current authenticated user
+  me: () => api.get('/v1/user'),
 };
 
 // Categories API
