@@ -2,26 +2,38 @@
 
 namespace App\Http\Middleware;
 
-use App\Providers\RouteServiceProvider;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Symfony\Component\HttpFoundation\Response;
 
 class RedirectIfAuthenticated
 {
     /**
-     * Handle an incoming request.
+     * If the user is already authenticated, redirect (for web) or return a JSON response (for API).
      *
+     * @param  \Illuminate\Http\Request  $request
      * @param  \Closure(\Illuminate\Http\Request): (\Symfony\Component\HttpFoundation\Response)  $next
+     * @param  string|null  ...$guards
+     * @return \Symfony\Component\HttpFoundation\Response
      */
-    public function handle(Request $request, Closure $next, string ...$guards): Response
+    public function handle(Request $request, Closure $next, ...$guards)
     {
         $guards = empty($guards) ? [null] : $guards;
 
         foreach ($guards as $guard) {
             if (Auth::guard($guard)->check()) {
-                return redirect(RouteServiceProvider::HOME);
+                // API clients: return a short JSON instead of redirect loops
+                if ($request->expectsJson() || $request->is('api/*')) {
+                    return response()->json([
+                        'error' => [
+                            'code'    => 'ALREADY_AUTHENTICATED',
+                            'message' => 'You are already authenticated.',
+                        ],
+                    ], 409); // or 204 if you prefer
+                }
+
+                // Web flow: redirect to intended page or homepage
+                return redirect()->intended(url('/'));
             }
         }
 
