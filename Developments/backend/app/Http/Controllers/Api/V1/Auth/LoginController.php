@@ -27,23 +27,24 @@ class LoginController extends Controller
         }
 
         $user = User::where('email', $request->email)->first();
-        if (!$user || !Hash::check($request->password, $user->password_hash)) {
+
+        if (! $user || ! Hash::check($request->password, $user->password_hash)) {
             return response()->json([
                 'success' => false,
                 'message' => 'Invalid email or password.'
             ], 401);
         }
-        if (!$user->is_active) {
+
+        if (! $user->is_active) {
             return response()->json([
                 'success' => false,
                 'message' => 'Account is inactive.'
             ], 403);
         }
 
-        // Sử dụng Sanctum để tạo cookie đăng nhập
-        Auth::login($user);
+        // ✅ Dùng Sanctum token thay vì Auth::login()
+        $token = $user->createToken('api-token')->plainTextToken;
 
-        // Laravel sẽ tự động gửi cookie session nếu guard là web
         return response()->json([
             'success' => true,
             'data' => [
@@ -52,6 +53,7 @@ class LoginController extends Controller
                 'name' => $user->name,
                 'role' => $user->role,
                 'is_active' => $user->is_active,
+                'token' => $token, // 👈 gửi token cho frontend
             ],
             'message' => 'Login successful.'
         ]);

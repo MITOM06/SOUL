@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Auth;
 class AuthController extends Controller
 {
 	// Lấy thông tin user hiện tại
+	// Get current authenticated user (kept as `me` for compatibility)
 	public function me(Request $request)
 	{
 		$user = $request->user();
@@ -28,6 +29,12 @@ class AuthController extends Controller
 				'is_active' => $user->is_active,
 			]
 		]);
+	}
+
+	// Backwards-compatible alias used by routes: getUser
+	public function getUser(Request $request)
+	{
+		return $this->me($request);
 	}
 
 	// Đăng xuất user (xóa session/cookie)

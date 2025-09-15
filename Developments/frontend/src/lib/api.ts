@@ -3,6 +3,8 @@ import axios from 'axios';
 import Cookies from 'js-cookie';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
+// API root without the /api suffix (used to call sanctum csrf endpoint)
+const API_ROOT = API_URL.replace(/\/api\/?$/, '');
 
 // Tạo instance axios
 const api = axios.create({
@@ -44,18 +46,29 @@ export default api;
 
 // Auth API
 export const authAPI = {
-  // Backend routes use /v1/* under /api prefix (e.g. /api/v1/login)
-  login: (credentials: { email: string; password: string }) =>
-    api.post('/v1/login', credentials),
+  // Ensure CSRF cookie (Sanctum) is present before stateful auth requests
+  ensureCsrf: () => axios.get(`${API_ROOT}/sanctum/csrf-cookie`, { withCredentials: true }),
 
-  register: (userData: {
+  // Backend routes use /v1/* under /api prefix (e.g. /api/v1/login)
+  login: async (credentials: { email: string; password: string }) => {
+    await axios.get(`${API_ROOT}/sanctum/csrf-cookie`, { withCredentials: true });
+    return api.post('/v1/login', credentials, { withCredentials: true });
+  },
+
+  register: async (userData: {
     name?: string;
     email: string;
     password: string;
     password_confirmation?: string;
-  }) => api.post('/v1/register', userData),
+  }) => {
+    await axios.get(`${API_ROOT}/sanctum/csrf-cookie`, { withCredentials: true });
+    return api.post('/v1/register', userData);
+  },
 
-  logout: () => api.post('/v1/logout'),
+  logout: async () => {
+    await axios.get(`${API_ROOT}/sanctum/csrf-cookie`, { withCredentials: true });
+    return api.post('/v1/logout');
+  },
 
   // Get current authenticated user
   me: () => api.get('/v1/user'),

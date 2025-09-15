@@ -16,7 +16,6 @@ class CreateUsersTable extends Migration
             $table->string('name', 150)->nullable();
             $table->boolean('is_active')->default(true);
             $table->timestamps(6);
-            $table->index('role', 'idx_users_role');
         });
     }
 

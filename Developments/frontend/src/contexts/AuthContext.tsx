@@ -39,7 +39,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const response = await authAPI.login(credentials);
       const data: ApiResponse<any> = response.data;
 
-      if (response.status === 200 && data.success && data.data) {
+      if ((response.status === 200 || response.status === 201) && data && data.success) {
         // Backend uses session cookie (Sanctum). We don't expect access_token.
         setUser({
           id: data.data.id,
@@ -50,10 +50,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (data.data.subscription_level) setSubscriptionLevel(data.data.subscription_level);
         toast.success('Login successful!');
         return true;
-      } else {
-        toast.error(data.message || 'Login failed');
-        return false;
       }
+      // If backend returns success=false or no data, surface message
+      toast.error(data?.message || 'Login failed');
+      return false;
     } catch (error: any) {
       toast.error(error.response?.data?.message || 'Login failed');
       return false;
@@ -70,7 +70,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const response = await authAPI.register(userData);
       const data: ApiResponse<any> = response.data;
 
-      if ((response.status === 200 || response.status === 201) && data.success && data.data) {
+      if ((response.status === 200 || response.status === 201) && data && data.success) {
         // Backend created user; do not assume an access token is returned.
         setUser({
           id: data.data.id,
