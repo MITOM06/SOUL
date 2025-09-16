@@ -35,8 +35,8 @@ api.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401) {
       // Token hết hạn, redirect về login
-      Cookies.remove('auth_token');
-      window.location.href = '/auth/login';
+      // Cookies.remove('auth_token');
+      // window.location.href = '/auth/login';
     }
     return Promise.reject(error);
   }

@@ -5,8 +5,8 @@ use App\Http\Controllers\Api\V1\Auth\LoginController;
 use App\Http\Controllers\Api\V1\Auth\RegisterController;
 use App\Http\Controllers\Api\V1\Auth\AuthController;
 use App\Http\Controllers\Api\ProductController;
-use App\Http\Controllers\Api\Commerce\OrderController;
-use App\Http\Controllers\Api\Commerce\OrderItemController;
+use App\Http\Controllers\Api\V1\Commerce\OrderController;
+use App\Http\Controllers\Api\V1\Commerce\OrderItemController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\DashboardController;
 
@@ -18,16 +18,16 @@ Route::get('/health', fn() => response()->json(['ok' => true, 'ts' => now()->toI
 Route::prefix('v1')->group(function () {
 
     // Auth
-    Route::post('register', [RegisterController::class, 'register']);
-    Route::post('login', [LoginController::class, 'login']);
+    // Route::post('register', [RegisterController::class, 'register']);
+    // Route::post('login', [LoginController::class, 'login']);
 
-    // Auth routes
-    Route::middleware('auth:sanctum')->group(function () {
+    // Auth routes 
+    // Route::middleware('auth:sanctum')->group(function () {
         Route::post('logout', [AuthController::class, 'logout']);
         Route::get('user', [AuthController::class, 'getUser']);
         Route::post('change-password', [AuthController::class, 'changePassword']);
         Route::post('update-profile', [AuthController::class, 'updateProfile']);
-    });
+    // });
 
     // Public product routes
     Route::get('products', [ProductController::class, 'index']);
@@ -36,7 +36,7 @@ Route::prefix('v1')->group(function () {
     // ...existing code...
 
     //Authenticated user routes
-    Route::middleware('auth:sanctum')->group(function () {
+    // Route::middleware('auth:sanctum')->group(function () {
         // Orders
         // Route::get('orders',            [OrderController::class, 'index']);
         // Route::post('orders',           [OrderController::class, 'store']);
@@ -53,17 +53,8 @@ Route::prefix('v1')->group(function () {
 
         // Product secured file download
         Route::get('products/{product}/files/{file}/download', [ProductController::class, 'downloadFile']);
-    });
+    // });
     
-//     // Orders
-// Route::get('orders', [OrderController::class, 'index']);
-// Route::post('orders/checkout', [OrderController::class, 'checkout']);
-
-// // Order Items
-// Route::post('orders/items', [OrderItemController::class, 'store']);       
-// Route::put('orders/items/{itemId}', [OrderItemController::class, 'update']);
-// Route::delete('orders/items/{itemId}', [OrderItemController::class, 'destroy']);
-
 
 
     // Admin routes
