@@ -1,7 +1,7 @@
 <?php
 
 
-namespace App\Http\Controllers\Api\Commerce;
+namespace App\Http\Controllers\Api\V1\Commerce;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
@@ -100,48 +100,97 @@ class OrderController extends Controller
 
 
     // Lấy đơn hàng pending (giống cart) của user
-    public function index(Request $request)
-    {
-        // Sử dụng user từ auth nếu đã setup sanctum
-        $user = $request->user();
+//    public function index(Request $request)
+// {
+//     $user = $request->user();
+//     if (!$user) {
+//         return response()->json(['success' => false, 'message' => 'Unauthenticated'], 401);
+//     }
 
-        $order = Order::with('items.product')
-            ->where('user_id', $user->id)
-            ->where('status', 'pending')
-            ->first();
+//     $order = Order::with('items.product')
+//         ->where('user_id', $user->id)
+//         ->where('status', 'pending')
+//         ->first();
 
+//     return response()->json([
+//         'success' => true,
+//         'data' => $order, // có thể null
+//         'message' => $order ? 'Pending order found' : 'No pending order found'
+//     ]);
+// }
+
+//test
+public function index(Request $request)
+{
+    // $user = $request->user(); // comment tạm
+    $userId = 1; // id user có sẵn trong DB
+
+    $order = Order::with('items.product')
+        ->where('user_id', $userId)
+        ->where('status', 'pending')
+        ->first();
+
+    return response()->json([
+        'success' => true,
+        'data' => $order, // có thể null
+        'message' => $order ? 'Pending order found' : 'No pending order found'
+    ]);
+}
+
+// public function checkout(Request $request)
+// {
+//     $user = $request->user();
+//     if (!$user) {
+//         return response()->json(['success' => false, 'message' => 'Unauthenticated'], 401);
+//     }
+
+//     $order = Order::with('items.product')
+//         ->where('user_id', $user->id)
+//         ->where('status', 'pending')
+//         ->first();
+
+//     if (!$order || $order->items->count() === 0) {
+//         return response()->json([
+//             'success' => false,
+//             'message' => 'No pending order to checkout'
+//         ], 404);
+//     }
+
+//     $order->update(['status' => 'paid']);
+
+//     return response()->json([
+//         'success' => true,
+//         'message' => 'Order checked out successfully',
+//         'data' => $order
+//     ]);
+// }
+
+//test
+public function checkout(Request $request)
+{
+    // $user = $request->user(); // comment tạm
+    $userId = 1; // id user có sẵn trong DB
+
+    $order = Order::with('items.product')
+        ->where('user_id', $userId)
+        ->where('status', 'pending')
+        ->first();
+
+    if (!$order || $order->items->count() === 0) {
         return response()->json([
-            'success' => true,
-            'data' => $order, // có thể null nếu chưa có đơn hàng
-            'message' => $order ? 'Pending order found' : 'No pending order found'
-        ]);
+            'success' => false,
+            'message' => 'No pending order to checkout'
+        ], 404);
     }
 
-    // Checkout (chốt đơn hàng)
-    public function checkout(Request $request)
-    {
-        $user = $request->user();
+    $order->update(['status' => 'paid']);
 
-        $order = Order::with('items.product')
-            ->where('user_id', $user->id)
-            ->where('status', 'pending')
-            ->first();
-
-        if (!$order) {
-            return response()->json([
-                'success' => false,
-                'message' => 'No pending order to checkout'
-            ], 404);
-        }
-
-        $order->update(['status' => 'paid']);
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Order checked out successfully',
-            'data' => $order
-        ]);
-    }
+    return response()->json([
+        'success' => true,
+        'message' => 'Order checked out successfully',
+        'data' => $order
+    ]);
+}
 }
 
 
