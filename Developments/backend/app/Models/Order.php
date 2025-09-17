@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Represents a customer order.  An order may have multiple items and
@@ -39,9 +40,12 @@ class Order extends Model
      * There may be multiple payments for a single order (e.g. retries).
      */
 
-     
+    
     public function payments()
     {
         return $this->hasMany(Payment::class, 'order_id');
     }
+
+    
+
 }

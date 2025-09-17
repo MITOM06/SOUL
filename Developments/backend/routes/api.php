@@ -9,6 +9,8 @@ use App\Http\Controllers\Api\V1\Commerce\OrderController;
 use App\Http\Controllers\Api\V1\Commerce\OrderItemController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\DashboardController;
+use App\Http\Controllers\Api\V1\Admin\AdminOrderController;
+use App\Http\Controllers\Api\V1\Admin\AdminOrderItemController;
 
 // Các controller còn lại giữ nguyên nếu có
 
@@ -78,6 +80,18 @@ Route::prefix('v1')->group(function () {
         Route::post('products', [ProductController::class, 'store']);
         Route::put('products/{product}', [ProductController::class, 'update']);
         Route::delete('products/{product}', [ProductController::class, 'destroy']);
+         
+          // Orders
+    Route::get('orders', [App\Http\Controllers\Api\V1\Admin\AdminOrderController::class, 'index']);
+    Route::get('orders/{order}', [App\Http\Controllers\Api\V1\Admin\AdminOrderController::class, 'show']);
+    Route::put('orders/{order}', [App\Http\Controllers\Api\V1\Admin\AdminOrderController::class, 'update']);
+    Route::delete('orders/{order}', [App\Http\Controllers\Api\V1\Admin\AdminOrderController::class, 'destroy']);
+
+    // Order Items
+    Route::get('orders/items', [AdminOrderItemController::class, 'index']);
+    Route::get('orders/items/{item}', [AdminOrderItemController::class, 'show']);
+    Route::put('orders/items/{item}', [AdminOrderItemController::class, 'update']);
+    Route::delete('orders/items/{item}', [AdminOrderItemController::class, 'destroy']);
 
         // ...existing code...
     });
