@@ -1,6 +1,8 @@
 <?php
 
 namespace Database\Seeders;
+use Illuminate\Support\Arr;
+use App\Models\User;
 
 use Illuminate\Database\Seeder;
 use App\Models\Order;
@@ -14,6 +16,13 @@ class OrdersSeeder extends Seeder
 {
     public function run()
     {
-        Order::factory()->count(30)->create();
+        $userIds = User::pluck('id')->toArray();
+Order::factory()
+    ->count(30)
+    ->state(function () use ($userIds) {
+        return ['user_id' => Arr::random($userIds)];
+    })
+    ->create();
+
     }
 }

@@ -29,15 +29,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   // Kiểm tra token khi load trang
-  useEffect(() => {
-    // For session-based auth (Sanctum), check by calling /user endpoint.
+useEffect(() => {
+  const token = Cookies.get('auth_token');
+  if (token) {
     refreshUser();
-  }, []);
+  } else {
+    setIsLoading(false);
+  }
+}, []);
+
 
   const login = async (credentials: { email: string; password: string }) => {
     try {
       const response = await authAPI.login(credentials);
       const data: ApiResponse<any> = response.data;
+
+      const success = (response.status === 200 || response.status === 201) && data && data.success;
+
+if (success) {
+  // LẤY TOKEN và LƯU LẠI
+  if (data.data?.token) {
+    // giữ đơn giản, token trong cookie
+    Cookies.set('auth_token', data.data.token, { sameSite: 'lax' });
+  }
+
+  if (data?.data?.token) {
+  Cookies.set('auth_token', data.data.token, { sameSite: 'lax' }); // lưu token
+}
+
+  setUser({
+    id: data.data.id,
+    name: data.data.name,
+    email: data.data.email,
+  });
+
+  if (data.data.subscription_level) setSubscriptionLevel(data.data.subscription_level);
+
+  toast.success('Login successful!');
+  return true;
+}
 
       if ((response.status === 200 || response.status === 201) && data && data.success) {
         // Backend uses session cookie (Sanctum). We don't expect access_token.

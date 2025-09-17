@@ -18,16 +18,22 @@ Route::get('/health', fn() => response()->json(['ok' => true, 'ts' => now()->toI
 Route::prefix('v1')->group(function () {
 
     // Auth
-    // Route::post('register', [RegisterController::class, 'register']);
-    // Route::post('login', [LoginController::class, 'login']);
+    Route::post('register', [RegisterController::class, 'register']);
+    Route::post('login', [LoginController::class, 'login']);
 
     // Auth routes 
-    // Route::middleware('auth:sanctum')->group(function () {
+  Route::middleware('auth:sanctum')->group(function () {
         Route::post('logout', [AuthController::class, 'logout']);
-        Route::get('user', [AuthController::class, 'getUser']);
-        Route::post('change-password', [AuthController::class, 'changePassword']);
-        Route::post('update-profile', [AuthController::class, 'updateProfile']);
-    // });
+        Route::get('user',    [AuthController::class, 'getUser']);
+
+        // Orders / download… các route cần login để dùng
+        Route::get('orders', [OrderController::class, 'index']);
+        Route::post('orders/checkout', [OrderController::class, 'checkout']);
+        Route::post('orders/items', [OrderItemController::class, 'store']);
+        Route::put('orders/items/{itemId}', [OrderItemController::class, 'update']);
+        Route::delete('orders/items/{itemId}', [OrderItemController::class, 'destroy']);
+        Route::get('products/{product}/files/{file}/download', [ProductController::class, 'downloadFile']);
+    });
 
     // Public product routes
     Route::get('products', [ProductController::class, 'index']);
@@ -35,12 +41,12 @@ Route::prefix('v1')->group(function () {
 
     // ...existing code...
 
-    //Authenticated user routes
-    // Route::middleware('auth:sanctum')->group(function () {
-        // Orders
-        // Route::get('orders',            [OrderController::class, 'index']);
-        // Route::post('orders',           [OrderController::class, 'store']);
-        // Route::get('orders/{order}',    [OrderController::class, 'show']);
+   // Authenticated user routes
+    Route::middleware('auth:sanctum')->group(function () {
+       // Orders
+        Route::get('orders',            [OrderController::class, 'index']);
+        Route::post('orders',           [OrderController::class, 'store']);
+        Route::get('orders/{order}',    [OrderController::class, 'show']);
 
         // Orders
         Route::get('orders', [OrderController::class, 'index']);
@@ -53,7 +59,7 @@ Route::prefix('v1')->group(function () {
 
         // Product secured file download
         Route::get('products/{product}/files/{file}/download', [ProductController::class, 'downloadFile']);
-    // });
+    });
     
 
 

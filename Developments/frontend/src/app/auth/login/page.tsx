@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '../../../contexts/AuthContext';
 import toast from 'react-hot-toast';
 import { EyeIcon, EyeSlashIcon } from '@heroicons/react/24/outline';
@@ -15,22 +15,21 @@ interface LoginForm {
 
 const LoginPage = () => {
   const router = useRouter();
-  const { login } = useAuth();
+  const search = useSearchParams();
+  const nextUrl = search.get('next') || '/';         // 👈 đọc ?next=
+  const { login, refreshUser } = useAuth();          // 👈 lấy refreshUser
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
-  const {
-    register,
-    handleSubmit,
-    formState: { errors }
-  } = useForm<LoginForm>();
+  const { register, handleSubmit, formState: { errors } } = useForm<LoginForm>();
 
   const onSubmit = async (data: LoginForm) => {
     setIsLoading(true);
     try {
       const success = await login({ email: data.email, password: data.password });
       if (success) {
-        router.push('/');
+        await refreshUser();                         // 👈 cập nhật user ngay
+        router.replace(nextUrl);                     // 👈 dùng replace thay vì push
       } else {
         toast.error('Login failed. Please check your credentials.');
       }

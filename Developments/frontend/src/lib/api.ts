@@ -2,24 +2,19 @@
 import axios from 'axios';
 import Cookies from 'js-cookie';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
-// API root without the /api suffix (used to call sanctum csrf endpoint)
-const API_ROOT = API_URL.replace(/\/api\/?$/, '');
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api'; // đổi localhost -> 127.0.0.1
+// const API_ROOT = API_URL.replace(/\/api\/?$/, ''); // <-- Không còn dùng, có thể xoá
 
-// Tạo instance axios
 const api = axios.create({
   baseURL: API_URL,
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
   },
-  // allow sending/receiving cookies for session-based auth (Sanctum)
-  withCredentials: true,
+  withCredentials: false, // đúng cho token-based
 });
 
-// Interceptor để tự động thêm token
-// We rely on cookie-based session authentication (Laravel Sanctum).
-// Keep the request interceptor in case an auth token exists, but do not require it.
+// interceptor giữ nguyên…
 api.interceptors.request.use((config) => {
   const token = Cookies.get('auth_token');
   if (token) {
@@ -29,72 +24,54 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Interceptor để xử lý response
 api.interceptors.response.use(
-  (response) => response,
+  (resp) => resp,
   (error) => {
-    if (error.response?.status === 401) {
-      // Token hết hạn, redirect về login
-      // Cookies.remove('auth_token');
-      // window.location.href = '/auth/login';
+    if (error.response?.status === 401 && error.config.url !== '/v1/user') {
+      Cookies.remove('auth_token');
+      const path = window.location.pathname;
+      if (!path.startsWith('/auth')) {
+        const next = encodeURIComponent(path + window.location.search);
+        window.location.replace(`/auth/login?next=${next}`);
+      }
     }
     return Promise.reject(error);
   }
 );
-
 export default api;
 
-// Auth API
+// ======================= AUTH =======================
 export const authAPI = {
-  // Ensure CSRF cookie (Sanctum) is present before stateful auth requests
-  ensureCsrf: () => axios.get(`${API_ROOT}/sanctum/csrf-cookie`, { withCredentials: true }),
-
-  // Backend routes use /v1/* under /api prefix (e.g. /api/v1/login)
   login: async (credentials: { email: string; password: string }) => {
-    await axios.get(`${API_ROOT}/sanctum/csrf-cookie`, { withCredentials: true });
-    return api.post('/v1/login', credentials, { withCredentials: true });
+    return api.post('/v1/login', credentials); // đúng
   },
-
   register: async (userData: {
     name?: string;
     email: string;
     password: string;
     password_confirmation?: string;
-  }) => {
-    await axios.get(`${API_ROOT}/sanctum/csrf-cookie`, { withCredentials: true });
-    return api.post('/v1/register', userData);
-  },
-
-  logout: async () => {
-    await axios.get(`${API_ROOT}/sanctum/csrf-cookie`, { withCredentials: true });
-    return api.post('/v1/logout');
-  },
-
-  // Get current authenticated user
-  me: () => api.get('/v1/user'),
+  }) => api.post('/v1/register', userData), // đúng
+  logout: async () => api.post('/v1/logout', {}), // đúng (cần Bearer)
+  me: () => api.get('/v1/user'), // đúng
 };
 
-// Categories API
+// ======================= CATEGORIES =======================
 export const categoriesAPI = {
   getAll: (params?: { type?: string; search?: string }) =>
-    api.get('/categories', { params }),
-  
-  getById: (id: number) => api.get(`/categories/${id}`),
-  
-  create: (data: FormData) => 
-    api.post('/categories', data, {
+    api.get('/v1/categories', { params }), // thêm /v1
+  getById: (id: number) => api.get(`/v1/categories/${id}`), // thêm /v1
+  create: (data: FormData) =>
+    api.post('/v1/categories', data, {
       headers: { 'Content-Type': 'multipart/form-data' }
     }),
-  
   update: (id: number, data: FormData) =>
-    api.put(`/categories/${id}`, data, {
+    api.put(`/v1/categories/${id}`, data, {
       headers: { 'Content-Type': 'multipart/form-data' }
     }),
-  
-  delete: (id: number) => api.delete(`/categories/${id}`),
+  delete: (id: number) => api.delete(`/v1/categories/${id}`),
 };
 
-// Products API
+// ======================= PRODUCTS =======================
 export const productsAPI = {
   getAll: (params?: {
     category_id?: number;
@@ -103,39 +80,28 @@ export const productsAPI = {
     subscription_level?: string;
     page?: number;
     limit?: number;
-  }) => api.get('/products', { params }),
-  
-  getById: (id: number) => api.get(`/products/${id}`),
-  
+  }) => api.get('/v1/products', { params }), // thêm /v1
+  getById: (id: number) => api.get(`/v1/products/${id}`), // thêm /v1
   create: (data: FormData) =>
-    api.post('/products', data, {
+    api.post('/v1/products', data, {
       headers: { 'Content-Type': 'multipart/form-data' }
     }),
-  
   update: (id: number, data: FormData) =>
-    api.put(`/products/${id}`, data, {
+    api.put(`/v1/products/${id}`, data, {
       headers: { 'Content-Type': 'multipart/form-data' }
     }),
-  
-  delete: (id: number) => api.delete(`/products/${id}`),
-  
+  delete: (id: number) => api.delete(`/v1/products/${id}`),
+  // Sửa URL tải file: backend là /v1/products/{product}/files/{file}/download
   download: (id: number, fileId: number) =>
-    api.get(`/products/${id}/download/${fileId}`, {
-      responseType: 'blob'
-    }),
+    api.get(`/v1/products/${id}/files/${fileId}/download`, { responseType: 'blob' }),
 };
 
-// Orders API
+// ======================= ORDERS =======================
 export const ordersAPI = {
-  getAll: () => api.get('/orders'),
-  
-  getById: (id: number) => api.get(`/orders/${id}`),
-  
-  create: (data: {
-    product_ids: number[];
-    payment_method: string;
-  }) => api.post('/orders', data),
-  
+  getAll: () => api.get('/v1/orders'), // thêm /v1
+  getById: (id: number) => api.get(`/v1/orders/${id}`), // nếu có endpoint
+  create: (data: { product_ids: number[]; payment_method: string; }) =>
+    api.post('/v1/orders', data), // nếu backend là /v1/orders (store)
   updateStatus: (id: number, status: string) =>
-    api.put(`/orders/${id}/status`, { status }),
+    api.put(`/v1/orders/${id}/status`, { status }), // nếu có endpoint
 };

@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import { EyeIcon, EyeSlashIcon } from '@heroicons/react/24/outline';
 import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
+import { useAuth } from '../../../contexts/AuthContext';
 
 interface RegisterForm {
   name: string;
@@ -31,33 +32,38 @@ const RegisterPage = () => {
 
   const password = watch('password');
 
+  const { register: registerUser, login, refreshUser } = useAuth();
+
   const onSubmit = async (data: RegisterForm) => {
     setIsLoading(true);
     try {
-      const response = await fetch('/api/v1/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: data.name,
-          email: data.email,
-          password: data.password
-        }),
-        credentials: 'include'
+      // Use AuthContext.register to create account
+      const ok = await registerUser({
+        name: data.name,
+        email: data.email,
+        password: data.password,
+        password_confirmation: data.password_confirmation,
       });
 
-      const result = await response.json();
+      if (!ok) {
+        // registerUser already shows toast on failure
+        return;
+      }
 
-      if (response.ok && result.success) {
-        toast.success(result.message || 'Registration successful. Please log in.');
-        router.push('/auth/login');
-      } else {
-        if (result.errors) {
-          // Flatten validation errors
-          const messages = Object.values(result.errors).flat().join(' ');
-          toast.error(messages || 'Registration failed');
-        } else {
-          toast.error(result.message || 'Registration failed');
+      // After successful registration, attempt to log the user in automatically
+      const logged = await login({ email: data.email, password: data.password });
+      if (logged) {
+        // refresh user data and navigate home
+        try {
+          await refreshUser();
+        } catch (err) {
+          // ignore refresh errors
         }
+        router.replace('/');
+      } else {
+        // If automatic login failed, redirect to login page so user can sign in
+        toast.success('Registration succeeded. Please sign in to continue.');
+        router.push('/auth/login');
       }
     } catch (error) {
       console.error('Register error:', error);
