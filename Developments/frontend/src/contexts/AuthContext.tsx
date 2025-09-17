@@ -30,11 +30,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Kiểm tra token khi load trang
 useEffect(() => {
-  const path = typeof window !== 'undefined' ? window.location.pathname : '';
-  if (!path.startsWith('/auth')) {
+  const token = Cookies.get('auth_token');
+  if (token) {
     refreshUser();
   } else {
-    setIsLoading(false); // tránh treo loading tại trang login
+    setIsLoading(false);
   }
 }, []);
 

@@ -25,22 +25,19 @@ api.interceptors.request.use((config) => {
 });
 
 api.interceptors.response.use(
-  (response) => response,
+  (resp) => resp,
   (error) => {
-    if (error.response?.status === 401) {
+    if (error.response?.status === 401 && error.config.url !== '/v1/user') {
       Cookies.remove('auth_token');
-      if (typeof window !== 'undefined') {
-        const path = window.location.pathname;
-        if (!path.startsWith('/auth')) {
-          const next = encodeURIComponent(path + window.location.search);
-          window.location.replace(`/auth/login?next=${next}`);
-        }
+      const path = window.location.pathname;
+      if (!path.startsWith('/auth')) {
+        const next = encodeURIComponent(path + window.location.search);
+        window.location.replace(`/auth/login?next=${next}`);
       }
     }
     return Promise.reject(error);
   }
 );
-
 export default api;
 
 // ======================= AUTH =======================

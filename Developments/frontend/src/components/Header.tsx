@@ -1,12 +1,13 @@
 // src/components/HeaderAuthArea.tsx
-'use client';
+"use client";
 
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePathname, useRouter } from 'next/navigation';
 import { useState } from 'react';
 
-export default function HeaderAuthArea() {
+// Small authenticated area used inside the Header (sign in / user menu)
+export function HeaderAuthArea() {
   const { user, isLoading, logout } = useAuth();
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
@@ -72,5 +73,33 @@ export default function HeaderAuthArea() {
         </div>
       )}
     </div>
+  );
+}
+
+// Main Header / Navbar (default export) — includes brand, primary nav and auth area
+export default function Header() {
+  return (
+    <header className="border-b">
+      <div className="container-max flex items-center justify-between py-4">
+        <div className="flex items-center gap-6">
+          <Link href="/" className="flex items-center gap-3">
+            <div className="h-9 w-9 rounded-md bg-blue-600 text-white grid place-items-center font-bold">S</div>
+            <span className="font-semibold">SOUL</span>
+          </Link>
+
+          <nav className="hidden md:flex items-center gap-4 text-sm text-zinc-700">
+            <Link href="/" className="hover:text-zinc-900">Home</Link>
+            <Link href="/library" className="hover:text-zinc-900">Library</Link>
+            <Link href="/podcasts" className="hover:text-zinc-900">Podcasts</Link>
+            <Link href="/about" className="hover:text-zinc-900">About</Link>
+          </nav>
+        </div>
+
+        <div className="flex items-center gap-4">
+          {/* Search shortcut / cart etc. could go here */}
+          <HeaderAuthArea />
+        </div>
+      </div>
+    </header>
   );
 }
