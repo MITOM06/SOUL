@@ -13,13 +13,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="vi">
       <body className="min-h-screen">
-        <Header />
-        <main className="pt-6 pb-20">
-          <div className="container-max">
-            <Providers>{children}</Providers>
-          </div>
-        </main>
-        <Footer />
+        <Providers>
+          <Header />
+          <main className="pt-6 pb-20">
+            <div className="container-max">
+              {children}
+            </div>
+          </main>
+          <Footer />
+        </Providers>
       </body>
     </html>
   )
