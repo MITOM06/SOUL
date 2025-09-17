@@ -28,6 +28,9 @@ export interface User {
   id: number;
   name: string;
   email: string;
+  role?: "user" | "admin";  // 👈 thêm role
+  subscription_level?: string; // nếu có
+
   // thêm các field khác nếu backend trả về
 }
 

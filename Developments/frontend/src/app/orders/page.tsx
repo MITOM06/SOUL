@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ordersAPI } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
 
 // --- Interfaces ---
 interface Product {
@@ -27,14 +28,28 @@ interface Order {
 
 export default function OrdersPage() {
   const router = useRouter();
+  const { user, isLoading: authLoading } = useAuth();
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
 
-  // --- Fetch order khi component mount ---
+  // --- Auth redirect ---
   useEffect(() => {
-    fetchOrder();
-  }, []);
+    if (!authLoading) {
+      if (!user) {
+        router.push("/auth/login");
+      } else if (user.role === "admin") {
+        router.push("/admin/orders"); // admin thì về trang admin
+      }
+    }
+  }, [authLoading, user, router]);
+
+  // --- Fetch order khi có user hợp lệ ---
+  useEffect(() => {
+    if (user && user.role !== "admin") {
+      fetchOrder();
+    }
+  }, [user]);
 
   const fetchOrder = async () => {
     setLoading(true);
@@ -43,11 +58,6 @@ export default function OrdersPage() {
       setOrder(res.data?.data ?? null);
     } catch (err: any) {
       console.error("Fetch Order Error:", err);
-      if (err.response?.status === 401) {
-        router.push("/auth/login");
-      } else {
-        setOrder(null);
-      }
     } finally {
       setLoading(false);
     }
@@ -65,9 +75,6 @@ export default function OrdersPage() {
       }
       await ordersAPI.updateItemQuantity(itemId, newQty);
       fetchOrder();
-    } catch (err: any) {
-      console.error("Update Error:", err);
-      if (err.response?.status === 401) router.push("/auth/login");
     } finally {
       setActionLoading(false);
     }
@@ -81,16 +88,13 @@ export default function OrdersPage() {
     try {
       await ordersAPI.deleteItem(itemId);
       fetchOrder();
-    } catch (err: any) {
-      console.error("Delete Error:", err);
-      if (err.response?.status === 401) router.push("/auth/login");
     } finally {
       setActionLoading(false);
     }
   };
 
   // --- Loading / Empty state ---
-  if (loading) return <p className="p-6">Loading...</p>;
+  if (authLoading || loading) return <p className="p-6">Loading...</p>;
   if (!order || !order.items || order.items.length === 0)
     return <p className="p-6">No pending order found.</p>;
 
@@ -106,19 +110,18 @@ export default function OrdersPage() {
       {actionLoading && <p className="mb-4 text-blue-600">Updating...</p>}
 
       <div className="space-y-4">
-        {order.items.map((item, index) => (
+        {order.items.map((item) => (
           <div
             key={item.id}
             className="flex justify-between items-center border rounded-lg p-4"
           >
-            
             {/* Left: Info */}
             <div className="flex items-center gap-4">
               <div className="w-20 h-20 bg-gray-200 flex items-center justify-center rounded">
                 <span className="text-xs text-gray-500">Image</span>
               </div>
               <div>
-                <h2 className="font-semibold">{item.product?.title ?? "No Product Name"}</h2>
+                <h2 className="font-semibold">{item.product?.title}</h2>
                 <div className="mt-2 flex items-center gap-2">
                   <button
                     onClick={() => updateQuantity(item.id, item.quantity - 1)}
@@ -156,9 +159,7 @@ export default function OrdersPage() {
 
       {/* Total */}
       <div className="mt-6 flex justify-between items-center border-t pt-4">
-        <p className="text-lg font-semibold">
-          Total Price: {total} cents
-        </p>
+        <p className="text-lg font-semibold">Total Price: {total} cents</p>
         <button className="px-5 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
           Buy Product
         </button>
