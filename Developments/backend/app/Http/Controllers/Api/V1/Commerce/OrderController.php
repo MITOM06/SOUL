@@ -122,17 +122,22 @@ class OrderController extends Controller
 //test
 public function index(Request $request)
 {
-    // $user = $request->user(); // comment tạm
-    $userId = 1; // id user có sẵn trong DB
+    $user = $request->user();
+    if (!$user) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Unauthenticated'
+        ], 401);
+    }
 
     $order = Order::with('items.product')
-        ->where('user_id', $userId)
+        ->where('user_id', $user->id)   // 👈 lấy đúng user đang đăng nhập
         ->where('status', 'pending')
         ->first();
 
     return response()->json([
         'success' => true,
-        'data' => $order, // có thể null
+        'data' => $order,
         'message' => $order ? 'Pending order found' : 'No pending order found'
     ]);
 }
@@ -168,11 +173,16 @@ public function index(Request $request)
 //test
 public function checkout(Request $request)
 {
-    // $user = $request->user(); // comment tạm
-    $userId = 1; // id user có sẵn trong DB
+    $user = $request->user();
+    if (!$user) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Unauthenticated'
+        ], 401);
+    }
 
     $order = Order::with('items.product')
-        ->where('user_id', $userId)
+        ->where('user_id', $user->id)
         ->where('status', 'pending')
         ->first();
 
@@ -191,6 +201,7 @@ public function checkout(Request $request)
         'data' => $order
     ]);
 }
+
 }
 
 

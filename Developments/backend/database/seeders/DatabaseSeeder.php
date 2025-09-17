@@ -21,8 +21,8 @@ class DatabaseSeeder extends Seeder
             UserSubscriptionsSeeder::class,
             FavouritesSeeder::class,
             ContinuesSeeder::class,
-            OrdersSeeder::class,
-            OrderItemsSeeder::class,
+            // OrdersSeeder::class,
+            // OrderItemsSeeder::class,
             PaymentsSeeder::class,
         ]);
     }

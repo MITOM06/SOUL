@@ -61,6 +61,7 @@ if (success) {
     id: data.data.id,
     name: data.data.name,
     email: data.data.email,
+    role: data.data.role,
   });
 
   if (data.data.subscription_level) setSubscriptionLevel(data.data.subscription_level);
@@ -106,6 +107,7 @@ if (success) {
           id: data.data.id,
           name: data.data.name,
           email: data.data.email,
+          role: data.data.role,
         });
         if (data.data.subscription_level) setSubscriptionLevel(data.data.subscription_level);
         toast.success('Registration successful!');
@@ -143,6 +145,7 @@ if (success) {
           id: data.data.id,
           name: data.data.name,
           email: data.data.email,
+          role: data.data.role,
         });
         if (data.data.subscription_level) setSubscriptionLevel(data.data.subscription_level);
       } else {

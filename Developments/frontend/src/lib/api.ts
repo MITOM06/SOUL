@@ -104,4 +104,25 @@ export const ordersAPI = {
     api.post('/v1/orders', data), // nếu backend là /v1/orders (store)
   updateStatus: (id: number, status: string) =>
     api.put(`/v1/orders/${id}/status`, { status }), // nếu có endpoint
+  // 👇 thêm mới
+  updateItemQuantity: (itemId: number, quantity: number) =>
+    api.put(`/v1/orders/items/${itemId}`, { quantity }),
+
+  deleteItem: (itemId: number) =>
+    api.delete(`/v1/orders/items/${itemId}`),
+
+};
+
+// ======================= ADMIN ORDERS =======================
+export const adminOrdersAPI = {
+  getAll: () => api.get('/v1/admin/orders'), 
+  getById: (id: number) => api.get(`/v1/admin/orders/${id}`),
+  updateStatus: (id: number, status: string) =>
+    api.put(`/v1/admin/orders/${id}/status`, { status }),
+  delete: (id: number) => api.delete(`/v1/admin/orders/${id}`),
+};
+
+// ======================= ADMIN ORDER ITEM =======================
+export const adminOrderItemsAPI = {
+  delete: (itemId: number) => api.delete(`/v1/admin/orders/items/${itemId}`),
 };
