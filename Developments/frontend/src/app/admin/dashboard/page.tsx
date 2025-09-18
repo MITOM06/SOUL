@@ -1,9 +1,10 @@
 "use client";
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { demoBooks } from '@/data/demoBooks';
 import { demoPodcasts } from '@/data/demoPodcasts';
 import { demoUsers } from '@/data/demoUsers';
+import api from '@/lib/api';
 
 // Admin dashboard overview. This page provides a quick glance at
 // system statistics (counts of users, books and podcasts) and
@@ -12,32 +13,44 @@ import { demoUsers } from '@/data/demoUsers';
 // demo arrays.
 
 export default function AdminDashboardPage() {
-  const userCount = demoUsers.length;
-  const bookCount = demoBooks.length;
-  const podcastCount = demoPodcasts.length;
+  const [stats, setStats] = useState({ users: demoUsers.length, products: demoBooks.length, orders: 0, revenue: 0 });
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const resp = await api.get('/v1/admin/stats');
+        const d = resp.data?.data || resp.data;
+        if (mounted && d) setStats(d);
+      } catch (err) {
+        // keep demo stats
+      }
+    })();
+    return () => { mounted = false };
+  }, []);
 
   const cards = [
     {
       title: 'Users',
-      count: userCount,
+      count: stats.users,
       link: '/admin/users',
       bg: 'bg-blue-100',
     },
     {
-      title: 'Books',
-      count: bookCount,
+      title: 'Products',
+      count: stats.products,
       link: '/admin/products',
       bg: 'bg-green-100',
     },
     {
-      title: 'Podcasts',
-      count: podcastCount,
-      link: '/admin/products',
+      title: 'Orders',
+      count: stats.orders,
+      link: '/admin/orders',
       bg: 'bg-yellow-100',
     },
     {
-      title: 'Orders',
-      count: 0,
+      title: 'Revenue',
+      count: stats.revenue,
       link: '/admin/orders',
       bg: 'bg-purple-100',
     },
