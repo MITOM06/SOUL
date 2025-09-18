@@ -9,6 +9,9 @@ use App\Http\Controllers\Api\V1\Commerce\OrderController;
 use App\Http\Controllers\Api\V1\Commerce\OrderItemController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\DashboardController;
+use App\Http\Controllers\Api\V1\Admin\AdminOrderController;
+use App\Http\Controllers\Api\V1\Admin\AdminOrderItemController;
+use App\Http\Controllers\Api\V1\Library\FavouriteController;
 
 // Các controller còn lại giữ nguyên nếu có
 
@@ -20,6 +23,13 @@ Route::prefix('v1')->group(function () {
     // Auth
     Route::post('register', [RegisterController::class, 'register']);
     Route::post('login', [LoginController::class, 'login']);
+
+    // Favourites (yêu thích) - cần login
+    Route::middleware('auth:sanctum')->group(function () {
+        Route::get('favourites', [FavouriteController::class, 'index']);
+        Route::post('favourites', [FavouriteController::class, 'store']);
+        Route::delete('favourites/{product}', [FavouriteController::class, 'destroy']);
+    });
 
     // Auth routes 
   Route::middleware('auth:sanctum')->group(function () {
@@ -33,6 +43,11 @@ Route::prefix('v1')->group(function () {
         Route::put('orders/items/{itemId}', [OrderItemController::class, 'update']);
         Route::delete('orders/items/{itemId}', [OrderItemController::class, 'destroy']);
         Route::get('products/{product}/files/{file}/download', [ProductController::class, 'downloadFile']);
+
+    // Favourites (yêu thích)
+    Route::get('favourites', [FavouriteController::class, 'index']);
+    Route::post('favourites', [FavouriteController::class, 'store']);
+    Route::delete('favourites/{product}', [FavouriteController::class, 'destroy']);
     });
 
     // Public product routes
@@ -64,7 +79,7 @@ Route::prefix('v1')->group(function () {
 
 
     // Admin routes
-    Route::prefix('admin')->middleware(['auth:sanctum', 'admin'])->group(function () {
+Route::prefix('admin')->middleware(['auth:sanctum', 'admin'])->group(function () {
         // Dashboard / stats
         Route::get('stats', [DashboardController::class, 'stats']);
 
@@ -78,6 +93,18 @@ Route::prefix('v1')->group(function () {
         Route::post('products', [ProductController::class, 'store']);
         Route::put('products/{product}', [ProductController::class, 'update']);
         Route::delete('products/{product}', [ProductController::class, 'destroy']);
+         
+          // Orders
+    Route::get('orders', [App\Http\Controllers\Api\V1\Admin\AdminOrderController::class, 'index']);
+    Route::get('orders/{order}', [App\Http\Controllers\Api\V1\Admin\AdminOrderController::class, 'show']);
+    Route::put('orders/{order}', [App\Http\Controllers\Api\V1\Admin\AdminOrderController::class, 'update']);
+    Route::delete('orders/{order}', [App\Http\Controllers\Api\V1\Admin\AdminOrderController::class, 'destroy']);
+
+    // Order Items
+    Route::get('orders/items', [AdminOrderItemController::class, 'index']);
+    Route::get('orders/items/{item}', [AdminOrderItemController::class, 'show']);
+    Route::put('orders/items/{item}', [AdminOrderItemController::class, 'update']);
+    Route::delete('orders/items/{item}', [AdminOrderItemController::class, 'destroy']);
 
         // ...existing code...
     });
@@ -87,26 +114,3 @@ Route::prefix('v1')->group(function () {
         return response()->json(['message' => 'Endpoint not found'], 404);
     });
  });
-
-
-
-// === Added by assistant: Catalog + Continue endpoints (non-breaking) ===
-use App\Http\Controllers\Api\V1\Catalog\ProductReadController;
-use App\Http\Controllers\Api\V1\Catalog\ProductWriteController;
-use App\Http\Controllers\Api\V1\Library\ContinueLiteController;
-
-Route::prefix('v1')->group(function () {
-    // Read-only catalog
-    Route::get('catalog/products', [ProductReadController::class, 'index']);
-    Route::get('catalog/products/{id}', [ProductReadController::class, 'show']);
-
-    // Admin write (no auth guard enforced here to stay non-breaking; project can add middleware later)
-    Route::post('catalog/products', [ProductWriteController::class, 'store']);
-    Route::put('catalog/products/{id}', [ProductWriteController::class, 'update']);
-    Route::delete('catalog/products/{id}', [ProductWriteController::class, 'destroy']);
-
-    // Continue progress
-    Route::get('continues/{product}', [ContinueLiteController::class, 'show']);
-    Route::post('continues/{product}', [ContinueLiteController::class, 'store']);
-});
-

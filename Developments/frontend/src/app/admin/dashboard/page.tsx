@@ -33,7 +33,7 @@ export default function AdminDashboardPage() {
     {
       title: 'Users',
       count: stats.users,
-      link: '/admin/users',
+      link: '/admin/role/users',
       bg: 'bg-blue-100',
     },
     {

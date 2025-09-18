@@ -1,6 +1,9 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { favouritesAPI } from '@/lib/api';
+import { useAuth } from '@/contexts/AuthContext';
+import toast from 'react-hot-toast';
 import { useParams } from 'next/navigation';
 
 interface Product {
@@ -56,6 +59,7 @@ function useContinue(productId: number | null) {
 
 export default function BookDetail() {
   const params = useParams();
+  const { user } = useAuth();
 
   // id có thể là string | string[] tùy Next; normalize về number an toàn
   const id = useMemo(() => {
@@ -69,6 +73,7 @@ export default function BookDetail() {
   const [err, setErr] = useState<string | null>(null);
   const { progress, load, save } = useContinue(id);
   const [page, setPage] = useState<number>(0);
+  const [isFav, setIsFav] = useState<boolean>(false);
 
   useEffect(() => {
     if (!id) return;
@@ -81,12 +86,41 @@ export default function BookDetail() {
         const j = await r.json();
         setData(j?.data || null);
         await load();
-      } catch (e: any) {
+        // Check favourite state (best-effort)
+        try {
+          const fav = await favouritesAPI.listMine();
+          const items = fav.data?.data?.books || fav.data?.data?.items || [];
+          const items2 = fav.data?.data?.podcasts || [];
+          const merged = [...items, ...items2];
+          if (merged.some((p: any) => Number(p.id) === Number(id))) setIsFav(true);
+        } catch {}
+} catch (e: any) {
         if (e?.name !== 'AbortError') setErr(e?.message || 'Không tải được dữ liệu');
       }
     })();
     return () => ac.abort();
   }, [id]);
+
+  const toggleFavourite = async () => {
+    if (!id) return;
+    if (!user) {
+      toast.error('Bạn cần đăng nhập');
+      return;
+    }
+    try {
+      if (isFav) {
+        await favouritesAPI.remove(id);
+        setIsFav(false);
+        toast.success('Đã xoá khỏi yêu thích');
+      } else {
+        await favouritesAPI.add(id);
+        setIsFav(true);
+        toast.success('Đã thêm vào yêu thích');
+      }
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || 'Thao tác thất bại');
+    }
+  };
 
   if (!id) return <div className="p-6 text-red-600">URL không hợp lệ (thiếu id).</div>;
   if (err) return <div className="p-6 text-red-600">Lỗi: {err}</div>;
@@ -100,16 +134,21 @@ export default function BookDetail() {
       <div className="text-gray-600 mb-4">{data.product.category || '—'}</div>
       <p className="mb-4 whitespace-pre-wrap">{data.product.description}</p>
 
-      {preview ? (
-        <a
-          href={preview.file_url}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-block px-4 py-2 bg-blue-600 text-white rounded"
-        >
-          Xem trước (PDF)
-        </a>
-      ) : null}
+      <div className="flex items-center gap-3">
+        {preview ? (
+          <a
+            href={preview.file_url}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-block px-4 py-2 bg-blue-600 text-white rounded"
+          >
+            Xem trước (PDF)
+          </a>
+        ) : null}
+        <button onClick={toggleFavourite} className={`px-4 py-2 rounded text-white ${isFav ? 'bg-red-600 hover:bg-red-700' : 'bg-rose-500 hover:bg-rose-600'}`}>
+          {isFav ? 'Bỏ yêu thích' : 'Thêm yêu thích'}
+        </button>
+      </div>
 
       <div className="mt-8 border-t pt-4">
         <h2 className="font-semibold mb-2">Tiến độ đọc</h2>
