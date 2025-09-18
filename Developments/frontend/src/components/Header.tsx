@@ -1,10 +1,11 @@
-// src/components/HeaderAuthArea.tsx
 "use client";
 
-import Link from 'next/link';
-import { useAuth } from '@/contexts/AuthContext';
-import { usePathname, useRouter } from 'next/navigation';
-import { useState } from 'react';
+import Link from "next/link";
+import { useAuth } from "@/contexts/AuthContext";
+import { usePathname, useRouter } from "next/navigation";
+import { useState } from "react";
+import { ShoppingCartIcon } from "@heroicons/react/24/outline";
+import { useCart } from "@/contexts/CartContext";
 
 // Small authenticated area used inside the Header (sign in / user menu)
 export function HeaderAuthArea() {
@@ -14,12 +15,11 @@ export function HeaderAuthArea() {
   const router = useRouter();
 
   if (isLoading) {
-    // skeleton nho nhỏ
     return <div className="h-8 w-28 bg-gray-200 animate-pulse rounded" />;
   }
 
   if (!user) {
-    const next = encodeURIComponent(pathname || '/');
+    const next = encodeURIComponent(pathname || "/");
     return (
       <Link
         href={`/auth/login?next=${next}`}
@@ -34,13 +34,21 @@ export function HeaderAuthArea() {
     <div className="relative">
       <button
         className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-100 hover:bg-gray-200"
-        onClick={() => setOpen(v => !v)}
+        onClick={() => setOpen((v) => !v)}
       >
         <div className="h-8 w-8 rounded-full bg-blue-500 text-white grid place-items-center">
           {user.name?.[0]?.toUpperCase() || user.email[0].toUpperCase()}
         </div>
-        <span className="hidden sm:block text-sm">{user.name || user.email}</span>
-        <svg className="h-4 w-4 opacity-70" viewBox="0 0 20 20" fill="currentColor"><path d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.24 4.5a.75.75 0 01-1.08 0l-4.24-4.5a.75.75 0 01.02-1.06z"/></svg>
+        <span className="hidden sm:block text-sm">
+          {user.name || user.email}
+        </span>
+        <svg
+          className="h-4 w-4 opacity-70"
+          viewBox="0 0 20 20"
+          fill="currentColor"
+        >
+          <path d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.24 4.5a.75.75 0 01-1.08 0l-4.24-4.5a.75.75 0 01.02-1.06z" />
+        </svg>
       </button>
 
       {open && (
@@ -48,24 +56,28 @@ export function HeaderAuthArea() {
           className="absolute right-0 mt-2 w-48 rounded-lg border bg-white shadow-lg p-1"
           onMouseLeave={() => setOpen(false)}
         >
-          <Link
-            href="/profile"
-            className="block rounded-md px-3 py-2 hover:bg-gray-100 text-sm"
-          >
+          <Link href="/profile" className="block rounded-md px-3 py-2 hover:bg-gray-100 text-sm">
             Profile
           </Link>
-          <Link
-            href="/orders"
-            className="block rounded-md px-3 py-2 hover:bg-gray-100 text-sm"
-          >
+          <Link href="/orders" className="block rounded-md px-3 py-2 hover:bg-gray-100 text-sm">
             My Orders
           </Link>
+
+          {user.role === "admin" && (
+            <Link
+              href="/admin/orders"
+              className="block rounded-md px-3 py-2 hover:bg-gray-100 text-sm text-red-600 font-medium"
+            >
+              Admin Dashboard
+            </Link>
+          )}
+
           <button
             className="w-full text-left rounded-md px-3 py-2 hover:bg-gray-100 text-sm"
             onClick={() => {
               setOpen(false);
               logout();
-              router.replace('/');
+              router.replace("/");
             }}
           >
             Sign out
@@ -76,19 +88,22 @@ export function HeaderAuthArea() {
   );
 }
 
-// Main Header / Navbar (default export) — includes brand, primary nav and auth area
+// Main Header / Navbar (default export)
 export default function Header() {
+  const { count } = useCart();
+
   return (
     <header className="border-b">
       <div className="container-max flex items-center justify-between py-4">
         <div className="flex items-center gap-6">
           <Link href="/" className="flex items-center gap-3">
-            <div className="h-9 w-9 rounded-md bg-blue-600 text-white grid place-items-center font-bold">S</div>
+            <div className="h-9 w-9 rounded-md bg-blue-600 text-white grid place-items-center font-bold">
+              S
+            </div>
             <span className="font-semibold">SOUL</span>
           </Link>
 
           <nav className="hidden md:flex items-center gap-4 text-sm text-zinc-700">
-            {/* Top navigation. Note: use descriptive labels and keep URLs consistent with new pages. */}
             <Link href="/" className="hover:text-zinc-900">Home</Link>
             <Link href="/library" className="hover:text-zinc-900">Books</Link>
             <Link href="/podcasts" className="hover:text-zinc-900">Podcasts</Link>
@@ -98,7 +113,17 @@ export default function Header() {
         </div>
 
         <div className="flex items-center gap-4">
-          {/* Search shortcut / cart etc. could go here */}
+          {/* Cart */}
+          <Link href="/orders" className="relative">
+            <ShoppingCartIcon className="h-6 w-6 text-gray-700 hover:text-gray-900" />
+            {count > 0 && (
+              <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs w-5 h-5 flex items-center justify-center rounded-full">
+                {count}
+              </span>
+            )}
+          </Link>
+
+          {/* User menu */}
           <HeaderAuthArea />
         </div>
       </div>

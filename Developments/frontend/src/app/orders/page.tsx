@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ordersAPI } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
+import { useCart } from "@/contexts/CartContext";
+import { cartAPI } from "@/lib/api";
 
 // --- Interfaces ---
 interface Product {
@@ -32,7 +34,7 @@ export default function OrdersPage() {
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
-
+  const { refresh } = useCart();
   // --- Auth redirect ---
   useEffect(() => {
     if (!authLoading) {
@@ -54,7 +56,7 @@ export default function OrdersPage() {
   const fetchOrder = async () => {
     setLoading(true);
     try {
-      const res = await ordersAPI.getAll();
+      const res = await cartAPI.getCart();
       setOrder(res.data?.data ?? null);
     } catch (err: any) {
       console.error("Fetch Order Error:", err);
@@ -75,6 +77,7 @@ export default function OrdersPage() {
       }
       await ordersAPI.updateItemQuantity(itemId, newQty); // 👈 Bearer token auto kèm
       fetchOrder();
+      refresh();
     } finally {
       setActionLoading(false);
     }
@@ -88,6 +91,7 @@ export default function OrdersPage() {
     try {
       await ordersAPI.deleteItem(itemId); // 👈 Bearer token auto kèm
       fetchOrder();
+      refresh();
     } finally {
       setActionLoading(false);
     }
@@ -144,7 +148,7 @@ export default function OrdersPage() {
 
             {/* Right: Price + Delete */}
             <div className="text-right">
-              <p className="font-medium">{item.unit_price_cents} cents</p>
+              <p className="font-medium">{item.unit_price_cents} VND</p>
               <button
                 onClick={() => deleteItem(item.id)}
                 disabled={actionLoading}
@@ -159,7 +163,7 @@ export default function OrdersPage() {
 
       {/* Total + Checkout */}
       <div className="mt-6 flex justify-between items-center border-t pt-4">
-        <p className="text-lg font-semibold">Total Price: {total} cents</p>
+        <p className="text-lg font-semibold">Total Price: {total} VND</p>
         <button
           onClick={() => router.push(`/checkout?order_id=${order.id}`)}
           disabled={actionLoading}

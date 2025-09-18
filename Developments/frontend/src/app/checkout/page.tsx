@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ordersAPI } from "@/lib/api";
-
+import { useCart } from "@/contexts/CartContext";
 interface PaymentData {
   order_id: number;
   amount: number;
@@ -17,7 +17,7 @@ export default function CheckoutPage() {
   const orderId = searchParams.get("order_id");
   const [paymentData, setPaymentData] = useState<PaymentData | null>(null);
   const [paid, setPaid] = useState(false);
-
+const { refresh } = useCart();
   // Lấy dữ liệu thanh toán ban đầu
   useEffect(() => {
     if (!orderId) return;
@@ -50,6 +50,7 @@ export default function CheckoutPage() {
     console.error("Checkout API error:", err);
     alert("Lỗi khi thanh toán");
   }
+   refresh();
 };
 
   if (!orderId) return <p>Không có order nào.</p>;

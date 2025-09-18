@@ -77,7 +77,7 @@ class PaymentController extends Controller
         $status = $request->input('status'); // 'success' hoặc 'failed'
 
         if ($status === 'success') {
-            $payment->status = Payment::STATUS_SUCCESS;   // ✅ dùng SUCCESS
+            $payment->status = Payment::STATUS_SUCCESS;  
             $payment->save();
 
             return response()->json([
@@ -85,7 +85,7 @@ class PaymentController extends Controller
                 'message' => 'Thanh toán thành công'
             ]);
         } else {
-            $payment->status = Payment::STATUS_FAILED;    // ❌ dùng FAILED
+            $payment->status = Payment::STATUS_FAILED;   
             $payment->save();
 
             return response()->json([
@@ -106,6 +106,25 @@ class PaymentController extends Controller
         'message' => 'Thanh toán thành công (tự động)',
     ]);
 }
+
+public function listTransactions(Request $request)
+{
+    $user = $request->user();
+    $transactions = Payment::where('user_id', $user->id)
+        ->orderByDesc('created_at')
+        ->get();
+
+    return response()->json(['success' => true, 'data' => $transactions]);
+}
+
+public function showTransaction($id, Request $request)
+{
+    $user = $request->user();
+    $transaction = Payment::where('user_id', $user->id)->findOrFail($id);
+
+    return response()->json(['success' => true, 'data' => $transaction]);
+}
+
 
 
 }

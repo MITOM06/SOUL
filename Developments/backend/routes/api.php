@@ -7,7 +7,7 @@ use App\Http\Controllers\Api\V1\Auth\AuthController;
 use App\Http\Controllers\Api\ProductController;
 use App\Http\Controllers\Api\V1\Commerce\OrderController;
 use App\Http\Controllers\Api\V1\Commerce\OrderItemController;
-use App\Http\Controllers\Api\UserController;
+use App\Http\Controllers\Api\V1\Users\UserController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\V1\Admin\AdminOrderController;
 use App\Http\Controllers\Api\V1\Admin\AdminOrderItemController;
@@ -63,13 +63,13 @@ Route::get('/health', fn() => response()->json(['ok' => true, 'ts' => now()->toI
 //         // Product secured file download
 //         Route::get('products/{product}/files/{file}/download', [ProductController::class, 'downloadFile']);
 //     });
-    
+
 //     // Payment routes
 //     Route::get('/payments/{id}/auto-success', [PaymentController::class, 'autoSuccess'])->name('payments.auto-success');
 //     Route::post('/payment/checkout', [PaymentController::class, 'checkout']);
 //     Route::post('/payment/webhook', [PaymentController::class, 'webhook']);
 
-  
+
 //     // Admin routes
 //     Route::prefix('admin')->middleware(['auth:sanctum', 'admin'])->group(function () {
 //         // Dashboard / stats
@@ -85,7 +85,7 @@ Route::get('/health', fn() => response()->json(['ok' => true, 'ts' => now()->toI
 //         Route::post('products', [ProductController::class, 'store']);
 //         Route::put('products/{product}', [ProductController::class, 'update']);
 //         Route::delete('products/{product}', [ProductController::class, 'destroy']);
-         
+
 //           // Orders
 //     Route::get('orders', [App\Http\Controllers\Api\V1\Admin\AdminOrderController::class, 'index']);
 //     Route::get('orders/{order}', [App\Http\Controllers\Api\V1\Admin\AdminOrderController::class, 'show']);
@@ -122,16 +122,35 @@ Route::prefix('v1')->group(function () {
     Route::get('payments/{id}/auto-success', [PaymentController::class, 'autoSuccess'])
         ->name('payments.auto-success');
 
+
+
+
+  
     // Routes cần login
     Route::middleware('auth:sanctum')->group(function () {
         Route::post('logout', [AuthController::class, 'logout']);
         Route::get('user', [AuthController::class, 'getUser']);
+
+   
+        // Profile
+        Route::get('profile', [UserController::class, 'getProfile']);
+        Route::put('profile', [UserController::class, 'updateProfile']);
+        
+        //Security
+        Route::put('profile/password', [UserController::class, 'changePassword']); // đổi mật khẩu
+
+        // Transactions
+        Route::get('transactions', [PaymentController::class, 'listTransactions']);
+        Route::get('transactions/{id}', [PaymentController::class, 'showTransaction']);
 
         // Orders
         Route::get('orders', [OrderController::class, 'index']);
         Route::post('orders', [OrderController::class, 'store']);
         Route::get('orders/{order}', [OrderController::class, 'show']);
         Route::post('orders/checkout', [OrderController::class, 'checkout']);
+
+       Route::get('cart/count', [OrderItemController::class, 'cartCount']);
+       Route::get('cart', [OrderController::class, 'getCart']);
 
         // Order Items
         Route::post('orders/items', [OrderItemController::class, 'store']);
@@ -172,6 +191,3 @@ Route::prefix('v1')->group(function () {
 
     Route::fallback(fn() => response()->json(['message' => 'Endpoint not found'], 404));
 });
-
-
-

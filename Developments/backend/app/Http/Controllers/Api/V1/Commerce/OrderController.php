@@ -229,6 +229,21 @@ public function checkout(Request $request)
         'data' => $order
     ]);
 }
+
+public function getCart(Request $request)
+{
+    $user = $request->user();
+
+    $order = Order::with('items.product')
+        ->where('user_id', $user->id)
+        ->where('status', 'pending') // chỉ lấy giỏ chưa checkout
+        ->first();
+
+    return response()->json([
+        'success' => true,
+        'data' => $order
+    ]);
+}
 }
 
 

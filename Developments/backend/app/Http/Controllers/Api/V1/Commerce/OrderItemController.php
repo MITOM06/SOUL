@@ -7,207 +7,125 @@ use Illuminate\Http\Request;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Product;
+use Illuminate\Support\Facades\DB;
 
 class OrderItemController extends Controller
 {
-    // Thêm item vào order (cart)
-    // public function store(Request $request)
-    // {
-    //     $user = $request->user();
-    //     if (!$user) {
-    //         return response()->json(['success' => false, 'message' => 'Unauthenticated'], 401);
-    //     }
+    // 👉 Thêm sản phẩm vào giỏ
+    public function store(Request $request)
+    {
+        $user = $request->user();
+        if (!$user) {
+            return response()->json(['success' => false, 'message' => 'Unauthenticated'], 401);
+        }
 
-    //     $request->validate([
-    //         'product_id' => 'required|exists:products,id',
-    //         'quantity' => 'required|integer|min:1'
-    //     ]);
+        $request->validate([
+            'product_id' => 'required|exists:products,id',
+            'quantity'   => 'required|integer|min:1'
+        ]);
 
-    //     $product = Product::findOrFail($request->product_id);
+        $product = Product::findOrFail($request->product_id);
 
-    //     // Lấy order pending hoặc tạo mới
-    //     $order = Order::firstOrCreate(
-    //         ['user_id' => $user->id, 'status' => 'pending'],
-    //         ['total_cents' => 0]
-    //     );
+        // Order trạng thái "pending" (giỏ hàng chưa thanh toán)
+        $order = Order::firstOrCreate(
+            ['user_id' => $user->id, 'status' => 'pending'],
+            ['total_cents' => 0]
+        );
 
-    //     // Nếu item đã tồn tại trong order thì cộng dồn
-    //     $item = $order->items()->where('product_id', $product->id)->first();
-    //     if ($item) {
-    //         $item->quantity += $request->quantity;
-    //         $item->save();
-    //     } else {
-    //         $order->items()->create([
-    //             'product_id' => $product->id,
-    //             'quantity' => $request->quantity,
-    //             'unit_price_cents' => $product->price_cents,
-    //             'meta' => ['title' => $product->title]
-    //         ]);
-    //     }
+        // Nếu sản phẩm đã có trong giỏ → cộng dồn
+        $item = $order->items()->where('product_id', $product->id)->first();
+        if ($item) {
+            $item->quantity += $request->quantity;
+            $item->save();
+        } else {
+            $order->items()->create([
+                'product_id'       => $product->id,
+                'quantity'         => $request->quantity,
+                'unit_price_cents' => $product->price_cents,
+                'meta'             => ['title' => $product->title]
+            ]);
+        }
 
-    //     // Cập nhật tổng tiền order
-    //     $order->refresh();
-    //     $order->total_cents = $order->items->sum(fn($i) => $i->quantity * $i->unit_price_cents);
-    //     $order->save();
+        // Update tổng tiền
+        $order->total_cents = $order->items->sum(fn($i) => $i->quantity * $i->unit_price_cents);
+        $order->save();
 
-    //     return response()->json([
-    //         'success' => true,
-    //         'message' => 'Item added to order',
-    //         'data' => $order->load('items.product')
-    //     ]);
-    // }
-
-//test
-
-public function store(Request $request)
-{
-    // $user = $request->user();
-    // if (!$user) { ... } // bỏ tạm
-
-    $userId = 1; // ID user có sẵn trong DB
-
-    $request->validate([
-        'product_id' => 'required|exists:products,id',
-        'quantity' => 'required|integer|min:1'
-    ]);
-
-    $product = Product::findOrFail($request->product_id);
-
-    // Lấy order pending hoặc tạo mới
-    $order = Order::firstOrCreate(
-        ['user_id' => $userId, 'status' => 'pending'],
-        ['total_cents' => 0]
-    );
-
-    $item = $order->items()->where('product_id', $product->id)->first();
-    if ($item) {
-        $item->quantity += $request->quantity;
-        $item->save();
-    } else {
-        $order->items()->create([
-            'product_id' => $product->id,
-            'quantity' => $request->quantity,
-            'unit_price_cents' => $product->price_cents,
-            'meta' => ['title' => $product->title]
+        return response()->json([
+            'success' => true,
+            'message' => 'Item added to cart',
+            'data'    => $order->load('items.product')
         ]);
     }
 
-    $order->refresh();
-    $order->total_cents = $order->items->sum(fn($i) => $i->quantity * $i->unit_price_cents);
-    $order->save();
-
-    return response()->json([
-        'success' => true,
-        'message' => 'Item added to order',
-        'data' => $order->load('items.product')
-    ]);
-}
-
-    // // Cập nhật số lượng item
-    // public function update(Request $request, $itemId)
-    // {
-    //     $request->validate([
-    //         'quantity' => 'required|integer|min:1'
-    //     ]);
-
-    //     $item = OrderItem::find($itemId);
-    //     if (!$item) {
-    //         return response()->json(['success' => false, 'message' => 'Item not found'], 404);
-    //     }
-
-    //     $item->quantity = $request->quantity;
-    //     $item->save();
-
-    //     $order = $item->order;
-    //     if ($order) {
-    //         $order->total_cents = $order->items->sum(fn($i) => $i->quantity * $i->unit_price_cents);
-    //         $order->save();
-    //     }
-
-    //     return response()->json([
-    //         'success' => true,
-    //         'message' => 'Item updated',
-    //         'data' => $item->load('product')
-    //     ]);
-    // }
-
-    //test
+    // 👉 Cập nhật số lượng sản phẩm
     public function update(Request $request, $itemId)
-{
-    $request->validate([
-        'quantity' => 'required|integer|min:1'
-    ]);
+    {
+        $request->validate([
+            'quantity' => 'required|integer|min:1'
+        ]);
 
-    $item = OrderItem::find($itemId);
-    if (!$item) {
-        return response()->json(['success' => false, 'message' => 'Item not found'], 404);
-    }
+        $item = OrderItem::find($itemId);
+        if (!$item) {
+            return response()->json(['success' => false, 'message' => 'Item not found'], 404);
+        }
 
-    $item->quantity = $request->quantity;
-    $item->save();
+        $item->quantity = $request->quantity;
+        $item->save();
 
-    $order = $item->order;
-    if ($order) {
-        $order->total_cents = $order->items->sum(fn($i) => $i->quantity * $i->unit_price_cents);
-        $order->save();
-    }
-
-    return response()->json([
-        'success' => true,
-        'message' => 'Item updated',
-        'data' => $item->load('product')
-    ]);
-}
-
-    // // Xóa item khỏi order
-    // public function destroy($itemId)
-    // {
-    //     $item = OrderItem::find($itemId);
-    //     if (!$item) {
-    //         return response()->json(['success' => false, 'message' => 'Item not found'], 404);
-    //     }
-
-    //     $order = $item->order;
-    //     $item->delete();
-
-    //     if ($order) {
-    //         $order->total_cents = $order->items->sum(fn($i) => $i->quantity * $i->unit_price_cents);
-    //         $order->save();
-    //     }
-
-    //     return response()->json([
-    //         'success' => true,
-    //         'message' => 'Item removed from order',
-    //         'data' => $order?->load('items.product') // null-safe
-    //     ]);
-    // }
-
-    //test
-   public function destroy($itemId)
-{
-    $item = OrderItem::find($itemId);
-    if (!$item) {
-        return response()->json(['success' => false, 'message' => 'Item not found'], 404);
-    }
-
-    $order = $item->order;
-    $item->delete();
-
-    // Nếu order còn item thì cập nhật tổng, nếu rỗng thì xoá luôn order
-    if ($order) {
-        if ($order->items()->count() > 0) {
+        $order = $item->order;
+        if ($order) {
             $order->total_cents = $order->items->sum(fn($i) => $i->quantity * $i->unit_price_cents);
             $order->save();
-        } else {
-            $order->delete(); // xoá luôn order
-            $order = null;    // set null để frontend không hiển thị
         }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Item updated',
+            'data'    => $item->load('product')
+        ]);
     }
 
-    return response()->json([
-        'success' => true,
-        'message' => 'Item removed from order',
-        'data' => $order?->load('items.product') // null-safe
-    ]);
-}
+    // 👉 Xóa sản phẩm khỏi giỏ
+    public function destroy($itemId)
+    {
+        $item = OrderItem::find($itemId);
+        if (!$item) {
+            return response()->json(['success' => false, 'message' => 'Item not found'], 404);
+        }
+
+        $order = $item->order;
+        $item->delete();
+
+        if ($order) {
+            if ($order->items()->count() > 0) {
+                $order->total_cents = $order->items->sum(fn($i) => $i->quantity * $i->unit_price_cents);
+                $order->save();
+            } else {
+                $order->delete();
+                $order = null;
+            }
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Item removed from cart',
+            'data'    => $order?->load('items.product')
+        ]);
+    }
+
+    // 👉 Đếm số lượng sản phẩm trong giỏ
+    public function cartCount(Request $request)
+    {
+        $user = $request->user();
+        if (!$user) {
+            return response()->json(['count' => 0]);
+        }
+
+        $count = OrderItem::whereHas('order', function($q) use ($user) {
+            $q->where('user_id', $user->id)
+              ->where('status', 'pending');
+        })->sum('quantity');
+
+        return response()->json(['count' => $count]);
+    }
 }

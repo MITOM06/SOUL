@@ -96,6 +96,30 @@ export const productsAPI = {
     api.get(`/v1/products/${id}/files/${fileId}/download`, { responseType: 'blob' }),
 };
 
+// ======================= PROFILE =======================
+export const profileAPI = {
+  get: () => api.get("/v1/profile"),  // GET profile user
+  update: (data: {
+    name?: string;
+    email?: string;
+    dob?: string;
+    gender?: string;
+  }) => api.put("/v1/profile", data), // PUT update profile
+  changePassword: (data: {
+    current_password: string;
+    new_password: string;
+    new_password_confirmation: string;
+  }) => api.put("/v1/profile/password", data), // nếu bạn muốn endpoint đổi mật khẩu riêng
+};
+
+// ======================= TRANSACTIONS =======================
+export const transactionsAPI = {
+  getAll: () => api.get("/v1/transactions"), // backend trả danh sách giao dịch
+  getById: (id: number) => api.get(`/v1/transactions/${id}`),
+};
+
+
+
 // ======================= ORDERS =======================
 export const ordersAPI = {
   getAll: () => api.get('/v1/orders'), // thêm /v1
@@ -114,6 +138,12 @@ export const ordersAPI = {
   checkout: (orderId: number) =>
     api.post("v1/orders/checkout", { order_id: orderId }),
 };
+// ======================= count=======================
+export const cartAPI = {
+  getCount: () => api.get("/v1/cart/count"),
+  getCart: () => api.get("/v1/cart"),
+};
+
 
 // ======================= ADMIN ORDERS =======================
 export const adminOrdersAPI = {
