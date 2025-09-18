@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { ordersAPI } from "@/lib/api";
-import { useAuth } from "@/contexts/AuthContext";
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { ordersAPI } from '@/lib/api';
+import { useAuth } from '@/contexts/AuthContext';
+import UserPanelLayout from '@/components/UserPanelLayout';
 
 // --- Interfaces ---
 interface Product {
@@ -94,9 +95,20 @@ export default function OrdersPage() {
   };
 
   // --- Loading / Empty state ---
-  if (authLoading || loading) return <p className="p-6">Loading...</p>;
-  if (!order || !order.items || order.items.length === 0)
-    return <p className="p-6">No pending order found.</p>;
+  if (authLoading || loading) {
+    return (
+      <UserPanelLayout>
+        <p>Loading...</p>
+      </UserPanelLayout>
+    );
+  }
+  if (!order || !order.items || order.items.length === 0) {
+    return (
+      <UserPanelLayout>
+        <p>No pending order found.</p>
+      </UserPanelLayout>
+    );
+  }
 
   const total = order.items.reduce(
     (sum, item) => sum + item.unit_price_cents * item.quantity,
@@ -104,7 +116,8 @@ export default function OrdersPage() {
   );
 
   return (
-    <div className="max-w-4xl mx-auto px-6 py-8">
+    <UserPanelLayout>
+      <div className="max-w-4xl mx-auto px-6 py-8">
       <h1 className="text-3xl font-bold mb-6">Cart</h1>
       <p className="mb-4 text-gray-600">Status: {order.status}</p>
       {actionLoading && <p className="mb-4 text-blue-600">Updating...</p>}
@@ -164,6 +177,7 @@ export default function OrdersPage() {
           Buy Product
         </button>
       </div>
-    </div>
+      </div>
+    </UserPanelLayout>
   );
 }

@@ -1,13 +1,14 @@
 import React from 'react'
 import { demoPodcasts } from '@/data/demoPodcasts'
 import AudioPlayer from '@/components/AudioPlayer'
+type PodcastDetailProps = {
+  params: { id: string }
+}
 
-interface Props { params: { id: string } }
-
-export default function PodcastDetail({ params }: Props) {
+export default function PodcastDetail({ params }: PodcastDetailProps) {
   const id = Number(params.id)
   const p = demoPodcasts.find(x => x.id === id)
-  if (!p) return <div className="py-20">Không tìm thấy podcast</div>
+  if (!p) return <div className="py-20">Podcast not found</div>
 
   return (
     <section className="grid lg:grid-cols-3 gap-6">
@@ -24,12 +25,12 @@ export default function PodcastDetail({ params }: Props) {
 
       <div className="lg:col-span-2 space-y-4">
         <div className="card p-6">
-          <h2 className="text-lg font-semibold">Mô tả</h2>
+          <h2 className="text-lg font-semibold">Description</h2>
           <p className="mt-3 text-zinc-700">{p.description}</p>
         </div>
 
         <div className="card p-6">
-          <h3 className="text-lg font-semibold">Nghe tập</h3>
+          <h3 className="text-lg font-semibold">Listen</h3>
           <AudioPlayer title={p.title} src={p.audio_url} />
         </div>
       </div>

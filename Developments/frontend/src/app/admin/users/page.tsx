@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from 'react';
-import { demoUsers, DemoUser } from '../../../data/demoUsers';
+import { demoUsers, DemoUser } from '@/data/demoUsers';
 
 // Admin user management page. Displays a table of users with basic
 // details and actions to edit, promote/demote or toggle activation.
