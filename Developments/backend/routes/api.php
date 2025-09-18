@@ -9,6 +9,10 @@ use App\Http\Controllers\Api\V1\Commerce\OrderController;
 use App\Http\Controllers\Api\V1\Commerce\OrderItemController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\DashboardController;
+use App\Http\Controllers\Api\V1\Library\FavouriteController;
+use App\Http\Controllers\Api\V1\Catalog\ProductReadController;
+use App\Http\Controllers\Api\V1\Catalog\ProductWriteController;
+use App\Http\Controllers\Api\V1\Library\ContinueLiteController;
 
 // Các controller còn lại giữ nguyên nếu có
 
@@ -33,6 +37,13 @@ Route::prefix('v1')->group(function () {
         Route::put('orders/items/{itemId}', [OrderItemController::class, 'update']);
         Route::delete('orders/items/{itemId}', [OrderItemController::class, 'destroy']);
         Route::get('products/{product}/files/{file}/download', [ProductController::class, 'downloadFile']);
+        
+// ===== FAVOURITES: bắt buộc đăng nhập thật =====
+     Route::get   ('favourites',               [FavouriteController::class, 'index']);
+    Route::post  ('favourites',               [FavouriteController::class, 'store']);   // { product_id }
+    Route::post  ('favourites/toggle',        [FavouriteController::class, 'toggle']);  // { product_id }
+    Route::delete('favourites/{product}',     [FavouriteController::class, 'destroy']);
+
     });
 
     // Public product routes
@@ -91,9 +102,7 @@ Route::prefix('v1')->group(function () {
 
 
 // === Added by assistant: Catalog + Continue endpoints (non-breaking) ===
-use App\Http\Controllers\Api\V1\Catalog\ProductReadController;
-use App\Http\Controllers\Api\V1\Catalog\ProductWriteController;
-use App\Http\Controllers\Api\V1\Library\ContinueLiteController;
+
 
 Route::prefix('v1')->group(function () {
     // Read-only catalog
@@ -108,5 +117,19 @@ Route::prefix('v1')->group(function () {
     // Continue progress
     Route::get('continues/{product}', [ContinueLiteController::class, 'show']);
     Route::post('continues/{product}', [ContinueLiteController::class, 'store']);
+    // Route::get('catalog/products/{product}/files/{file}/download',
+    // [ProductWriteController::class, 'downloadFile']);
+    
+    // routes/api.php (trong nhóm /v1)
+Route::post('catalog/products/{id}/files', [\App\Http\Controllers\Api\V1\Catalog\ProductWriteController::class, 'uploadFiles']);
+
 });
 
+// Upload file thực tế vào storage
+Route::post('catalog/products/{id}/files', [\App\Http\Controllers\Api\V1\Catalog\ProductWriteController::class, 'uploadFiles']);
+
+// Upload ảnh bìa
+Route::post('catalog/products/{id}/thumbnail', [\App\Http\Controllers\Api\V1\Catalog\ProductWriteController::class, 'uploadThumbnail']);
+
+// Download file
+Route::get('catalog/products/{product}/files/{file}/download', [\App\Http\Controllers\Api\V1\Catalog\ProductWriteController::class, 'downloadFile']);

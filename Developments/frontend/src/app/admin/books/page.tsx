@@ -127,6 +127,13 @@ export default function AdminProductsV2() {
     }
   }
 
+  const formatVND = (n: number | null | undefined, withSymbol = true) => {
+  const v = Number(n ?? 0);
+  const s = v.toLocaleString('vi-VN', { maximumFractionDigits: 0 });
+  return withSymbol ? `${s} đ` : s; // đổi true/false theo ý bạn
+};
+
+
   return (
     <div className="p-6 max-w-6xl mx-auto">
       <h1 className="text-2xl font-bold mb-4">Admin · Product Management (v2)</h1>
@@ -227,7 +234,7 @@ export default function AdminProductsV2() {
                   <div className="font-medium">{p.title}</div>
                   <div className="text-sm text-gray-500">{p.type} · {p.category || '—'}</div>
                   <div className="text-sm">
-                    {p.price_cents ? (p.price_cents/100).toLocaleString('vi-VN', {style:'currency', currency:'VND'}) : 'Miễn phí'}
+                    {p.price_cents ? formatVND(p.price_cents, true) : 'Miễn phí'}
                   </div>
                   <div className="mt-2 flex gap-2">
                     <a href={`/book/${p.id}`} className="px-2 py-1 rounded bg-gray-100">Xem</a>

@@ -8,21 +8,42 @@ interface Product {
   title: string;
   description?: string | null;
   category?: string | null;
+  thumbnail_url?: string | null;
 }
 interface ProductFile {
   id: number;
-  file_type: string;
-  file_url: string;
+  file_type: string;   // 'image' | 'pdf' | 'txt' | 'doc' | 'docx' | 'audio' ...
+  file_url: string;    // /storage/... hoặc http(s)://...
   is_preview?: number | boolean;
 }
 
-// Chuẩn hoá BASE URL (loại dấu / ở cuối)
-const API_BASE = (process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api').replace(
-  /\/$/,
-  ''
-);
+const API_BASE = (process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api').replace(/\/$/, '');
+const ORIGIN   = API_BASE.replace(/\/api$/, '');
 
-/** Hook lưu/đọc tiến độ (demo dùng header X-User-Id) */
+const FALLBACK_IMG = (() => {
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='400' height='560'>
+    <rect width='100%' height='100%' fill='#f3f4f6'/>
+    <text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle'
+      font-family='sans-serif' font-size='20' fill='#9ca3af'>No cover</text>
+  </svg>`;
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+})();
+
+const toAbs = (u?: string | null) => {
+  if (!u) return '';
+  const s = u.trim();
+  if (/^file:\/\//i.test(s) || /^[A-Za-z]:\\/.test(s)) return '';
+  if (s.startsWith('http://') || s.startsWith('https://')) return s;
+  if (s.startsWith('/')) return `${ORIGIN}${s}`;
+  return s;
+};
+
+const canOpenDirect = (u: string) => /^https?:\/\//i.test(u) || u.startsWith('/');
+const downloadUrl = (productId: number, fileId: number) =>
+  `${API_BASE}/v1/catalog/products/${productId}/files/${fileId}/download`;
+
+
+/** Hook tiến độ – dùng cookie Sanctum thay vì X-User-Id */
 function useContinue(productId: number | null) {
   const [progress, setProgress] = useState<any>(null);
   const [loading, setLoading] = useState(false);
@@ -32,8 +53,12 @@ function useContinue(productId: number | null) {
     setLoading(true);
     try {
       const r = await fetch(`${API_BASE}/v1/continues/${productId}`, {
-        headers: { 'X-User-Id': '1' },
+        credentials: 'include', // gửi cookie đăng nhập
       });
+      if (r.status === 401) {   // chưa đăng nhập
+        setProgress(null);
+        return;
+      }
       const j = await r.json();
       setProgress(j?.data || null);
     } finally {
@@ -43,21 +68,26 @@ function useContinue(productId: number | null) {
 
   const save = async (p: any) => {
     if (!productId) return;
-    await fetch(`${API_BASE}/v1/continues/${productId}`, {
+    const res = await fetch(`${API_BASE}/v1/continues/${productId}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-User-Id': '1' },
+      credentials: 'include',          // gửi cookie
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(p),
     });
+    if (!res.ok) {
+      const msg = await res.text().catch(() => '');
+      throw new Error(`Save failed: ${res.status} ${msg}`);
+    }
     await load();
   };
 
   return { progress, loading, load, save };
 }
 
+
 export default function BookDetail() {
   const params = useParams();
 
-  // id có thể là string | string[] tùy Next; normalize về number an toàn
   const id = useMemo(() => {
     const raw = (params as any)?.id;
     const s = Array.isArray(raw) ? raw[0] : raw;
@@ -88,28 +118,91 @@ export default function BookDetail() {
     return () => ac.abort();
   }, [id]);
 
-  if (!id) return <div className="p-6 text-red-600">URL không hợp lệ (thiếu id).</div>;
-  if (err) return <div className="p-6 text-red-600">Lỗi: {err}</div>;
+  if (!id)  return <div className="p-6 text-red-600">URL không hợp lệ (thiếu id).</div>;
+  if (err)  return <div className="p-6 text-red-600">Lỗi: {err}</div>;
   if (!data) return <div className="p-6">Đang tải…</div>;
 
-  const preview = data.files.find((f) => !!f.is_preview);
+  const files   = data.files || [];
+  const preview = files.find(f => !!f.is_preview && canOpenDirect(f.file_url)) ||
+                  files.find(f => f.file_type === 'pdf' && canOpenDirect(f.file_url)) || null;
+  const gallery = files.filter(f => f.file_type === 'image' && canOpenDirect(f.file_url));
+
+  const coverSrc = toAbs(data.product.thumbnail_url) || FALLBACK_IMG;
 
   return (
     <div className="p-6 max-w-3xl mx-auto">
-      <h1 className="text-2xl font-bold mb-2">{data.product.title}</h1>
-      <div className="text-gray-600 mb-4">{data.product.category || '—'}</div>
-      <p className="mb-4 whitespace-pre-wrap">{data.product.description}</p>
+      <div className="flex items-start gap-4">
+        <img
+          src={coverSrc}
+          alt={data.product.title}
+          className="w-40 h-56 object-cover rounded"
+          onError={(e)=>{ (e.currentTarget as HTMLImageElement).src = FALLBACK_IMG; }}
+        />
+        <div>
+          <h1 className="text-2xl font-bold mb-1">{data.product.title}</h1>
+          <div className="text-gray-600 mb-2">{data.product.category || '—'}</div>
 
-      {preview ? (
-        <a
-          href={preview.file_url}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-block px-4 py-2 bg-blue-600 text-white rounded"
-        >
-          Xem trước (PDF)
-        </a>
+          {preview ? (
+            <a
+              href={toAbs(preview.file_url)}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-block px-4 py-2 bg-blue-600 text-white rounded"
+            >
+              Xem trước (PDF)
+            </a>
+          ) : (
+            files.some(f => f.is_preview || f.file_type === 'pdf') && (
+              // <div className="text-sm text-red-600">
+              //   File xem trước là đường dẫn cục bộ (file://…). Hãy upload lại file qua Admin để dùng trên web.
+              // </div>
+              <div>
+                </div>
+            ))
+          }
+        </div>
+      </div>
+
+      {data.product.description ? (
+        <p className="mt-6 whitespace-pre-wrap">{data.product.description}</p>
       ) : null}
+
+      {gallery.length > 0 && (
+        <div className="mt-6">
+          <h2 className="font-semibold mb-2">Hình ảnh</h2>
+          <div className="flex flex-wrap gap-2">
+            {gallery.map(img => (
+              <img
+                key={img.id}
+                src={toAbs(img.file_url) || FALLBACK_IMG}
+                alt=""
+                className="w-24 h-32 object-cover rounded"
+                onError={(e)=>{ (e.currentTarget as HTMLImageElement).src = FALLBACK_IMG; }}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {files.length > 0 && (
+        <div className="mt-6">
+          <h2 className="font-semibold mb-2">Tệp đính kèm</h2>
+        <ul className="list-disc pl-6 space-y-1">
+          {files.map(f => (
+            <li key={f.id}>
+              <a
+                href={downloadUrl(data.product.id, f.id)}
+                target="_blank"
+                rel="noreferrer"
+                className="text-blue-600 hover:underline"
+              >
+                Tải về: {f.file_type.toUpperCase()}
+              </a>
+            </li>
+          ))}
+        </ul>
+        </div>
+      )}
 
       <div className="mt-8 border-t pt-4">
         <h2 className="font-semibold mb-2">Tiến độ đọc</h2>
@@ -118,8 +211,7 @@ export default function BookDetail() {
         </div>
         <div className="flex items-center gap-2">
           <input
-            type="number"
-            min={0}
+            type="number" min={0}
             value={page}
             onChange={(e) => setPage(Number(e.target.value))}
             className="border rounded px-2 py-1 w-24"
