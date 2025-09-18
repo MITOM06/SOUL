@@ -110,7 +110,9 @@ export const ordersAPI = {
 
   deleteItem: (itemId: number) =>
     api.delete(`/v1/orders/items/${itemId}`),
-
+    // 👇 Thêm checkout
+  checkout: (orderId: number) =>
+    api.post("v1/orders/checkout", { order_id: orderId }),
 };
 
 // ======================= ADMIN ORDERS =======================

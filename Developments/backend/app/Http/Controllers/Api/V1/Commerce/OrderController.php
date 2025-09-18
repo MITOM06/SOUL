@@ -7,7 +7,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\Order;
 use App\Models\User; // Để sử dụng model User
-
+use Illuminate\Support\Facades\DB;
 // use App\Models\Product; // Để sử dụng model Product
 // use App\Http\Requests\OrderRequest; // Để sử dụng OrderRequest nếu có
 // use Illuminate\Support\Facades\DB; // Để sử dụng DB
@@ -171,29 +171,57 @@ public function index(Request $request)
 // }
 
 //test
+// public function checkout(Request $request)
+// {
+//     $user = $request->user();
+//     if (!$user) {
+//         return response()->json([
+//             'success' => false,
+//             'message' => 'Unauthenticated'
+//         ], 401);
+//     }
+
+//     $order = Order::with('items.product')
+//         ->where('user_id', $user->id)
+//         ->where('status', 'pending')
+//         ->first();
+
+//     if (!$order || $order->items->count() === 0) {
+//         return response()->json([
+//             'success' => false,
+//             'message' => 'No pending order to checkout'
+//         ], 404);
+//     }
+
+//     $order->update(['status' => 'paid']);
+
+//     return response()->json([
+//         'success' => true,
+//         'message' => 'Order checked out successfully',
+//         'data' => $order
+//     ]);
+// }
+
 public function checkout(Request $request)
 {
     $user = $request->user();
-    if (!$user) {
-        return response()->json([
-            'success' => false,
-            'message' => 'Unauthenticated'
-        ], 401);
-    }
 
-    $order = Order::with('items.product')
+    $order = Order::with('items')
         ->where('user_id', $user->id)
         ->where('status', 'pending')
         ->first();
 
-    if (!$order || $order->items->count() === 0) {
+    if (!$order || $order->items->isEmpty()) {
         return response()->json([
             'success' => false,
             'message' => 'No pending order to checkout'
-        ], 404);
+        ], 400);
     }
 
-    $order->update(['status' => 'paid']);
+    DB::transaction(function () use ($order) {
+        $order->update(['status' => 'paid']);
+        $order->items()->delete();
+    });
 
     return response()->json([
         'success' => true,
@@ -201,7 +229,6 @@ public function checkout(Request $request)
         'data' => $order
     ]);
 }
-
 }
 
 

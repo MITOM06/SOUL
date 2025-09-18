@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -73,7 +73,7 @@ export default function OrdersPage() {
         await deleteItem(itemId);
         return;
       }
-      await ordersAPI.updateItemQuantity(itemId, newQty);
+      await ordersAPI.updateItemQuantity(itemId, newQty); // 👈 Bearer token auto kèm
       fetchOrder();
     } finally {
       setActionLoading(false);
@@ -86,7 +86,7 @@ export default function OrdersPage() {
     setActionLoading(true);
 
     try {
-      await ordersAPI.deleteItem(itemId);
+      await ordersAPI.deleteItem(itemId); // 👈 Bearer token auto kèm
       fetchOrder();
     } finally {
       setActionLoading(false);
@@ -157,10 +157,14 @@ export default function OrdersPage() {
         ))}
       </div>
 
-      {/* Total */}
+      {/* Total + Checkout */}
       <div className="mt-6 flex justify-between items-center border-t pt-4">
         <p className="text-lg font-semibold">Total Price: {total} cents</p>
-        <button className="px-5 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
+        <button
+          onClick={() => router.push(`/checkout?order_id=${order.id}`)}
+          disabled={actionLoading}
+          className="px-5 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+        >
           Buy Product
         </button>
       </div>

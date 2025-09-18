@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";   // 👈 để redirect
+import { useAuth } from "@/contexts/AuthContext"; // 👈 lấy user
 import { adminOrdersAPI, adminOrderItemsAPI } from "@/lib/api";
 
 interface Product {
@@ -30,9 +32,13 @@ interface User {
   id: number;
   name: string;
   email: string;
+  role?: "user" | "admin";
 }
 
 export default function AdminOrderManage() {
+  const router = useRouter();
+  const { user, isLoading: authLoading } = useAuth(); // 👈 từ AuthContext
+
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
@@ -41,9 +47,22 @@ export default function AdminOrderManage() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
+  // --- Auth guard ---
   useEffect(() => {
-    fetchOrders();
-  }, []);
+    if (!authLoading) {
+      if (!user) {
+        router.push("/auth/login"); // chưa login thì về login
+      } else if (user.role !== "admin") {
+        router.push("/"); // user thường thì đá về trang chủ
+      }
+    }
+  }, [authLoading, user, router]);
+
+  useEffect(() => {
+    if (user?.role === "admin") {
+      fetchOrders();
+    }
+  }, [user]);
 
   const fetchOrders = async () => {
     setLoading(true);
@@ -87,7 +106,10 @@ export default function AdminOrderManage() {
     }
   };
 
-  if (loading) return <p className="p-6">Loading...</p>;
+  if (authLoading || loading) return <p className="p-6">Loading...</p>;
+
+  // --- Nếu ko phải admin thì ko render ---
+  if (!user || user.role !== "admin") return null;
 
   // tính toán pagination
   const totalPages = Math.ceil(orders.length / itemsPerPage);
@@ -220,7 +242,7 @@ export default function AdminOrderManage() {
                       <div>
                         <p className="font-semibold">{item.product?.title}</p>
                         <p className="text-sm text-gray-600">
-                          Qty: {item.quantity} × {item.unit_price_cents} cents
+                          Qty: {item.quantity} × {item.unit_price_cents} VND
                         </p>
                       </div>
                     </div>
