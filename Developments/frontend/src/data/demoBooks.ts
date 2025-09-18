@@ -3,34 +3,34 @@ import { Book } from '@/types'
 export const demoBooks: Book[] = [
   {
     id: 1,
-    title: 'Lập Trình Tư Duy — Từ Zero lên Hero',
-    author: 'Nguyễn Demo',
+    title: 'Programming Mindset — From Zero to Hero',
+    author: 'Nguyen Demo',
     cover: '', // placeholder
-    description: 'Hành trình học lập trình bài bản: tư duy, roadmap, project thực tế.',
-    category: 'Lập trình',
+    description: 'A structured learning journey for programming: mindset, roadmap, and practical projects.',
+    category: 'Programming',
     access_level: 'free',
-    content_preview: `Chương 1: Tư duy và phương pháp...
-    
-Để bắt đầu, hãy hiểu problem solving...`
+  content_preview: `Chapter 1: Mindset and methods...
+
+To get started, understand problem solving...`
   },
   {
     id: 2,
-    title: 'Thiết kế sản phẩm — Từ ý tưởng đến thực thi',
-    author: 'Trần Mẫu',
+    title: 'Product Design — From Idea to Execution',
+    author: 'Tran Mau',
     cover: '',
-    description: 'Bài học về UX, product discovery, testing và phát triển.',
-    category: 'Sản phẩm',
+    description: 'Lessons on UX, product discovery, testing and product development.',
+    category: 'Product',
     access_level: 'basic',
-    content_preview: 'Chương 1: Đặt câu hỏi đúng...'
+  content_preview: 'Chapter 1: Asking the right questions...'
   },
   {
     id: 3,
-    title: 'Kỹ năng mềm cho dev',
-    author: 'Team Demo',
+    title: 'Soft Skills for Developers',
+    author: 'Demo Team',
     cover: '',
-    description: 'Giao tiếp, quản lý thời gian, làm việc nhóm và thăng tiến.',
-    category: 'Kỹ năng',
+    description: 'Communication, time management, teamwork and career growth.',
+    category: 'Skills',
     access_level: 'free',
-    content_preview: 'Chương 1: Giao tiếp hiệu quả...'
+    content_preview: 'Chapter 1: Effective communication...'
   }
 ]

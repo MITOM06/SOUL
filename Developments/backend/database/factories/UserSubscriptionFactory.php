@@ -6,13 +6,6 @@ use Illuminate\Database\Eloquent\Factories\Factory;
 use App\Models\User;
 use App\Models\Payment;
 
-/**
- * Factory for the UserSubscription model.  Generates realistic subscription
- * periods and randomly assigns a plan tier.  Payment associations are left
- * nullable to avoid deep nested factory creation unless explicitly linked.
- *
- * @extends Factory<\App\Models\UserSubscription>
- */
 class UserSubscriptionFactory extends Factory
 {
     protected $model = \App\Models\UserSubscription::class;

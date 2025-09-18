@@ -88,9 +88,11 @@ export default function Header() {
           </Link>
 
           <nav className="hidden md:flex items-center gap-4 text-sm text-zinc-700">
+            {/* Top navigation. Note: use descriptive labels and keep URLs consistent with new pages. */}
             <Link href="/" className="hover:text-zinc-900">Home</Link>
-            <Link href="/library" className="hover:text-zinc-900">Library</Link>
+            <Link href="/library" className="hover:text-zinc-900">Books</Link>
             <Link href="/podcasts" className="hover:text-zinc-900">Podcasts</Link>
+            <Link href="/upgrade" className="hover:text-zinc-900">Upgrade</Link>
             <Link href="/about" className="hover:text-zinc-900">About</Link>
           </nav>
         </div>

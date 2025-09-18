@@ -13,13 +13,13 @@ export default function HomePage() {
         <div className="card p-8 bg-gradient-to-r from-white to-slate-50">
           <div className="grid lg:grid-cols-2 gap-6 items-center">
             <div>
-              <h1 className="text-4xl font-bold">Nền tảng đọc sách & Podcast — Demo</h1>
+              <h1 className="text-4xl font-bold">Ebook & Podcast Platform — Demo</h1>
               <p className="mt-4 text-lg text-zinc-600">
-                Demo UI/UX cho ebook + podcast: trình đọc (reader), trình phát audio, quản lý nội dung và trang chi tiết.
+                Demo UI/UX for ebooks + podcasts: reader, audio player, content management and detailed pages.
               </p>
               <div className="mt-6 flex gap-3">
-                <a href="#books" className="btn">Xem sách</a>
-                <a href="#podcasts" className="btn-ghost">Xem podcast</a>
+                <a href="#books" className="btn">Browse books</a>
+                <a href="#podcasts" className="btn-ghost">Browse podcasts</a>
               </div>
             </div>
             <div className="cover-placeholder cover-large rounded-xl">
@@ -34,8 +34,8 @@ export default function HomePage() {
         {/* Books */}
         <section id="books" className="space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="section-title">Sách nổi bật</h2>
-            <a className="text-sm text-brand-500" href="/library">Xem tất cả</a>
+            <h2 className="section-title">Featured books</h2>
+            <a className="text-sm text-brand-500" href="/library">See all</a>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {demoBooks.map((b) => <BookCard key={b.id} book={b} />)}
@@ -45,8 +45,8 @@ export default function HomePage() {
         {/* Podcasts */}
         <section id="podcasts" className="space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="section-title">Podcast</h2>
-            <a className="text-sm text-brand-500" href="/podcasts">Xem tất cả</a>
+            <h2 className="section-title">Podcasts</h2>
+            <a className="text-sm text-brand-500" href="/podcasts">See all</a>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {demoPodcasts.map((p) => <PodcastCard key={p.id} podcast={p} />)}
