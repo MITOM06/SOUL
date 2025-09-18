@@ -10,31 +10,31 @@ export default function Footer() {
             <span className="font-semibold">SOUL</span>
           </div>
           <p className="mt-3 text-sm text-zinc-600">
-            Nền tảng Ebook & Podcast. Học tập mỗi ngày.
+            Ebook & Podcast platform. Learn every day.
           </p>
         </div>
 
         <div>
-          <h4 className="font-semibold mb-3">Sản phẩm</h4>
+          <h4 className="font-semibold mb-3">Products</h4>
           <ul className="space-y-2 text-sm text-zinc-700">
-            <li><Link href="/library" className="hover:underline">Thư viện</Link></li>
+            <li><Link href="/library" className="hover:underline">Library</Link></li>
             <li><Link href="/podcasts" className="hover:underline">Podcasts</Link></li>
           </ul>
         </div>
 
         <div>
-          <h4 className="font-semibold mb-3">Công ty</h4>
+          <h4 className="font-semibold mb-3">Company</h4>
           <ul className="space-y-2 text-sm text-zinc-700">
-            <li><Link href="/about" className="hover:underline">Giới thiệu</Link></li>
-            <li><Link href="/contact" className="hover:underline">Liên hệ</Link></li>
+            <li><Link href="/about" className="hover:underline">About</Link></li>
+            <li><Link href="/contact" className="hover:underline">Contact</Link></li>
           </ul>
         </div>
 
         <div>
-          <h4 className="font-semibold mb-3">Pháp lý</h4>
+          <h4 className="font-semibold mb-3">Legal</h4>
           <ul className="space-y-2 text-sm text-zinc-700">
-            <li><Link href="/terms" className="hover:underline">Điều khoản</Link></li>
-            <li><Link href="/privacy" className="hover:underline">Chính sách</Link></li>
+            <li><Link href="/terms" className="hover:underline">Terms</Link></li>
+            <li><Link href="/privacy" className="hover:underline">Privacy Policy</Link></li>
           </ul>
         </div>
       </div>

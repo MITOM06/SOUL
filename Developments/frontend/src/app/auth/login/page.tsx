@@ -93,10 +93,10 @@ const LoginPage = () => {
               <div className="mt-1 relative">
                 <input
                   {...register('password', {
-                    required: 'Mật khẩu là bắt buộc',
+                    required: 'Password is required',
                     minLength: {
                       value: 6,
-                      message: 'Mật khẩu phải có ít nhất 6 ký tự'
+                      message: 'Password must be at least 6 characters'
                     }
                   })}
                   type={showPassword ? 'text' : 'password'}
