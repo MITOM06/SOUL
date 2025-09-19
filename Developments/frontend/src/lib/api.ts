@@ -10,7 +10,7 @@ const api = axios.create({
     'Content-Type': 'application/json',
     'Accept': 'application/json',
   },
-  withCredentials: false, // token-based
+  withCredentials: true, // token-based
 });
 
 // ===== Interceptors =====
@@ -109,11 +109,15 @@ export const ordersAPI = {
   deleteItem: (itemId: number) => api.delete(`/v1/orders/items/${itemId}`),
   checkout: (orderId: number) =>
     api.post('/v1/orders/checkout', { order_id: orderId }),
+  
 }
 // ======================= CART =======================
 export const cartAPI = {
   getCount: () => api.get('/v1/cart/count'),
-  getCart: () => api.get('/v1/cart'),
+  getCart: () => api.get('/v1/orders'), // lấy order pending
+  add: (productId: number, qty = 1) =>
+    api.post('/v1/orders/items', { product_id: productId, quantity: qty }),
+  remove: (itemId: number) => api.delete(`/v1/orders/items/${itemId}`),
 };
 
 
@@ -129,4 +133,15 @@ export const adminOrdersAPI = {
 // ======================= ADMIN ORDER ITEMS =======================
 export const adminOrderItemsAPI = {
   delete: (itemId: number) => api.delete(`/v1/admin/orders/items/${itemId}`),
+};
+
+
+export const adminUsersAPI = {
+  getAll: ({ page = 1, role }: { page?: number; role?: "user" | "admin" }) =>
+    api.get("/v1/admin/users", {   // 👈 thêm /v1
+      params: { page, role },
+    }),
+  create: (data: any) => api.post("/v1/admin/users", data),
+  update: (id: number, data: any) => api.put(`/v1/admin/users/${id}`, data),
+  delete: (id: number) => api.delete(`/v1/admin/users/${id}`),
 };

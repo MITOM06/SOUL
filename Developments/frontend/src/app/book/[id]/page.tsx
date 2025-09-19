@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
+import { useCart } from '@/contexts/CartContext';
 
 interface Product {
   id: number;
@@ -12,13 +13,13 @@ interface Product {
 }
 interface ProductFile {
   id: number;
-  file_type: string;   // 'image' | 'pdf' | 'txt' | 'doc' | 'docx' | 'audio' ...
+  file_type: string;   // 'image' | 'pdf' | 'txt' | ...
   file_url: string;    // /storage/... hoặc http(s)://...
   is_preview?: number | boolean;
 }
 
 const API_BASE = (process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api').replace(/\/$/, '');
-const ORIGIN   = API_BASE.replace(/\/api$/, '');
+const ORIGIN = API_BASE.replace(/\/api$/, '');
 
 const FALLBACK_IMG = (() => {
   const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='400' height='560'>
@@ -42,7 +43,6 @@ const canOpenDirect = (u: string) => /^https?:\/\//i.test(u) || u.startsWith('/'
 const downloadUrl = (productId: number, fileId: number) =>
   `${API_BASE}/v1/catalog/products/${productId}/files/${fileId}/download`;
 
-
 /** Hook tiến độ – dùng cookie Sanctum thay vì X-User-Id */
 function useContinue(productId: number | null) {
   const [progress, setProgress] = useState<any>(null);
@@ -53,9 +53,9 @@ function useContinue(productId: number | null) {
     setLoading(true);
     try {
       const r = await fetch(`${API_BASE}/v1/continues/${productId}`, {
-        credentials: 'include', // gửi cookie đăng nhập
+        credentials: 'include',
       });
-      if (r.status === 401) {   // chưa đăng nhập
+      if (r.status === 401) {
         setProgress(null);
         return;
       }
@@ -70,7 +70,7 @@ function useContinue(productId: number | null) {
     if (!productId) return;
     const res = await fetch(`${API_BASE}/v1/continues/${productId}`, {
       method: 'POST',
-      credentials: 'include',          // gửi cookie
+      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(p),
     });
@@ -84,9 +84,9 @@ function useContinue(productId: number | null) {
   return { progress, loading, load, save };
 }
 
-
 export default function BookDetail() {
   const params = useParams();
+  const { add } = useCart();
 
   const id = useMemo(() => {
     const raw = (params as any)?.id;
@@ -118,13 +118,13 @@ export default function BookDetail() {
     return () => ac.abort();
   }, [id]);
 
-  if (!id)  return <div className="p-6 text-red-600">URL không hợp lệ (thiếu id).</div>;
-  if (err)  return <div className="p-6 text-red-600">Lỗi: {err}</div>;
+  if (!id) return <div className="p-6 text-red-600">URL không hợp lệ (thiếu id).</div>;
+  if (err) return <div className="p-6 text-red-600">Lỗi: {err}</div>;
   if (!data) return <div className="p-6">Đang tải…</div>;
 
-  const files   = data.files || [];
+  const files = data.files || [];
   const preview = files.find(f => !!f.is_preview && canOpenDirect(f.file_url)) ||
-                  files.find(f => f.file_type === 'pdf' && canOpenDirect(f.file_url)) || null;
+    files.find(f => f.file_type === 'pdf' && canOpenDirect(f.file_url)) || null;
   const gallery = files.filter(f => f.file_type === 'image' && canOpenDirect(f.file_url));
 
   const coverSrc = toAbs(data.product.thumbnail_url) || FALLBACK_IMG;
@@ -136,30 +136,30 @@ export default function BookDetail() {
           src={coverSrc}
           alt={data.product.title}
           className="w-40 h-56 object-cover rounded"
-          onError={(e)=>{ (e.currentTarget as HTMLImageElement).src = FALLBACK_IMG; }}
+          onError={(e) => { (e.currentTarget as HTMLImageElement).src = FALLBACK_IMG; }}
         />
         <div>
           <h1 className="text-2xl font-bold mb-1">{data.product.title}</h1>
-          <div className="text-gray-600 mb-2">{data.product.category || '—'}</div>
+          <div className="text-gray-600 mb-3">{data.product.category || '—'}</div>
 
-          {preview ? (
-            <a
-              href={toAbs(preview.file_url)}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-block px-4 py-2 bg-blue-600 text-white rounded"
+          <div className="flex gap-2">
+            {preview && (
+              <a
+                href={toAbs(preview.file_url)}
+                target="_blank"
+                rel="noreferrer"
+                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+              >
+                Xem trước (PDF)
+              </a>
+            )}
+            <button
+              onClick={() => add(data.product.id, 1)}
+              className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
             >
-              Xem trước (PDF)
-            </a>
-          ) : (
-            files.some(f => f.is_preview || f.file_type === 'pdf') && (
-              // <div className="text-sm text-red-600">
-              //   File xem trước là đường dẫn cục bộ (file://…). Hãy upload lại file qua Admin để dùng trên web.
-              // </div>
-              <div>
-                </div>
-            ))
-          }
+              🛒 Add to Cart
+            </button>
+          </div>
         </div>
       </div>
 
@@ -177,7 +177,7 @@ export default function BookDetail() {
                 src={toAbs(img.file_url) || FALLBACK_IMG}
                 alt=""
                 className="w-24 h-32 object-cover rounded"
-                onError={(e)=>{ (e.currentTarget as HTMLImageElement).src = FALLBACK_IMG; }}
+                onError={(e) => { (e.currentTarget as HTMLImageElement).src = FALLBACK_IMG; }}
               />
             ))}
           </div>
@@ -187,20 +187,20 @@ export default function BookDetail() {
       {files.length > 0 && (
         <div className="mt-6">
           <h2 className="font-semibold mb-2">Tệp đính kèm</h2>
-        <ul className="list-disc pl-6 space-y-1">
-          {files.map(f => (
-            <li key={f.id}>
-              <a
-                href={downloadUrl(data.product.id, f.id)}
-                target="_blank"
-                rel="noreferrer"
-                className="text-blue-600 hover:underline"
-              >
-                Tải về: {f.file_type.toUpperCase()}
-              </a>
-            </li>
-          ))}
-        </ul>
+          <ul className="list-disc pl-6 space-y-1">
+            {files.map(f => (
+              <li key={f.id}>
+                <a
+                  href={downloadUrl(data.product.id, f.id)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-blue-600 hover:underline"
+                >
+                  Tải về: {f.file_type.toUpperCase()}
+                </a>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 

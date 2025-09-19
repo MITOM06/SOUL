@@ -20,38 +20,41 @@ class OrderItemController extends Controller
 
         $request->validate([
             'product_id' => 'required|exists:products,id',
-            'quantity'   => 'required|integer|min:1'
+            'quantity'   => 'nullable|integer|min:1'
         ]);
 
+        $qty = $request->input('quantity', 1);
         $product = Product::findOrFail($request->product_id);
 
-        // Lấy order "pending" hoặc tạo mới
+        // 👉 Lấy order "pending" hoặc tạo mới
         $order = Order::firstOrCreate(
             ['user_id' => $user->id, 'status' => 'pending'],
             ['total_cents' => 0]
         );
 
+        // 👉 Kiểm tra item đã tồn tại chưa
         $item = $order->items()->where('product_id', $product->id)->first();
+
         if ($item) {
-            $item->quantity += $request->quantity;
+            $item->quantity += $qty;
             $item->save();
         } else {
-            $order->items()->create([
-                'product_id'      => $product->id,
-                'quantity'        => $request->quantity,
-                'unit_price_cents'=> $product->price_cents,
-                'meta'            => ['title' => $product->title]
+            $item = $order->items()->create([
+                'product_id'       => $product->id,
+                'quantity'         => $qty,
+                'unit_price_cents' => $product->price_cents,
+                'meta'             => ['title' => $product->title],
             ]);
         }
 
-        // cập nhật tổng
+        // 👉 Cập nhật tổng tiền
         $order->total_cents = $order->items->sum(fn($i) => $i->quantity * $i->unit_price_cents);
         $order->save();
 
         return response()->json([
             'success' => true,
-            'message' => 'Item added to order',
-            'data'    => $order->load('items.product')
+            'message' => 'Item added to pending order',
+            'data'    => $order->load('items.product'),
         ]);
     }
 
@@ -68,7 +71,7 @@ class OrderItemController extends Controller
         ]);
 
         $item = OrderItem::find($itemId);
-        if (!$item || $item->order->user_id !== $user->id) {
+        if (!$item || $item->order->user_id !== $user->id || $item->order->status !== 'pending') {
             return response()->json(['success' => false, 'message' => 'Item not found'], 404);
         }
 
@@ -95,7 +98,7 @@ class OrderItemController extends Controller
         }
 
         $item = OrderItem::find($itemId);
-        if (!$item || $item->order->user_id !== $user->id) {
+        if (!$item || $item->order->user_id !== $user->id || $item->order->status !== 'pending') {
             return response()->json(['success' => false, 'message' => 'Item not found'], 404);
         }
 
@@ -106,17 +109,17 @@ class OrderItemController extends Controller
             $order->total_cents = $order->items->sum(fn($i) => $i->quantity * $i->unit_price_cents);
             $order->save();
         } else {
-            $order->delete(); // xoá luôn order rỗng
+            $order->delete(); // 👉 xoá luôn order rỗng
         }
 
         return response()->json([
             'success' => true,
-            'message' => 'Item removed from order',
+            'message' => 'Item removed from pending order',
             'data'    => $order?->load('items.product')
         ]);
     }
 
-    // ➡️ Đếm số lượng trong giỏ
+    // ➡️ Đếm số lượng trong giỏ (order pending)
     public function cartCount(Request $request)
     {
         $user = $request->user();
