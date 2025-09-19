@@ -1,25 +1,18 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { favouritesAPI } from '@/lib/api';
-import { useAuth } from '@/contexts/AuthContext';
-import toast from 'react-hot-toast';
 import { useParams } from 'next/navigation';
-import Link from 'next/link';
 
-type ProductType = 'ebook' | 'podcast';
 interface Product {
   id: number;
-  type: ProductType;
   title: string;
   description?: string | null;
   category?: string | null;
   thumbnail_url?: string | null;
-  price_cents: number;
 }
 interface ProductFile {
   id: number;
-  file_type: string;   // 'pdf' | 'image' | ...
+  file_type: string;   // 'image' | 'pdf' | 'txt' | 'doc' | 'docx' | 'audio' ...
   file_url: string;    // /storage/... hoặc http(s)://...
   is_preview?: number | boolean;
 }
@@ -36,27 +29,65 @@ const FALLBACK_IMG = (() => {
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 })();
 
-const formatVND = (n: number | null | undefined) =>
-  Number(n ?? 0).toLocaleString('vi-VN', { maximumFractionDigits: 0 }) + ' đ';
-
 const toAbs = (u?: string | null) => {
   if (!u) return '';
-  const s = String(u).trim();
-  if (/^file:\/\//i.test(s) || /^[A-Za-z]:\\/.test(s)) return ''; // chặn đường dẫn cục bộ
+  const s = u.trim();
+  if (/^file:\/\//i.test(s) || /^[A-Za-z]:\\/.test(s)) return '';
   if (s.startsWith('http://') || s.startsWith('https://')) return s;
   if (s.startsWith('/')) return `${ORIGIN}${s}`;
   return s;
 };
+
 const canOpenDirect = (u: string) => /^https?:\/\//i.test(u) || u.startsWith('/');
-const isPdf = (f: ProductFile) =>
-  f.file_type?.toLowerCase() === 'pdf' || /\.pdf(\?|$)/i.test(f.file_url || '');
-const isImage = (f: ProductFile) =>
-  f.file_type?.toLowerCase() === 'image' || /\.(png|jpe?g|webp)(\?|$)/i.test(f.file_url || '');
 const downloadUrl = (productId: number, fileId: number) =>
   `${API_BASE}/v1/catalog/products/${productId}/files/${fileId}/download`;
 
+
+/** Hook tiến độ – dùng cookie Sanctum thay vì X-User-Id */
+function useContinue(productId: number | null) {
+  const [progress, setProgress] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+
+  const load = async () => {
+    if (!productId) return;
+    setLoading(true);
+    try {
+      const r = await fetch(`${API_BASE}/v1/continues/${productId}`, {
+        credentials: 'include', // gửi cookie đăng nhập
+      });
+      if (r.status === 401) {   // chưa đăng nhập
+        setProgress(null);
+        return;
+      }
+      const j = await r.json();
+      setProgress(j?.data || null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const save = async (p: any) => {
+    if (!productId) return;
+    const res = await fetch(`${API_BASE}/v1/continues/${productId}`, {
+      method: 'POST',
+      credentials: 'include',          // gửi cookie
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(p),
+    });
+    if (!res.ok) {
+      const msg = await res.text().catch(() => '');
+      throw new Error(`Save failed: ${res.status} ${msg}`);
+    }
+    await load();
+  };
+
+  return { progress, loading, load, save };
+}
+
+
 export default function BookDetail() {
   const params = useParams();
+
   const id = useMemo(() => {
     const raw = (params as any)?.id;
     const s = Array.isArray(raw) ? raw[0] : raw;
@@ -66,184 +97,133 @@ export default function BookDetail() {
 
   const [data, setData] = useState<{ product: Product; files: ProductFile[] } | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  // modal states
-  const [showPreview, setShowPreview] = useState(false);
-  const [showReader, setShowReader] = useState(false);
+  const { progress, load, save } = useContinue(id);
+  const [page, setPage] = useState<number>(0);
 
   useEffect(() => {
     if (!id) return;
     const ac = new AbortController();
     (async () => {
       try {
-        setLoading(true); setErr(null);
+        setErr(null);
         const r = await fetch(`${API_BASE}/v1/catalog/products/${id}`, { signal: ac.signal });
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         const j = await r.json();
         setData(j?.data || null);
+        await load();
       } catch (e: any) {
-
         if (e?.name !== 'AbortError') setErr(e?.message || 'Không tải được dữ liệu');
-      } finally {
-        setLoading(false);
       }
     })();
     return () => ac.abort();
   }, [id]);
 
   if (!id)  return <div className="p-6 text-red-600">URL không hợp lệ (thiếu id).</div>;
-  if (loading) return <div className="p-6">Đang tải…</div>;
   if (err)  return <div className="p-6 text-red-600">Lỗi: {err}</div>;
-  if (!data) return <div className="p-6">Không có dữ liệu.</div>;
+  if (!data) return <div className="p-6">Đang tải…</div>;
 
-  const p = data.product;
-  const files = data.files || [];
-  const cover = toAbs(p.thumbnail_url) || FALLBACK_IMG;
+  const files   = data.files || [];
+  const preview = files.find(f => !!f.is_preview && canOpenDirect(f.file_url)) ||
+                  files.find(f => f.file_type === 'pdf' && canOpenDirect(f.file_url)) || null;
+  const gallery = files.filter(f => f.file_type === 'image' && canOpenDirect(f.file_url));
 
-  // 1) file preview (ưu tiên is_preview, sau đó bất kỳ PDF nào)
-  const previewFile =
-    files.find(f => !!f.is_preview && isPdf(f) && canOpenDirect(f.file_url)) ||
-    files.find(f => isPdf(f) && canOpenDirect(f.file_url)) ||
-    null;
-
-  // 2) file đọc online (ưu tiên PDF đầy đủ; nếu không có PDF thì dùng ảnh trang)
-  const fullPdf   = files.find(f => isPdf(f)); // có thể là preview nếu chỉ có 1 PDF
-  const imgPages  = files.filter(f => isImage(f) && canOpenDirect(f.file_url));
-
-  const previewUrl = previewFile
-    ? (canOpenDirect(previewFile.file_url) ? toAbs(previewFile.file_url) : downloadUrl(p.id, previewFile.id))
-    : '';
-
-  const readerPdfUrl = fullPdf
-    ? (canOpenDirect(fullPdf.file_url) ? toAbs(fullPdf.file_url) : downloadUrl(p.id, fullPdf.id))
-    : '';
-
-
-  // 1 file để tải (nếu có)
-  const downloadable = fullPdf || files[0] || null;
+  const coverSrc = toAbs(data.product.thumbnail_url) || FALLBACK_IMG;
 
   return (
     <div className="p-6 max-w-3xl mx-auto">
-      {/* Header */}
       <div className="flex items-start gap-4">
         <img
-          src={cover}
-          alt={p.title}
+          src={coverSrc}
+          alt={data.product.title}
           className="w-40 h-56 object-cover rounded"
           onError={(e)=>{ (e.currentTarget as HTMLImageElement).src = FALLBACK_IMG; }}
         />
-        <div className="flex-1">
-          <h1 className="text-2xl font-bold mb-1">{p.title}</h1>
-          <div className="text-gray-600 mb-2">{p.category || '—'}</div>
-          <div className="text-sm mb-4">{p.price_cents > 0 ? formatVND(p.price_cents) : 'Miễn phí'}</div>
+        <div>
+          <h1 className="text-2xl font-bold mb-1">{data.product.title}</h1>
+          <div className="text-gray-600 mb-2">{data.product.category || '—'}</div>
 
-          <div className="flex flex-wrap gap-2">
-            {previewUrl && (
-              <button
-                className="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700"
-                onClick={() => setShowPreview(true)}
-              >
-                Đọc thử
-              </button>
-            )}
-
-            {(readerPdfUrl || imgPages.length) ? (
-              <button
-                className="px-4 py-2 rounded bg-emerald-600 text-white hover:bg-emerald-700"
-                onClick={() => setShowReader(true)}
-              >
-                Đọc online (xem thêm)
-              </button>
-            ) : null}
-
-            {downloadable && (
-              <a
-                href={downloadUrl(p.id, downloadable.id)}
-                target="_blank"
-                rel="noreferrer"
-                className="px-4 py-2 rounded border"
-              >
-                Tải về: {downloadable.file_type.toUpperCase()}
-              </a>
-            )}
-          </div>
+          {preview ? (
+            <a
+              href={toAbs(preview.file_url)}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-block px-4 py-2 bg-blue-600 text-white rounded"
+            >
+              Xem trước (PDF)
+            </a>
+          ) : (
+            files.some(f => f.is_preview || f.file_type === 'pdf') && (
+              // <div className="text-sm text-red-600">
+              //   File xem trước là đường dẫn cục bộ (file://…). Hãy upload lại file qua Admin để dùng trên web.
+              // </div>
+              <div>
+                </div>
+            ))
+          }
         </div>
       </div>
 
-      {/* Mô tả */}
-      {p.description ? (
-        <p className="mt-6 whitespace-pre-wrap">{p.description}</p>
+      {data.product.description ? (
+        <p className="mt-6 whitespace-pre-wrap">{data.product.description}</p>
+      ) : null}
 
-
-      {/* ========= Modal: Đọc thử ========= */}
-      {showPreview && previewUrl && (
-        <div
-          className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4"
-          onClick={() => setShowPreview(false)}
-        >
-          <div
-            className="bg-white rounded-xl w-full max-w-4xl h-[80vh] overflow-hidden flex flex-col"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between px-4 py-2 border-b">
-              <div className="font-semibold">Đọc thử</div>
-              <button className="text-sm px-3 py-1 border rounded" onClick={() => setShowPreview(false)}>Đóng</button>
-            </div>
-            <div className="flex-1">
-              <iframe src={previewUrl} className="w-full h-full" title="Preview" />
-            </div>
+      {gallery.length > 0 && (
+        <div className="mt-6">
+          <h2 className="font-semibold mb-2">Hình ảnh</h2>
+          <div className="flex flex-wrap gap-2">
+            {gallery.map(img => (
+              <img
+                key={img.id}
+                src={toAbs(img.file_url) || FALLBACK_IMG}
+                alt=""
+                className="w-24 h-32 object-cover rounded"
+                onError={(e)=>{ (e.currentTarget as HTMLImageElement).src = FALLBACK_IMG; }}
+              />
+            ))}
           </div>
         </div>
       )}
 
-      {/* ========= Overlay toàn màn hình: Đọc online ========= */}
-      {showReader && (
-        <div className="fixed inset-0 z-50 bg-white flex flex-col">
-          <div className="flex items-center justify-between px-4 py-2 border-b">
-            <div className="font-semibold truncate">Đọc online — {p.title}</div>
-            <div className="flex items-center gap-2">
-              {fullPdf && (
-                <a
-                  href={downloadUrl(p.id, fullPdf.id)}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-sm px-3 py-1 border rounded"
-                >
-                  Tải PDF
-                </a>
-              )}
-              <button
-                className="text-sm px-3 py-1 border rounded"
-                onClick={() => setShowReader(false)}
+      {files.length > 0 && (
+        <div className="mt-6">
+          <h2 className="font-semibold mb-2">Tệp đính kèm</h2>
+        <ul className="list-disc pl-6 space-y-1">
+          {files.map(f => (
+            <li key={f.id}>
+              <a
+                href={downloadUrl(data.product.id, f.id)}
+                target="_blank"
+                rel="noreferrer"
+                className="text-blue-600 hover:underline"
               >
-                Đóng
-              </button>
-            </div>
-          </div>
-
-          <div className="flex-1 bg-neutral-50">
-            {readerPdfUrl ? (
-              <iframe src={readerPdfUrl} title="Reader" className="w-full h-full" />
-            ) : imgPages.length > 0 ? (
-              <div className="max-w-3xl mx-auto p-4 space-y-4 overflow-y-auto h-full">
-                {imgPages.map(img => (
-                  <img
-                    key={img.id}
-                    src={toAbs(img.file_url)}
-                    alt=""
-                    className="w-full rounded shadow"
-                  />
-                ))}
-              </div>
-            ) : (
-              <div className="h-full flex items-center justify-center text-gray-500">
-                Chưa có nội dung để đọc online.
-              </div>
-            )}
-          </div>
+                Tải về: {f.file_type.toUpperCase()}
+              </a>
+            </li>
+          ))}
+        </ul>
         </div>
       )}
+
+      <div className="mt-8 border-t pt-4">
+        <h2 className="font-semibold mb-2">Tiến độ đọc</h2>
+        <div className="text-sm text-gray-600 mb-2">
+          Trang hiện tại: {progress?.current_page ?? 0}
+        </div>
+        <div className="flex items-center gap-2">
+          <input
+            type="number" min={0}
+            value={page}
+            onChange={(e) => setPage(Number(e.target.value))}
+            className="border rounded px-2 py-1 w-24"
+          />
+          <button
+            onClick={() => save({ current_page: page })}
+            className="px-3 py-1 rounded bg-green-600 text-white"
+          >
+            Lưu tiến độ
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

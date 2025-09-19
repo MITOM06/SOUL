@@ -9,22 +9,33 @@ use App\Http\Controllers\Api\V1\Commerce\OrderController;
 use App\Http\Controllers\Api\V1\Commerce\OrderItemController;
 use App\Http\Controllers\Api\V1\Commerce\PaymentController;
 use App\Http\Controllers\Api\V1\Users\UserController;
+use App\Http\Controllers\Api\V1\Admin\UserController as AdminUserController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\V1\Admin\AdminOrderController;
 use App\Http\Controllers\Api\V1\Admin\AdminOrderItemController;
+use App\Http\Controllers\Api\V1\Admin\SubscriptionController;
+use App\Http\Controllers\Api\V1\Library\FavouriteController;
+use App\Http\Controllers\Api\V1\Catalog\ProductReadController;
+use App\Http\Controllers\Api\V1\Catalog\ProductWriteController;
+use App\Http\Controllers\Api\V1\Library\ContinueLiteController;
+use App\Http\Controllers\Api\V1\Media\YoutubeController;
 
 Route::get('/health', fn() => response()->json(['ok' => true, 'ts' => now()->toISOString()]));
 
+// =====================================================
+// 🔹 API v1
+// =====================================================
 Route::prefix('v1')->group(function () {
-    // 🔹 Auth (public)
+
+    // ---------------- Auth (public) ----------------
     Route::post('register', [RegisterController::class, 'register']);
     Route::post('login', [LoginController::class, 'login']);
 
-    // 🔹 Public products
+    // ---------------- Public Products ----------------
     Route::get('products', [ProductController::class, 'index']);
     Route::get('products/{product}', [ProductController::class, 'show']);
 
-    // 🔹 Payment public
+    // ---------------- Payment public ----------------
     Route::post('payment/checkout', [PaymentController::class, 'checkout']);
     Route::post('payment/webhook', [PaymentController::class, 'webhook']);
     Route::get('payments/{id}/auto-success', [PaymentController::class, 'autoSuccess'])
@@ -43,15 +54,21 @@ Route::prefix('v1')->group(function () {
         Route::put('profile', [UserController::class, 'updateProfile']);
         Route::put('profile/password', [UserController::class, 'changePassword']);
 
+        // Favourites
+        Route::get   ('favourites',            [FavouriteController::class, 'index']);
+        Route::post  ('favourites',            [FavouriteController::class, 'store']);
+Route::post  ('favourites/toggle',     [FavouriteController::class, 'toggle']);
+        Route::delete('favourites/{product}',  [FavouriteController::class, 'destroy']);
+
         // Transactions
         Route::get('transactions', [PaymentController::class, 'listTransactions']);
         Route::get('transactions/{id}', [PaymentController::class, 'showTransaction']);
 
         // Orders
-        Route::get('orders', [OrderController::class, 'index']);   // danh sách
-        Route::post('orders', [OrderController::class, 'store']); // tạo đơn
+        Route::get('orders', [OrderController::class, 'index']);
+        Route::post('orders', [OrderController::class, 'store']);
         Route::get('orders/{order}', [OrderController::class, 'show']);
-        Route::post('orders/checkout', [OrderController::class, 'checkout']); // checkout chính thức
+        Route::post('orders/checkout', [OrderController::class, 'checkout']);
 
         // Cart
         Route::get('cart', [OrderController::class, 'getCart']);
@@ -70,13 +87,15 @@ Route::prefix('v1')->group(function () {
     // 🔹 Admin routes
     // =====================================================
     Route::prefix('admin')->middleware(['auth:sanctum', 'admin'])->group(function () {
+        // Dashboard / stats
         Route::get('stats', [DashboardController::class, 'stats']);
 
-        // Users (sau này có thể tách Admin\UserController)
-        Route::get('users', [UserController::class, 'index']);
-        Route::get('users/{user}', [UserController::class, 'show']);
-        Route::put('users/{user}', [UserController::class, 'update']);
-        Route::delete('users/{user}', [UserController::class, 'destroy']);
+        // Users management
+        Route::get('users', [AdminUserController::class, 'index']);
+        Route::get('users/{user}', [AdminUserController::class, 'show']);
+        Route::post('users', [AdminUserController::class, 'store']);
+        Route::put('users/{user}', [AdminUserController::class, 'update']);
+        Route::delete('users/{user}', [AdminUserController::class, 'destroy']);
 
         // Products
         Route::post('products', [ProductController::class, 'store']);
@@ -89,13 +108,39 @@ Route::prefix('v1')->group(function () {
         Route::put('orders/{order}', [AdminOrderController::class, 'update']);
         Route::delete('orders/{order}', [AdminOrderController::class, 'destroy']);
 
-        // Order Items
+        // Subscriptions
+        Route::get('subscriptions', [SubscriptionController::class, 'index']);
+        Route::get('subscriptions/{id}', [SubscriptionController::class, 'show']);
+        Route::post('subscriptions', [SubscriptionController::class, 'store']);
+        Route::put('subscriptions/{id}', [SubscriptionController::class, 'update']);
+        Route::delete('subscriptions/{id}', [SubscriptionController::class, 'destroy']);
+// Order Items
         Route::get('orders/items', [AdminOrderItemController::class, 'index']);
         Route::get('orders/items/{item}', [AdminOrderItemController::class, 'show']);
         Route::put('orders/items/{item}', [AdminOrderItemController::class, 'update']);
         Route::delete('orders/items/{item}', [AdminOrderItemController::class, 'destroy']);
     });
 
-    // 🔹 Fallback
+    // =====================================================
+    // 🔹 Catalog + Media
+    // =====================================================
+    Route::get('catalog/products', [ProductReadController::class, 'index']);
+    Route::get('catalog/products/{id}', [ProductReadController::class, 'show']);
+
+    Route::post('catalog/products', [ProductWriteController::class, 'store']);
+    Route::put('catalog/products/{id}', [ProductWriteController::class, 'update']);
+    Route::delete('catalog/products/{id}', [ProductWriteController::class, 'destroy']);
+    Route::post('catalog/products/{id}/files', [ProductWriteController::class, 'uploadFiles']);
+    Route::post('catalog/products/{id}/thumbnail', [ProductWriteController::class, 'uploadThumbnail']);
+    Route::get('catalog/products/{product}/files/{file}/download', [ProductWriteController::class, 'downloadFile']);
+
+    // Continue progress
+    Route::get('continues/{product}', [ContinueLiteController::class, 'show']);
+    Route::post('continues/{product}', [ContinueLiteController::class, 'store']);
+
+    // Youtube
+    Route::get('youtube/lookup', [YoutubeController::class, 'lookup']);
+
+    // ---------------- Fallback ----------------
     Route::fallback(fn() => response()->json(['message' => 'Endpoint not found'], 404));
 });

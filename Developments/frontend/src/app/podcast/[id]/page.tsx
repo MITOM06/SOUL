@@ -1,4 +1,5 @@
 'use client';
+
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
 
@@ -199,41 +200,6 @@ export default function PodcastDetailPage() {
 
   const cover = toAbs(p.thumbnail_url) || yt?.thumb || FALLBACK_IMG;
 
-  const { user } = useAuth();
-  const [isFav, setIsFav] = useState(false);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const fav = await favouritesAPI.listMine();
-        const items = fav.data?.data?.books || fav.data?.data?.items || [];
-        const items2 = fav.data?.data?.podcasts || [];
-        const merged = [...items, ...items2];
-        if (merged.some((x: any) => Number(x.id) === Number(id))) setIsFav(true);
-      } catch {}
-    })();
-  }, [id]);
-
-  const toggleFavourite = async () => {
-    if (!user) {
-      toast.error('Bạn cần đăng nhập');
-      return;
-    }
-    try {
-      if (isFav) {
-        await favouritesAPI.remove(id);
-        setIsFav(false);
-        toast.success('Đã xoá khỏi yêu thích');
-      } else {
-        await favouritesAPI.add(id);
-        setIsFav(true);
-        toast.success('Đã thêm vào yêu thích');
-      }
-    } catch (e: any) {
-      toast.error(e?.response?.data?.message || 'Thao tác thất bại');
-    }
-  };
-
   return (
     <div className="p-6 max-w-4xl mx-auto">
       <div className="flex items-start gap-6">
@@ -263,10 +229,10 @@ export default function PodcastDetailPage() {
             ) : yt ? (
               <div className="space-y-2">
                 <YoutubeAudio embedUrl={yt.embed} cover={cover} title={p.title} />
-                {/* <a href={yt.watch} target="_blank" rel="noreferrer" className="text-sm text-blue-600 hover:underline">
+                <a href={yt.watch} target="_blank" rel="noreferrer" className="text-sm text-blue-600 hover:underline">
                   Mở trên YouTube
-                </a> */}
-                {/* <div className="text-xs text-gray-500">* Video ẩn – chỉ phát âm thanh từ YouTube.</div> */}
+                </a>
+                <div className="text-xs text-gray-500">* Video ẩn – chỉ phát âm thanh từ YouTube.</div>
               </div>
             ) : (
               <div className="text-gray-500">Hiện chưa có tệp âm thanh.</div>
@@ -284,4 +250,3 @@ export default function PodcastDetailPage() {
     </div>
   );
 }
-
