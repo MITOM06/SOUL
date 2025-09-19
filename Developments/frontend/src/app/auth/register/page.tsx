@@ -1,5 +1,5 @@
 // frontend/src/app/auth/register/page.tsx
-"use client";
+'use client';
 
 import React, { useState } from 'react';
 import Link from 'next/link';
@@ -7,37 +7,36 @@ import { useRouter } from 'next/navigation';
 import { EyeIcon, EyeSlashIcon } from '@heroicons/react/24/outline';
 import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
-import { useAuth } from '../../../contexts/AuthContext';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface RegisterForm {
-  name: string;
+  name?: string;
   email: string;
   password: string;
   password_confirmation: string;
-  terms: boolean;
+  terms?: boolean;
 }
 
-const RegisterPage = () => {
+export default function RegisterPage() {
   const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const { register: registerUser, refreshUser } = useAuth();
 
   const {
     register,
     handleSubmit,
     watch,
-    formState: { errors }
+    formState: { errors },
   } = useForm<RegisterForm>();
 
   const password = watch('password');
 
-  const { register: registerUser, login, refreshUser } = useAuth();
-
   const onSubmit = async (data: RegisterForm) => {
     setIsLoading(true);
     try {
-      // Use AuthContext.register to create account
+      // 👉 GỌI register() và KHÔNG gọi login()
       const ok = await registerUser({
         name: data.name,
         email: data.email,
@@ -45,26 +44,13 @@ const RegisterPage = () => {
         password_confirmation: data.password_confirmation,
       });
 
-      if (!ok) {
-        // registerUser already shows toast on failure
-        return;
-      }
+      if (!ok) return;
 
-      // After successful registration, attempt to log the user in automatically
-      const logged = await login({ email: data.email, password: data.password });
-      if (logged) {
-        // refresh user data and navigate home
-        try {
-          await refreshUser();
-        } catch (err) {
-          // ignore refresh errors
-        }
-        router.replace('/');
-      } else {
-        // If automatic login failed, redirect to login page so user can sign in
-        toast.success('Registration succeeded. Please sign in to continue.');
-        router.push('/auth/login');
-      }
+      // Có thể refresh lại để đồng bộ (không bắt buộc nếu register đã set user)
+      try { await refreshUser(); } catch {}
+
+      // Về home ngay, không hiện "login thành công"
+      router.replace('/');
     } catch (error) {
       console.error('Register error:', error);
       toast.error('An error occurred during registration');
@@ -83,10 +69,7 @@ const RegisterPage = () => {
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600">
             Or{' '}
-            <Link
-              href="/auth/login"
-              className="font-medium text-blue-600 hover:text-blue-500"
-            >
+            <Link href="/auth/login" className="font-medium text-blue-600 hover:text-blue-500">
               sign in to an existing account
             </Link>
           </p>
@@ -102,19 +85,13 @@ const RegisterPage = () => {
               </label>
               <input
                 {...register('name', {
-                  required: 'Full name is required',
-                  minLength: {
-                    value: 2,
-                    message: 'Name must be at least 2 characters'
-                  }
+                  minLength: { value: 2, message: 'Name must be at least 2 characters' },
                 })}
                 type="text"
                 className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                 placeholder="Enter your full name"
               />
-              {errors.name && (
-                <p className="mt-1 text-sm text-red-600">{errors.name.message}</p>
-              )}
+              {errors.name && <p className="mt-1 text-sm text-red-600">{errors.name.message}</p>}
             </div>
 
             {/* Email */}
@@ -127,16 +104,14 @@ const RegisterPage = () => {
                   required: 'Email is required',
                   pattern: {
                     value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
-                    message: 'Invalid email address'
-                  }
+                    message: 'Invalid email address',
+                  },
                 })}
                 type="email"
                 className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                 placeholder="Enter your email"
               />
-              {errors.email && (
-                <p className="mt-1 text-sm text-red-600">{errors.email.message}</p>
-              )}
+              {errors.email && <p className="mt-1 text-sm text-red-600">{errors.email.message}</p>}
             </div>
 
             {/* Password */}
@@ -148,10 +123,7 @@ const RegisterPage = () => {
                 <input
                   {...register('password', {
                     required: 'Password is required',
-                    minLength: {
-                      value: 8,
-                      message: 'Password must be at least 8 characters'
-                    }
+                    minLength: { value: 8, message: 'Password must be at least 8 characters' },
                   })}
                   type={showPassword ? 'text' : 'password'}
                   className="block w-full px-3 py-2 pr-10 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
@@ -169,9 +141,7 @@ const RegisterPage = () => {
                   )}
                 </button>
               </div>
-              {errors.password && (
-                <p className="mt-1 text-sm text-red-600">{errors.password.message}</p>
-              )}
+              {errors.password && <p className="mt-1 text-sm text-red-600">{errors.password.message}</p>}
             </div>
 
             {/* Confirm Password */}
@@ -183,8 +153,7 @@ const RegisterPage = () => {
                 <input
                   {...register('password_confirmation', {
                     required: 'Please confirm your password',
-                    validate: (value) =>
-                      value === password || 'Password confirmation does not match'
+                    validate: (value) => value === password || 'Password confirmation does not match',
                   })}
                   type={showConfirmPassword ? 'text' : 'password'}
                   className="block w-full px-3 py-2 pr-10 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
@@ -211,9 +180,7 @@ const RegisterPage = () => {
           {/* Terms & Conditions */}
           <div className="flex items-center">
             <input
-              {...register('terms', {
-                required: 'You must agree to the terms of use'
-              })}
+              {...register('terms')}
               id="terms"
               name="terms"
               type="checkbox"
@@ -230,9 +197,6 @@ const RegisterPage = () => {
               </Link>
             </label>
           </div>
-          {errors.terms && (
-            <p className="mt-1 text-sm text-red-600">{errors.terms.message}</p>
-          )}
 
           {/* Submit Button */}
           <div>
@@ -252,6 +216,4 @@ const RegisterPage = () => {
       </div>
     </div>
   );
-};
-
-export default RegisterPage;
+}

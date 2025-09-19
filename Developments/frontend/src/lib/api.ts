@@ -85,16 +85,16 @@ export const profileAPI = {
     api.put('/v1/profile/password', data),
 };
 
-// ======================= TRANSACTIONS =======================
+// ======================= TRANSACTIONS / PAYMENTS =======================
 export const transactionsAPI = {
   getAll: () => api.get('/v1/transactions'),
   getById: (id: number) => api.get(`/v1/transactions/${id}`),
 };
-export const paymentsAPI = {
-  initCheckout: (orderId: number, provider = "fake") =>
-    api.post("/v1/payment/checkout", { order_id: orderId, provider }),
-};
 
+export const paymentsAPI = {
+  initCheckout: (orderId: number, provider = 'fake') =>
+    api.post('/v1/payment/checkout', { order_id: orderId, provider }),
+};
 
 // ======================= ORDERS =======================
 export const ordersAPI = {
@@ -103,19 +103,19 @@ export const ordersAPI = {
   create: (data: { product_ids: number[]; payment_method: string }) =>
     api.post('/v1/orders', data),
   update: (id: number, data: any) =>
-    api.put(`/v1/orders/${id}`, data), // ✅ khớp với backend
+    api.put(`/v1/orders/${id}`, data),
   updateItemQuantity: (itemId: number, quantity: number) =>
     api.put(`/v1/orders/items/${itemId}`, { quantity }),
   deleteItem: (itemId: number) => api.delete(`/v1/orders/items/${itemId}`),
   checkout: (orderId: number) =>
     api.post('/v1/orders/checkout', { order_id: orderId }),
-}
+};
+
 // ======================= CART =======================
 export const cartAPI = {
   getCount: () => api.get('/v1/cart/count'),
   getCart: () => api.get('/v1/cart'),
 };
-
 
 // ======================= ADMIN ORDERS =======================
 export const adminOrdersAPI = {
@@ -129,4 +129,61 @@ export const adminOrdersAPI = {
 // ======================= ADMIN ORDER ITEMS =======================
 export const adminOrderItemsAPI = {
   delete: (itemId: number) => api.delete(`/v1/admin/orders/items/${itemId}`),
+};
+
+/* =======================================================================
+ * ======================= USERS SUBSCRIPTIONS ============================
+ * =======================================================================
+ * Phần này bổ sung đầy đủ API cho:
+ *  - User: tự tạo / xem / xoá subscription của chính mình
+ *  - Admin: CRUD trên bảng user_subscriptions
+ *  Lưu ý: backend dùng cột DB là `plan_key` (basic|standard|premium).
+ *  Controller đã cho phép nhận cả `plan` lẫn `plan_key`; ở FE ta nên gửi `plan_key`.
+ */
+
+// -------- User subscriptions (yêu cầu đăng nhập) --------
+export const userSubscriptionsAPI = {
+  // Danh sách subscriptions của chính user
+  getAll: () => api.get('/v1/subscriptions'),
+
+  // Tạo subscription mới theo 1 trong 3 gói
+  // Gửi plan_key để match DB; nếu bạn vẫn muốn dùng 'plan', backend vẫn map được.
+  create: (payload: { plan_key: 'basic' | 'standard' | 'premium' } | { plan: 'basic' | 'standard' | 'premium' }) =>
+    api.post('/v1/subscriptions', payload),
+
+  // Huỷ subscription của chính mình
+  delete: (id: number) => api.delete(`/v1/subscriptions/${id}`),
+};
+
+// -------- Admin subscriptions CRUD (yêu cầu quyền admin) --------
+export const adminUserSubscriptionsAPI = {
+  getAll: () => api.get('/v1/admin/users-sub'),
+  getById: (id: number) => api.get(`/v1/admin/users-sub/${id}`),
+
+  // Tạo: bắt buộc user_id + plan_key + status
+  create: (payload: {
+    user_id: number;
+    plan_key: 'basic' | 'standard' | 'premium'; // hoặc gửi 'plan', backend vẫn nhận
+    status: 'active' | 'canceled' | 'expired';
+    start_date?: string | null;
+    end_date?: string | null;
+    price_cents?: number | null;
+    payment_id?: number | null;
+  }) => api.post('/v1/admin/users-sub', payload),
+
+  // Cập nhật: gửi phần muốn sửa
+  update: (
+    id: number,
+    payload: Partial<{
+      plan_key: 'basic' | 'standard' | 'premium'; // hoặc 'plan'
+      status: 'active' | 'canceled' | 'expired';
+      start_date: string | null;
+      end_date: string | null;
+      price_cents: number | null;
+      payment_id: number | null;
+    }>
+  ) => api.put(`/v1/admin/users-sub/${id}`, payload),
+
+  // Xoá
+  delete: (id: number) => api.delete(`/v1/admin/users-sub/${id}`),
 };
