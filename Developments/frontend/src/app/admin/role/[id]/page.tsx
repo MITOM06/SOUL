@@ -1,7 +1,9 @@
 import React from 'react';
 
-export default function RoleDetailPage(props: any) {
-	const id = props?.params?.id ?? 'unknown';
+// Next.js App Router: dynamic route must be async to await params
+export default async function RoleDetailPage({ params }: { params: { id: string } }) {
+	// params is always available, but must be awaited in async function for dynamic routes
+	const id = params.id ?? 'unknown';
 	return (
 		<section className="space-y-4">
 			<h1 className="text-2xl font-bold">Role: {id}</h1>

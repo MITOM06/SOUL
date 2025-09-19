@@ -88,7 +88,7 @@ export const productsAPI = {
     }),
   update: (id: number, data: FormData) =>
     api.put(`/v1/products/${id}`, data, {
-      headers: { 'Content-Type': 'multipart/form-data' }
+headers: { 'Content-Type': 'multipart/form-data' }
     }),
   delete: (id: number) => api.delete(`/v1/products/${id}`),
   // Sửa URL tải file: backend là /v1/products/{product}/files/{file}/download
@@ -125,4 +125,33 @@ export const adminOrdersAPI = {
 // ======================= ADMIN ORDER ITEM =======================
 export const adminOrderItemsAPI = {
   delete: (itemId: number) => api.delete(`/v1/admin/orders/items/${itemId}`),
+};
+
+// ======================= FAVOURITES =======================
+export const favouritesAPI = {
+  listMine: () => api.get('/v1/user/favourites'),
+  add: (productId: number) => api.post('/v1/favourites', { product_id: productId }),
+  remove: (productId: number) => api.delete(`/v1/favourites/${productId}`),
+};
+// ======================= ADMIN ROLE-BASED USERS =======================
+export const adminRoleUsersAPI = {
+  // Admins
+  listAdmins: (params?: { page?: number; per_page?: number }) =>
+    api.get('/v1/admin/roles/admins', { params }),
+  getAdmin: (id: number) => api.get(`/v1/admin/roles/admins/${id}`),
+  createAdmin: (data: { name?: string; email: string; password: string; is_active?: boolean }) =>
+    api.post('/v1/admin/roles/admins', data),
+  updateAdmin: (id: number, data: { name?: string; email?: string; password?: string; is_active?: boolean }) =>
+    api.put(`/v1/admin/roles/admins/${id}`, data),
+  deleteAdmin: (id: number) => api.delete(`/v1/admin/roles/admins/${id}`),
+
+  // Users
+  listUsers: (params?: { page?: number; per_page?: number }) =>
+    api.get('/v1/admin/roles/users', { params }),
+  getUser: (id: number) => api.get(`/v1/admin/roles/users/${id}`),
+  createUser: (data: { name?: string; email: string; password: string; is_active?: boolean }) =>
+    api.post('/v1/admin/roles/users', data),
+updateUser: (id: number, data: { name?: string; email?: string; password?: string; is_active?: boolean }) =>
+    api.put(`/v1/admin/roles/users/${id}`, data),
+  deleteUser: (id: number) => api.delete(`/v1/admin/roles/users/${id}`),
 };

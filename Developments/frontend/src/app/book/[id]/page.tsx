@@ -1,6 +1,9 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { favouritesAPI } from '@/lib/api';
+import { useAuth } from '@/contexts/AuthContext';
+import toast from 'react-hot-toast';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 
@@ -80,6 +83,7 @@ export default function BookDetail() {
         const j = await r.json();
         setData(j?.data || null);
       } catch (e: any) {
+
         if (e?.name !== 'AbortError') setErr(e?.message || 'Không tải được dữ liệu');
       } finally {
         setLoading(false);
@@ -114,6 +118,7 @@ export default function BookDetail() {
   const readerPdfUrl = fullPdf
     ? (canOpenDirect(fullPdf.file_url) ? toAbs(fullPdf.file_url) : downloadUrl(p.id, fullPdf.id))
     : '';
+
 
   // 1 file để tải (nếu có)
   const downloadable = fullPdf || files[0] || null;
@@ -169,7 +174,7 @@ export default function BookDetail() {
       {/* Mô tả */}
       {p.description ? (
         <p className="mt-6 whitespace-pre-wrap">{p.description}</p>
-      ) : null}
+
 
       {/* ========= Modal: Đọc thử ========= */}
       {showPreview && previewUrl && (

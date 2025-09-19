@@ -26,6 +26,13 @@ Route::prefix('v1')->group(function () {
     Route::post('register', [RegisterController::class, 'register']);
     Route::post('login', [LoginController::class, 'login']);
 
+    // Favourites (yêu thích) - cần login
+    Route::middleware('auth:sanctum')->group(function () {
+        Route::get('favourites', [FavouriteController::class, 'index']);
+        Route::post('favourites', [FavouriteController::class, 'store']);
+        Route::delete('favourites/{product}', [FavouriteController::class, 'destroy']);
+    });
+
     // Auth routes 
   Route::middleware('auth:sanctum')->group(function () {
         Route::post('logout', [AuthController::class, 'logout']);
@@ -38,13 +45,12 @@ Route::prefix('v1')->group(function () {
         Route::put('orders/items/{itemId}', [OrderItemController::class, 'update']);
         Route::delete('orders/items/{itemId}', [OrderItemController::class, 'destroy']);
         Route::get('products/{product}/files/{file}/download', [ProductController::class, 'downloadFile']);
-        
+       
 // ===== FAVOURITES: bắt buộc đăng nhập thật =====
      Route::get   ('favourites',               [FavouriteController::class, 'index']);
     Route::post  ('favourites',               [FavouriteController::class, 'store']);   // { product_id }
     Route::post  ('favourites/toggle',        [FavouriteController::class, 'toggle']);  // { product_id }
     Route::delete('favourites/{product}',     [FavouriteController::class, 'destroy']);
-
     });
 
     // Public product routes
@@ -76,7 +82,7 @@ Route::prefix('v1')->group(function () {
 
 
     // Admin routes
-    Route::prefix('admin')->middleware(['auth:sanctum', 'admin'])->group(function () {
+Route::prefix('admin')->middleware(['auth:sanctum', 'admin'])->group(function () {
         // Dashboard / stats
         Route::get('stats', [DashboardController::class, 'stats']);
 
@@ -90,6 +96,18 @@ Route::prefix('v1')->group(function () {
         Route::post('products', [ProductController::class, 'store']);
         Route::put('products/{product}', [ProductController::class, 'update']);
         Route::delete('products/{product}', [ProductController::class, 'destroy']);
+         
+          // Orders
+    Route::get('orders', [App\Http\Controllers\Api\V1\Admin\AdminOrderController::class, 'index']);
+    Route::get('orders/{order}', [App\Http\Controllers\Api\V1\Admin\AdminOrderController::class, 'show']);
+    Route::put('orders/{order}', [App\Http\Controllers\Api\V1\Admin\AdminOrderController::class, 'update']);
+    Route::delete('orders/{order}', [App\Http\Controllers\Api\V1\Admin\AdminOrderController::class, 'destroy']);
+
+    // Order Items
+    Route::get('orders/items', [AdminOrderItemController::class, 'index']);
+    Route::get('orders/items/{item}', [AdminOrderItemController::class, 'show']);
+    Route::put('orders/items/{item}', [AdminOrderItemController::class, 'update']);
+    Route::delete('orders/items/{item}', [AdminOrderItemController::class, 'destroy']);
 
         // ...existing code...
     });
@@ -98,6 +116,7 @@ Route::prefix('v1')->group(function () {
     Route::fallback(function () {
         return response()->json(['message' => 'Endpoint not found'], 404);
     });
+
  });
 
 
@@ -146,3 +165,4 @@ Route::post('catalog/products/{id}/thumbnail', [\App\Http\Controllers\Api\V1\Cat
 
 // Download file
 Route::get('catalog/products/{product}/files/{file}/download', [\App\Http\Controllers\Api\V1\Catalog\ProductWriteController::class, 'downloadFile']);
+

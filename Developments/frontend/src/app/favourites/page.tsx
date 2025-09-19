@@ -7,7 +7,8 @@ import BookCard from '@/components/BookCard';
 import PodcastCard from '@/components/PodcastCard';
 import { demoBooks } from '@/data/demoBooks';
 import { demoPodcasts } from '@/data/demoPodcasts';
-import api from '@/lib/api';
+import api, { favouritesAPI } from '@/lib/api';
+import toast from 'react-hot-toast';
 
 interface Book {
   id: number;
@@ -26,9 +27,11 @@ interface Podcast {
 export default function FavouritesPage() {
   const [books, setBooks] = useState<Book[]>([]);
   const [podcasts, setPodcasts] = useState<Podcast[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
     async function fetchData() {
+      setLoading(true);
       try {
         // Try known or conventional endpoints; fallback if not available
         let done = false;
@@ -66,10 +69,21 @@ export default function FavouritesPage() {
       } catch (err) {
         setBooks([]);
         setPodcasts([]);
-      }
+      } finally { setLoading(false); }
     }
     fetchData();
   }, []);
+
+  const removeFav = async (id: number) => {
+    try {
+      await favouritesAPI.remove(id);
+      setBooks((prev) => prev.filter((x) => x.id !== id));
+      setPodcasts((prev) => prev.filter((x) => x.id !== id));
+      toast.success('Đã xoá khỏi yêu thích');
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || 'Xoá thất bại');
+    }
+  };
 
   // Fallback to a subset of demo data if API hasn't returned anything
   const bookItems = books.length ? books : demoBooks.slice(0, 3);
@@ -78,12 +92,20 @@ export default function FavouritesPage() {
   return (
     <UserPanelLayout>
       <div className="space-y-6">
-        <h1 className="text-2xl font-bold">Favourites</h1>
+<h1 className="text-2xl font-bold">Favourites</h1>
         <div className="space-y-3">
           <h2 className="text-xl font-semibold">Favourite Books</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {bookItems.map((b) => (
-              <BookCard key={b.id} book={b as any} />
+              <div key={b.id} className="relative group">
+                <BookCard book={b as any} />
+                <button
+                  onClick={() => removeFav(b.id)}
+                  className="hidden group-hover:inline-flex absolute top-2 right-2 text-xs px-2 py-1 rounded bg-red-600 text-white"
+                >
+                  Remove
+                </button>
+              </div>
             ))}
           </div>
         </div>
@@ -91,7 +113,15 @@ export default function FavouritesPage() {
           <h2 className="text-xl font-semibold">Favourite Podcasts</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {podcastItems.map((p) => (
-              <PodcastCard key={p.id} podcast={p as any} />
+              <div key={p.id} className="relative group">
+                <PodcastCard podcast={p as any} />
+                <button
+                  onClick={() => removeFav(p.id)}
+                  className="hidden group-hover:inline-flex absolute top-2 right-2 text-xs px-2 py-1 rounded bg-red-600 text-white"
+                >
+                  Remove
+                </button>
+              </div>
             ))}
           </div>
         </div>
