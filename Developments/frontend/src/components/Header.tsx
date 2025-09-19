@@ -186,7 +186,7 @@ export default function Header() {
   const nav = [
     { href: "/", label: "Home" },
     { href: "/book", label: "Books" },
-    { href: "/podcasts", label: "Podcasts" },
+    { href: "/podcast", label: "Podcasts" },
     { href: "/upgrade", label: "Upgrade" },
     { href: "/about", label: "About" },
   ];

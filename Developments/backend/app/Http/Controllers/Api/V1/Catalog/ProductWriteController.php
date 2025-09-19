@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Validator;
 use App\Http\Controllers\Controller;
+use Illuminate\Support\Facades\Http;
 
 class ProductWriteController extends Controller
 {
@@ -333,4 +334,80 @@ class ProductWriteController extends Controller
             'message' => 'Unsupported file URL. Please upload the file to the server via Admin.'
         ], 400);
     }
+
+
+public function attachYoutube(Request $r, int $id)
+{
+    // 1) Kiểm tra product
+    $product = DB::table('products')->where('id', $id)->first();
+    if (!$product) {
+        return response()->json(['success' => false, 'message' => 'Product not found'], 404);
+    }
+
+    // 2) Validate URL
+    $v = Validator::make($r->all(), [
+        'url' => ['required','string','max:255'],
+    ]);
+    if ($v->fails()) {
+        return response()->json(['success'=>false,'message'=>$v->errors()->first()], 422);
+    }
+
+    $url = trim((string)$r->input('url'));
+
+    // 3) Bắt id YouTube (hỗ trợ share/watch/embed/shorts)
+    if (!preg_match('~(?:youtu\.be/|v=|embed/|shorts/)([A-Za-z0-9_-]{11})~', $url, $m)) {
+        return response()->json(['success'=>false,'message'=>'Invalid YouTube URL'], 422);
+    }
+    $vid   = $m[1];
+    $watch = "https://www.youtube.com/watch?v={$vid}";
+    $embed = "https://www.youtube.com/embed/{$vid}";
+    $thumb = "https://img.youtube.com/vi/{$vid}/hqdefault.jpg";
+
+    // 4) (Tuỳ chọn) Lấy tiêu đề qua oEmbed — không bắt buộc phải thành công
+    $title = null;
+    try {
+        $o = Http::get('https://www.youtube.com/oembed', [
+            'url'    => $watch,
+            'format' => 'json',
+        ]);
+        if ($o->ok()) {
+            $title = $o->json('title');
+        }
+    } catch (\Throwable $e) {
+        // ignore
+    }
+
+    // 5) Ghi bản ghi "file" kiểu youtube vào product_files
+    $now = now();
+    DB::table('product_files')->insert([
+        'product_id'     => $id,
+        'file_type'      => 'youtube',
+        'file_url'       => $watch,                 // lưu link xem
+        'filesize_bytes' => null,
+        'is_preview'     => 0,
+        'meta'           => json_encode([
+            'provider'       => 'youtube',
+            'video_id'       => $vid,
+            'embed_url'      => $embed,
+            'thumbnail_url'  => $thumb,
+            'title'          => $title,
+        ]),
+        'created_at'     => $now,
+        'updated_at'     => $now,
+    ]);
+
+    // 6) Nếu product chưa có thumbnail -> set theo youtube
+    if (empty($product->thumbnail_url)) {
+        DB::table('products')->where('id', $id)->update([
+            'thumbnail_url' => $thumb,
+            'updated_at'    => now(),
+        ]);
+    }
+
+    return response()->json(['success'=>true,'message'=>'YouTube attached']);
 }
+
+
+
+}
+

@@ -13,6 +13,7 @@ use App\Http\Controllers\Api\V1\Library\FavouriteController;
 use App\Http\Controllers\Api\V1\Catalog\ProductReadController;
 use App\Http\Controllers\Api\V1\Catalog\ProductWriteController;
 use App\Http\Controllers\Api\V1\Library\ContinueLiteController;
+use App\Http\Controllers\Api\V1\Media\YoutubeController;
 
 // Các controller còn lại giữ nguyên nếu có
 
@@ -117,9 +118,21 @@ Route::prefix('v1')->group(function () {
     // Continue progress
     Route::get('continues/{product}', [ContinueLiteController::class, 'show']);
     Route::post('continues/{product}', [ContinueLiteController::class, 'store']);
+
+  // GIỮ URL CŨ
+    Route::get('youtube/lookup', [YoutubeController::class, 'lookup']);
+
+    Route::prefix('catalog')->group(function () {
+        Route::post('products/{id}/youtube', [ProductWriteController::class, 'attachYoutube']);
+    });
+
+    // ... các route khác
+
+    Route::fallback(fn() => response()->json(['message'=>'Endpoint not found'], 404));
+
     // Route::get('catalog/products/{product}/files/{file}/download',
     // [ProductWriteController::class, 'downloadFile']);
-    
+
     // routes/api.php (trong nhóm /v1)
 Route::post('catalog/products/{id}/files', [\App\Http\Controllers\Api\V1\Catalog\ProductWriteController::class, 'uploadFiles']);
 

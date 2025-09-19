@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 
-type ProductType = 'ebook' | 'podcast';
+type ProductType = 'ebook' ;
 
 interface ProductInput {
   type: ProductType;
@@ -159,7 +159,7 @@ export default function AdminProductsV2() {
             <label className="block text-sm">Loại
               <select value={form.type} onChange={e=>setForm({...form, type: e.target.value as ProductType})} className="w-full border rounded px-2 py-1">
                 <option value="ebook">Ebook</option>
-                <option value="podcast">Podcast</option>
+                {/* <option value="podcast">Podcast</option> */}
               </select>
             </label>
             <label className="block text-sm">Tiêu đề
