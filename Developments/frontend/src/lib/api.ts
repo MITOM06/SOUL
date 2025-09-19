@@ -2,8 +2,7 @@
 import axios from 'axios';
 import Cookies from 'js-cookie';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api'; // đổi localhost -> 127.0.0.1
-// const API_ROOT = API_URL.replace(/\/api\/?$/, ''); // <-- Không còn dùng, có thể xoá
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api';
 
 const api = axios.create({
   baseURL: API_URL,
@@ -11,10 +10,10 @@ const api = axios.create({
     'Content-Type': 'application/json',
     'Accept': 'application/json',
   },
-  withCredentials: false, // đúng cho token-based
+  withCredentials: false, // token-based
 });
 
-// interceptor giữ nguyên…
+// ===== Interceptors =====
 api.interceptors.request.use((config) => {
   const token = Cookies.get('auth_token');
   if (token) {
@@ -38,120 +37,96 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
 export default api;
 
 // ======================= AUTH =======================
 export const authAPI = {
-  login: async (credentials: { email: string; password: string }) => {
-    return api.post('/v1/login', credentials); // đúng
-  },
-  register: async (userData: {
-    name?: string;
-    email: string;
-    password: string;
-    password_confirmation?: string;
-  }) => api.post('/v1/register', userData), // đúng
-  logout: async () => api.post('/v1/logout', {}), // đúng (cần Bearer)
-  me: () => api.get('/v1/user'), // đúng
+  login: (credentials: { email: string; password: string }) =>
+    api.post('/v1/login', credentials),
+  register: (userData: { name?: string; email: string; password: string; password_confirmation?: string }) =>
+    api.post('/v1/register', userData),
+  logout: () => api.post('/v1/logout', {}),
+  me: () => api.get('/v1/user'),
 };
 
 // ======================= CATEGORIES =======================
 export const categoriesAPI = {
   getAll: (params?: { type?: string; search?: string }) =>
-    api.get('/v1/categories', { params }), // thêm /v1
-  getById: (id: number) => api.get(`/v1/categories/${id}`), // thêm /v1
+    api.get('/v1/categories', { params }),
+  getById: (id: number) => api.get(`/v1/categories/${id}`),
   create: (data: FormData) =>
-    api.post('/v1/categories', data, {
-      headers: { 'Content-Type': 'multipart/form-data' }
-    }),
+    api.post('/v1/categories', data, { headers: { 'Content-Type': 'multipart/form-data' } }),
   update: (id: number, data: FormData) =>
-    api.put(`/v1/categories/${id}`, data, {
-      headers: { 'Content-Type': 'multipart/form-data' }
-    }),
+    api.put(`/v1/categories/${id}`, data, { headers: { 'Content-Type': 'multipart/form-data' } }),
   delete: (id: number) => api.delete(`/v1/categories/${id}`),
 };
 
 // ======================= PRODUCTS =======================
 export const productsAPI = {
-  getAll: (params?: {
-    category_id?: number;
-    type?: string;
-    search?: string;
-    subscription_level?: string;
-    page?: number;
-    limit?: number;
-  }) => api.get('/v1/products', { params }), // thêm /v1
-  getById: (id: number) => api.get(`/v1/products/${id}`), // thêm /v1
+  getAll: (params?: { category_id?: number; type?: string; search?: string; subscription_level?: string; page?: number; limit?: number }) =>
+    api.get('/v1/products', { params }),
+  getById: (id: number) => api.get(`/v1/products/${id}`),
   create: (data: FormData) =>
-    api.post('/v1/products', data, {
-      headers: { 'Content-Type': 'multipart/form-data' }
-    }),
+    api.post('/v1/products', data, { headers: { 'Content-Type': 'multipart/form-data' } }),
   update: (id: number, data: FormData) =>
-    api.put(`/v1/products/${id}`, data, {
-headers: { 'Content-Type': 'multipart/form-data' }
-    }),
+    api.put(`/v1/products/${id}`, data, { headers: { 'Content-Type': 'multipart/form-data' } }),
   delete: (id: number) => api.delete(`/v1/products/${id}`),
-  // Sửa URL tải file: backend là /v1/products/{product}/files/{file}/download
   download: (id: number, fileId: number) =>
     api.get(`/v1/products/${id}/files/${fileId}/download`, { responseType: 'blob' }),
 };
 
+// ======================= PROFILE =======================
+export const profileAPI = {
+  get: () => api.get('/v1/profile'),
+  update: (data: { name?: string; email?: string; dob?: string; gender?: string }) =>
+    api.put('/v1/profile', data),
+  changePassword: (data: { current_password: string; new_password: string; new_password_confirmation: string }) =>
+    api.put('/v1/profile/password', data),
+};
+
+// ======================= TRANSACTIONS =======================
+export const transactionsAPI = {
+  getAll: () => api.get('/v1/transactions'),
+  getById: (id: number) => api.get(`/v1/transactions/${id}`),
+};
+export const paymentsAPI = {
+  initCheckout: (orderId: number, provider = "fake") =>
+    api.post("/v1/payment/checkout", { order_id: orderId, provider }),
+};
+
+
 // ======================= ORDERS =======================
 export const ordersAPI = {
-  getAll: () => api.get('/v1/orders'), // thêm /v1
-  getById: (id: number) => api.get(`/v1/orders/${id}`), // nếu có endpoint
-  create: (data: { product_ids: number[]; payment_method: string; }) =>
-    api.post('/v1/orders', data), // nếu backend là /v1/orders (store)
-  updateStatus: (id: number, status: string) =>
-    api.put(`/v1/orders/${id}/status`, { status }), // nếu có endpoint
-  // 👇 thêm mới
+  getAll: () => api.get('/v1/orders'),
+  getById: (id: number) => api.get(`/v1/orders/${id}`),
+  create: (data: { product_ids: number[]; payment_method: string }) =>
+    api.post('/v1/orders', data),
+  update: (id: number, data: any) =>
+    api.put(`/v1/orders/${id}`, data), // ✅ khớp với backend
   updateItemQuantity: (itemId: number, quantity: number) =>
     api.put(`/v1/orders/items/${itemId}`, { quantity }),
-
-  deleteItem: (itemId: number) =>
-    api.delete(`/v1/orders/items/${itemId}`),
-
+  deleteItem: (itemId: number) => api.delete(`/v1/orders/items/${itemId}`),
+  checkout: (orderId: number) =>
+    api.post('/v1/orders/checkout', { order_id: orderId }),
+}
+// ======================= CART =======================
+export const cartAPI = {
+  getCount: () => api.get('/v1/cart/count'),
+  getCart: () => api.get('/v1/cart'),
 };
+
 
 // ======================= ADMIN ORDERS =======================
 export const adminOrdersAPI = {
-  getAll: () => api.get('/v1/admin/orders'), 
+  getAll: () => api.get('/v1/admin/orders'),
   getById: (id: number) => api.get(`/v1/admin/orders/${id}`),
   updateStatus: (id: number, status: string) =>
     api.put(`/v1/admin/orders/${id}/status`, { status }),
   delete: (id: number) => api.delete(`/v1/admin/orders/${id}`),
 };
 
-// ======================= ADMIN ORDER ITEM =======================
+// ======================= ADMIN ORDER ITEMS =======================
 export const adminOrderItemsAPI = {
   delete: (itemId: number) => api.delete(`/v1/admin/orders/items/${itemId}`),
-};
-
-// ======================= FAVOURITES =======================
-export const favouritesAPI = {
-  listMine: () => api.get('/v1/user/favourites'),
-  add: (productId: number) => api.post('/v1/favourites', { product_id: productId }),
-  remove: (productId: number) => api.delete(`/v1/favourites/${productId}`),
-};
-// ======================= ADMIN ROLE-BASED USERS =======================
-export const adminRoleUsersAPI = {
-  // Admins
-  listAdmins: (params?: { page?: number; per_page?: number }) =>
-    api.get('/v1/admin/roles/admins', { params }),
-  getAdmin: (id: number) => api.get(`/v1/admin/roles/admins/${id}`),
-  createAdmin: (data: { name?: string; email: string; password: string; is_active?: boolean }) =>
-    api.post('/v1/admin/roles/admins', data),
-  updateAdmin: (id: number, data: { name?: string; email?: string; password?: string; is_active?: boolean }) =>
-    api.put(`/v1/admin/roles/admins/${id}`, data),
-  deleteAdmin: (id: number) => api.delete(`/v1/admin/roles/admins/${id}`),
-
-  // Users
-  listUsers: (params?: { page?: number; per_page?: number }) =>
-    api.get('/v1/admin/roles/users', { params }),
-  getUser: (id: number) => api.get(`/v1/admin/roles/users/${id}`),
-  createUser: (data: { name?: string; email: string; password: string; is_active?: boolean }) =>
-    api.post('/v1/admin/roles/users', data),
-updateUser: (id: number, data: { name?: string; email?: string; password?: string; is_active?: boolean }) =>
-    api.put(`/v1/admin/roles/users/${id}`, data),
-  deleteUser: (id: number) => api.delete(`/v1/admin/roles/users/${id}`),
 };

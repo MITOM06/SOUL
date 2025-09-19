@@ -7,162 +7,95 @@ use App\Http\Controllers\Api\V1\Auth\AuthController;
 use App\Http\Controllers\Api\ProductController;
 use App\Http\Controllers\Api\V1\Commerce\OrderController;
 use App\Http\Controllers\Api\V1\Commerce\OrderItemController;
-use App\Http\Controllers\Api\UserController;
+use App\Http\Controllers\Api\V1\Commerce\PaymentController;
+use App\Http\Controllers\Api\V1\Users\UserController;
 use App\Http\Controllers\Api\DashboardController;
-use App\Http\Controllers\Api\V1\Library\FavouriteController;
-use App\Http\Controllers\Api\V1\Catalog\ProductReadController;
-use App\Http\Controllers\Api\V1\Catalog\ProductWriteController;
-use App\Http\Controllers\Api\V1\Library\ContinueLiteController;
-use App\Http\Controllers\Api\V1\Media\YoutubeController;
-
-// Các controller còn lại giữ nguyên nếu có
-
+use App\Http\Controllers\Api\V1\Admin\AdminOrderController;
+use App\Http\Controllers\Api\V1\Admin\AdminOrderItemController;
 
 Route::get('/health', fn() => response()->json(['ok' => true, 'ts' => now()->toISOString()]));
 
 Route::prefix('v1')->group(function () {
-
-    // Auth
+    // 🔹 Auth (public)
     Route::post('register', [RegisterController::class, 'register']);
     Route::post('login', [LoginController::class, 'login']);
 
-    // Favourites (yêu thích) - cần login
-    Route::middleware('auth:sanctum')->group(function () {
-        Route::get('favourites', [FavouriteController::class, 'index']);
-        Route::post('favourites', [FavouriteController::class, 'store']);
-        Route::delete('favourites/{product}', [FavouriteController::class, 'destroy']);
-    });
-
-    // Auth routes 
-  Route::middleware('auth:sanctum')->group(function () {
-        Route::post('logout', [AuthController::class, 'logout']);
-        Route::get('user',    [AuthController::class, 'getUser']);
-
-        // Orders / download… các route cần login để dùng
-        Route::get('orders', [OrderController::class, 'index']);
-        Route::post('orders/checkout', [OrderController::class, 'checkout']);
-        Route::post('orders/items', [OrderItemController::class, 'store']);
-        Route::put('orders/items/{itemId}', [OrderItemController::class, 'update']);
-        Route::delete('orders/items/{itemId}', [OrderItemController::class, 'destroy']);
-        Route::get('products/{product}/files/{file}/download', [ProductController::class, 'downloadFile']);
-       
-// ===== FAVOURITES: bắt buộc đăng nhập thật =====
-     Route::get   ('favourites',               [FavouriteController::class, 'index']);
-    Route::post  ('favourites',               [FavouriteController::class, 'store']);   // { product_id }
-    Route::post  ('favourites/toggle',        [FavouriteController::class, 'toggle']);  // { product_id }
-    Route::delete('favourites/{product}',     [FavouriteController::class, 'destroy']);
-    });
-
-    // Public product routes
+    // 🔹 Public products
     Route::get('products', [ProductController::class, 'index']);
     Route::get('products/{product}', [ProductController::class, 'show']);
 
-    // ...existing code...
+    // 🔹 Payment public
+    Route::post('payment/checkout', [PaymentController::class, 'checkout']);
+    Route::post('payment/webhook', [PaymentController::class, 'webhook']);
+    Route::get('payments/{id}/auto-success', [PaymentController::class, 'autoSuccess'])
+        ->name('payments.auto-success');
 
-   // Authenticated user routes
+    // =====================================================
+    // 🔹 Routes cần login
+    // =====================================================
     Route::middleware('auth:sanctum')->group(function () {
-       // Orders
-        Route::get('orders',            [OrderController::class, 'index']);
-        Route::post('orders',           [OrderController::class, 'store']);
-        Route::get('orders/{order}',    [OrderController::class, 'show']);
+        // Authenticated user
+        Route::post('logout', [AuthController::class, 'logout']);
+        Route::get('user', [AuthController::class, 'getUser']);
+
+        // Profile
+        Route::get('profile', [UserController::class, 'getProfile']);
+        Route::put('profile', [UserController::class, 'updateProfile']);
+        Route::put('profile/password', [UserController::class, 'changePassword']);
+
+        // Transactions
+        Route::get('transactions', [PaymentController::class, 'listTransactions']);
+        Route::get('transactions/{id}', [PaymentController::class, 'showTransaction']);
 
         // Orders
-        Route::get('orders', [OrderController::class, 'index']);
-        Route::post('orders/checkout', [OrderController::class, 'checkout']);
+        Route::get('orders', [OrderController::class, 'index']);   // danh sách
+        Route::post('orders', [OrderController::class, 'store']); // tạo đơn
+        Route::get('orders/{order}', [OrderController::class, 'show']);
+        Route::post('orders/checkout', [OrderController::class, 'checkout']); // checkout chính thức
+
+        // Cart
+        Route::get('cart', [OrderController::class, 'getCart']);
+        Route::get('cart/count', [OrderItemController::class, 'cartCount']);
 
         // Order Items
-        Route::post('orders/items', [OrderItemController::class, 'store']);       // thêm vào cart
-        Route::put('orders/items/{itemId}', [OrderItemController::class, 'update']); // update số lượng
-        Route::delete('orders/items/{itemId}', [OrderItemController::class, 'destroy']); // xóa khỏi cart
+        Route::post('orders/items', [OrderItemController::class, 'store']);
+        Route::put('orders/items/{itemId}', [OrderItemController::class, 'update']);
+        Route::delete('orders/items/{itemId}', [OrderItemController::class, 'destroy']);
 
-        // Product secured file download
+        // File download
         Route::get('products/{product}/files/{file}/download', [ProductController::class, 'downloadFile']);
     });
-    
 
-
-    // Admin routes
-Route::prefix('admin')->middleware(['auth:sanctum', 'admin'])->group(function () {
-        // Dashboard / stats
+    // =====================================================
+    // 🔹 Admin routes
+    // =====================================================
+    Route::prefix('admin')->middleware(['auth:sanctum', 'admin'])->group(function () {
         Route::get('stats', [DashboardController::class, 'stats']);
 
-        // Users management
+        // Users (sau này có thể tách Admin\UserController)
         Route::get('users', [UserController::class, 'index']);
         Route::get('users/{user}', [UserController::class, 'show']);
         Route::put('users/{user}', [UserController::class, 'update']);
         Route::delete('users/{user}', [UserController::class, 'destroy']);
 
-        // Products (write)
+        // Products
         Route::post('products', [ProductController::class, 'store']);
         Route::put('products/{product}', [ProductController::class, 'update']);
         Route::delete('products/{product}', [ProductController::class, 'destroy']);
-         
-          // Orders
-    Route::get('orders', [App\Http\Controllers\Api\V1\Admin\AdminOrderController::class, 'index']);
-    Route::get('orders/{order}', [App\Http\Controllers\Api\V1\Admin\AdminOrderController::class, 'show']);
-    Route::put('orders/{order}', [App\Http\Controllers\Api\V1\Admin\AdminOrderController::class, 'update']);
-    Route::delete('orders/{order}', [App\Http\Controllers\Api\V1\Admin\AdminOrderController::class, 'destroy']);
 
-    // Order Items
-    Route::get('orders/items', [AdminOrderItemController::class, 'index']);
-    Route::get('orders/items/{item}', [AdminOrderItemController::class, 'show']);
-    Route::put('orders/items/{item}', [AdminOrderItemController::class, 'update']);
-    Route::delete('orders/items/{item}', [AdminOrderItemController::class, 'destroy']);
+        // Orders
+        Route::get('orders', [AdminOrderController::class, 'index']);
+        Route::get('orders/{order}', [AdminOrderController::class, 'show']);
+        Route::put('orders/{order}', [AdminOrderController::class, 'update']);
+        Route::delete('orders/{order}', [AdminOrderController::class, 'destroy']);
 
-        // ...existing code...
+        // Order Items
+        Route::get('orders/items', [AdminOrderItemController::class, 'index']);
+        Route::get('orders/items/{item}', [AdminOrderItemController::class, 'show']);
+        Route::put('orders/items/{item}', [AdminOrderItemController::class, 'update']);
+        Route::delete('orders/items/{item}', [AdminOrderItemController::class, 'destroy']);
     });
 
-    // Fallback for unknown endpoints within /v1
-    Route::fallback(function () {
-        return response()->json(['message' => 'Endpoint not found'], 404);
-    });
-
- });
-
-
-
-// === Added by assistant: Catalog + Continue endpoints (non-breaking) ===
-
-
-Route::prefix('v1')->group(function () {
-    // Read-only catalog
-    Route::get('catalog/products', [ProductReadController::class, 'index']);
-    Route::get('catalog/products/{id}', [ProductReadController::class, 'show']);
-
-    // Admin write (no auth guard enforced here to stay non-breaking; project can add middleware later)
-    Route::post('catalog/products', [ProductWriteController::class, 'store']);
-    Route::put('catalog/products/{id}', [ProductWriteController::class, 'update']);
-    Route::delete('catalog/products/{id}', [ProductWriteController::class, 'destroy']);
-
-    // Continue progress
-    Route::get('continues/{product}', [ContinueLiteController::class, 'show']);
-    Route::post('continues/{product}', [ContinueLiteController::class, 'store']);
-
-  // GIỮ URL CŨ
-    Route::get('youtube/lookup', [YoutubeController::class, 'lookup']);
-
-    Route::prefix('catalog')->group(function () {
-        Route::post('products/{id}/youtube', [ProductWriteController::class, 'attachYoutube']);
-    });
-
-    // ... các route khác
-
-    Route::fallback(fn() => response()->json(['message'=>'Endpoint not found'], 404));
-
-    // Route::get('catalog/products/{product}/files/{file}/download',
-    // [ProductWriteController::class, 'downloadFile']);
-
-    // routes/api.php (trong nhóm /v1)
-Route::post('catalog/products/{id}/files', [\App\Http\Controllers\Api\V1\Catalog\ProductWriteController::class, 'uploadFiles']);
-
+    // 🔹 Fallback
+    Route::fallback(fn() => response()->json(['message' => 'Endpoint not found'], 404));
 });
-
-// Upload file thực tế vào storage
-Route::post('catalog/products/{id}/files', [\App\Http\Controllers\Api\V1\Catalog\ProductWriteController::class, 'uploadFiles']);
-
-// Upload ảnh bìa
-Route::post('catalog/products/{id}/thumbnail', [\App\Http\Controllers\Api\V1\Catalog\ProductWriteController::class, 'uploadThumbnail']);
-
-// Download file
-Route::get('catalog/products/{product}/files/{file}/download', [\App\Http\Controllers\Api\V1\Catalog\ProductWriteController::class, 'downloadFile']);
-

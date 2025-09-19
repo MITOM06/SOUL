@@ -1,5 +1,6 @@
 // frontend/src/components/Layout.tsx
 import React from 'react';
+import { CartProvider } from '@/contexts/CartContext';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -7,13 +8,14 @@ interface LayoutProps {
 
 const Layout: React.FC<LayoutProps> = ({ children }) => {
   return (
-    <div className="min-h-screen flex flex-col">
-     
-      <main className="flex-grow">
-        {children}
-      </main>
-    
-    </div>
+    <CartProvider> {/* 👈 bọc toàn bộ */}
+      <div className="min-h-screen flex flex-col">
+        {/* Header và Nav nằm đây cũng dùng được useCart */}
+        <main className="flex-grow">
+          {children}
+        </main>
+      </div>
+    </CartProvider>
   );
 };
 

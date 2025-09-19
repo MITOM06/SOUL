@@ -13,6 +13,14 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 class Payment extends Model
 {
     use HasFactory;
+     
+    // 🔹 Định nghĩa các trạng thái
+    public const STATUS_INITIATED = 'initiated'; // mới khởi tạo
+    public const STATUS_SUCCESS   = 'success';  
+    public const STATUS_FAILED    = 'failed';    // thất bại
+    public const STATUS_PENDING   = 'pending';   // đang chờ (nếu cần)
+
+
 
     protected $fillable = [
         'order_id',

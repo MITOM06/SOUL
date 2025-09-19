@@ -173,34 +173,25 @@ public function index(Request $request)
 //test
 public function checkout(Request $request)
 {
-    $user = $request->user();
-    if (!$user) {
-        return response()->json([
-            'success' => false,
-            'message' => 'Unauthenticated'
-        ], 401);
-    }
+    $orderId = $request->input('order_id');
 
-    $order = Order::with('items.product')
-        ->where('user_id', $user->id)
-        ->where('status', 'pending')
-        ->first();
+    $order = Order::where('id', $orderId)
+        ->where('user_id', auth()->id())
+        ->firstOrFail();
 
-    if (!$order || $order->items->count() === 0) {
-        return response()->json([
-            'success' => false,
-            'message' => 'No pending order to checkout'
-        ], 404);
-    }
-
-    $order->update(['status' => 'paid']);
+    // update trạng thái
+    $order->status = 'paid';
+    $order->save();
 
     return response()->json([
         'success' => true,
-        'message' => 'Order checked out successfully',
-        'data' => $order
+        'message' => 'Thanh toán thành công',
+        'order'   => $order,
     ]);
 }
+
+
+
 
 }
 
