@@ -1,16 +1,21 @@
 "use client";
 
-import Link from "next/link"; 
+import Link from "next/link";
 import { useAuth } from '@/contexts/AuthContext';
 import { usePathname, useRouter } from 'next/navigation';
-import { useState } from 'react'; 
-import { cn } from "@/lib/utils";  
+import { useState } from 'react';
+import { cn } from "@/lib/utils";
 import { normalizeRole } from '@/lib/role';
+import { ShoppingCartIcon } from "@heroicons/react/24/outline";
+import { useCart } from "@/contexts/CartContext";
+import { cartAPI } from "@/lib/api";
+
 export function HeaderAuthArea() {
   const { user, isLoading, logout } = useAuth();
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
+  const { reset } = useCart();
 
   if (isLoading) {
     // skeleton nho nhỏ
@@ -39,7 +44,7 @@ export function HeaderAuthArea() {
           {user.name?.[0]?.toUpperCase() || user.email[0].toUpperCase()}
         </div>
         <span className="hidden sm:block text-sm">{user.name || user.email}</span>
-        <svg className="h-4 w-4 opacity-70" viewBox="0 0 20 20" fill="currentColor"><path d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.24 4.5a.75.75 0 01-1.08 0l-4.24-4.5a.75.75 0 01.02-1.06z"/></svg>
+        <svg className="h-4 w-4 opacity-70" viewBox="0 0 20 20" fill="currentColor"><path d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.24 4.5a.75.75 0 01-1.08 0l-4.24-4.5a.75.75 0 01.02-1.06z" /></svg>
       </button>
 
       {open && (
@@ -85,7 +90,8 @@ export function HeaderAuthArea() {
                     onClick={() => {
                       setOpen(false);
                       logout();
-                      router.replace('/');
+                      reset(); // 👈 reset giỏ khi logout
+                      router.replace("/");
                     }}
                   >
                     Sign out
@@ -135,7 +141,7 @@ export function HeaderAuthArea() {
       )}
     </div>
   );
-} 
+}
 function SoulLogo() {
   return (
     <div className="relative">
@@ -182,7 +188,7 @@ function NavItem({
 
 export default function Header() {
   const pathname = usePathname();
-
+  const { count } = useCart();
   const nav = [
     { href: "/", label: "Home" },
     { href: "/book", label: "Books" },
@@ -193,7 +199,6 @@ export default function Header() {
 
   return (
     <header className="sticky top-0 z-40">
-      {/* Glass bar with subtle border + shadow */}
       <div className="backdrop-blur supports-[backdrop-filter]:bg-white/70 bg-white/90 border-b border-zinc-200 shadow-sm">
         <div className="container-max">
           <div className="flex items-center justify-between py-3">
@@ -214,21 +219,32 @@ export default function Header() {
                   label={n.label}
                   active={
                     pathname === n.href ||
-                    (n.href !== "/" &&
-                      pathname?.startsWith(n.href))
+                    (n.href !== "/" && pathname?.startsWith(n.href))
                   }
                 />
               ))}
             </nav>
 
             {/* Right area */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-4">
+              {/* Cart Icon */}
+              <Link
+                href="/orders"
+                className="relative p-2 rounded-lg hover:bg-gray-100 transition"
+              >
+                <ShoppingCartIcon className="h-6 w-6 text-zinc-700" />
+                {count > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold px-1.5 py-0.5 rounded-full">
+                    {count}
+                  </span>
+                )}
+              </Link>
+
               <HeaderAuthArea />
             </div>
           </div>
         </div>
 
-        {/* bottom accent line that animates on hover of the whole header */}
         <div className="h-px bg-gradient-to-r from-transparent via-zinc-300 to-transparent" />
       </div>
     </header>
