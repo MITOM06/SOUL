@@ -229,10 +229,10 @@ export default function PodcastDetailPage() {
             ) : yt ? (
               <div className="space-y-2">
                 <YoutubeAudio embedUrl={yt.embed} cover={cover} title={p.title} />
-                <a href={yt.watch} target="_blank" rel="noreferrer" className="text-sm text-blue-600 hover:underline">
+                {/* <a href={yt.watch} target="_blank" rel="noreferrer" className="text-sm text-blue-600 hover:underline">
                   Mở trên YouTube
-                </a>
-                <div className="text-xs text-gray-500">* Video ẩn – chỉ phát âm thanh từ YouTube.</div>
+                </a> */}
+                {/* <div className="text-xs text-gray-500">* Video ẩn – chỉ phát âm thanh từ YouTube.</div> */}
               </div>
             ) : (
               <div className="text-gray-500">Hiện chưa có tệp âm thanh.</div>
