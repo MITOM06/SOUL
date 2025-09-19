@@ -2,19 +2,21 @@
 
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { cartAPI } from "@/lib/api";
-import { useAuth } from "@/contexts/AuthContext";  // 👈 lấy user
+import { useAuth } from "@/contexts/AuthContext";
 
 interface CartContextType {
   count: number;
   refresh: () => Promise<void>;
   reset: () => void;
+  add: (productId: number, qty?: number) => Promise<void>;
+  remove: (productId: number) => Promise<void>;
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const [count, setCount] = useState(0);
-  const { user } = useAuth();   // 👈 lấy user từ context
+  const { user } = useAuth();
 
   const refresh = async () => {
     try {
@@ -28,7 +30,24 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   const reset = () => setCount(0);
 
-  // 👉 mỗi khi user thay đổi (login/logout) thì gọi refresh/reset
+  const add = async (productId: number, qty = 1) => {
+    try {
+      await cartAPI.add(productId, qty);
+      await refresh();
+    } catch (err) {
+      console.error("Failed to add to cart:", err);
+    }
+  };
+
+  const remove = async (productId: number) => {
+    try {
+      await cartAPI.remove(productId);
+      await refresh();
+    } catch (err) {
+      console.error("Failed to remove from cart:", err);
+    }
+  };
+
   useEffect(() => {
     if (user) {
       refresh();
@@ -38,7 +57,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   }, [user]);
 
   return (
-    <CartContext.Provider value={{ count, refresh, reset }}>
+    <CartContext.Provider value={{ count, refresh, reset, add, remove }}>
       {children}
     </CartContext.Provider>
   );
