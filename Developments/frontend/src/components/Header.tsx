@@ -1,147 +1,193 @@
 "use client";
 
 import Link from "next/link";
-import { useAuth } from '@/contexts/AuthContext';
-import { usePathname, useRouter } from 'next/navigation';
-import { useState } from 'react';
+import React, { useEffect, useRef, useState } from "react";
+import { useAuth } from "@/contexts/AuthContext";
+import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { normalizeRole } from '@/lib/role';
+import { normalizeRole } from "@/lib/role";
 import { ShoppingCartIcon } from "@heroicons/react/24/outline";
 import { useCart } from "@/contexts/CartContext";
-import { cartAPI } from "@/lib/api";
 
+/* ========= Small helpers ========= */
+function useClickOutside<T extends HTMLElement>(open: boolean, onClose: () => void) {
+  const ref = useRef<T | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (!ref.current) return;
+      if (!ref.current.contains(e.target as Node)) onClose();
+    };
+    const esc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("mousedown", handler);
+    document.addEventListener("keydown", esc);
+    return () => {
+      document.removeEventListener("mousedown", handler);
+      document.removeEventListener("keydown", esc);
+    };
+  }, [open, onClose]);
+  return ref;
+}
+
+function useScrolled(threshold = 8) {
+  const [scrolled, setScrolled] = useState(false);
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > threshold);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, [threshold]);
+  return scrolled;
+}
+
+/* ========= Auth Dropdown ========= */
 export function HeaderAuthArea() {
-  const { user, isLoading, logout } = useAuth();
+  const { user, isLoading, logout, subscriptionLevel } = useAuth();
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
-  const { reset } = useCart();
+  const panelRef = useClickOutside<HTMLDivElement>(open, () => setOpen(false));
 
   if (isLoading) {
-    // skeleton nho nhỏ
     return <div className="h-8 w-28 bg-gray-200 animate-pulse rounded" />;
   }
 
+  // Not logged in
   if (!user) {
-    const next = encodeURIComponent(pathname || '/');
+    const next = encodeURIComponent(pathname || "/");
     return (
       <Link
         href={`/auth/login?next=${next}`}
-        className="px-3 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700"
+        className="px-3 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition"
       >
         Sign in
       </Link>
     );
   }
 
+  const planLabel = subscriptionLevel ? subscriptionLevel.toUpperCase() : "FREE";
+  const isPremium = subscriptionLevel === "premium";
+
   return (
     <div className="relative">
       <button
-        className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-100 hover:bg-gray-200"
-        onClick={() => setOpen(v => !v)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className={cn(
+          "group flex items-center gap-2 px-3 py-2 rounded-lg",
+          "bg-gray-100 hover:bg-gray-200 transition",
+          "focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+        )}
+        onClick={() => setOpen((v) => !v)}
       >
-        <div className="h-8 w-8 rounded-full bg-blue-500 text-white grid place-items-center">
+        <div
+          className={cn(
+            "h-8 w-8 rounded-full grid place-items-center text-white font-semibold",
+            "bg-blue-500",
+            isPremium && "ring-2 ring-amber-400 relative"
+          )}
+        >
           {user.name?.[0]?.toUpperCase() || user.email[0].toUpperCase()}
+          {/* subtle pulse for premium */}
+          {isPremium && (
+            <span className="pointer-events-none absolute inset-0 rounded-full ring-2 ring-amber-400/40 animate-[pulse_2s_ease-out_infinite] [@media(prefers-reduced-motion:reduce)]:hidden" />
+          )}
         </div>
         <span className="hidden sm:block text-sm">{user.name || user.email}</span>
-        <svg className="h-4 w-4 opacity-70" viewBox="0 0 20 20" fill="currentColor"><path d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.24 4.5a.75.75 0 01-1.08 0l-4.24-4.5a.75.75 0 01.02-1.06z" /></svg>
+        {/* chevron with rotate when open */}
+        <svg
+          className={cn(
+            "h-4 w-4 opacity-70 transition-transform",
+            open ? "rotate-180" : "rotate-0"
+          )}
+          viewBox="0 0 20 20"
+          fill="currentColor"
+        >
+          <path d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 011.08 1.04l-4.25 4.25a.75.75 0 01-1.06 0L5.21 8.27a.75.75 0 01.02-1.06z" />
+        </svg>
       </button>
 
-      {open && (
-        <div
-          className="absolute right-0 mt-2 w-56 rounded-lg border bg-white shadow-lg p-1 z-10"
-          onMouseLeave={() => setOpen(false)}
-        >
-          {(() => {
-            const role = normalizeRole(user);
-            // Links common to both roles
-            const commonItems = (
-              <>
-                <Link
-                  href="/profile"
-                  className="block rounded-md px-3 py-2 hover:bg-gray-100 text-sm"
-                  onClick={() => setOpen(false)}
-                >
-                  Profile
-                </Link>
-                <Link
-                  href="/orders"
-                  className="block rounded-md px-3 py-2 hover:bg-gray-100 text-sm"
-                  onClick={() => setOpen(false)}
-                >
-                  My Orders
-                </Link>
-              </>
-            );
-            if (role === 'admin') {
-              // Admin sees an Admin Panel link plus the common items
-              return (
-                <>
-                  <Link
-                    href="/admin/dashboard"
-                    className="block rounded-md px-3 py-2 hover:bg-gray-100 text-sm"
-                    onClick={() => setOpen(false)}
-                  >
-                    Admin Panel
-                  </Link>
-                  {commonItems}
-                  <button
-                    className="w-full text-left rounded-md px-3 py-2 hover:bg-gray-100 text-sm"
-                    onClick={() => {
-                      setOpen(false);
-                      logout();
-                      reset(); // 👈 reset giỏ khi logout
-                      router.replace("/");
-                    }}
-                  >
-                    Sign out
-                  </button>
-                </>
-              );
-            }
-            // Standard user sees favourites, continues and payment links along with common
-            return (
-              <>
-                {commonItems}
-                <Link
-                  href="/favourites"
-                  className="block rounded-md px-3 py-2 hover:bg-gray-100 text-sm"
-                  onClick={() => setOpen(false)}
-                >
-                  Favourites
-                </Link>
-                <Link
-                  href="/continues"
-                  className="block rounded-md px-3 py-2 hover:bg-gray-100 text-sm"
-                  onClick={() => setOpen(false)}
-                >
-                  Continues
-                </Link>
-                <Link
-                  href="/payment-history"
-                  className="block rounded-md px-3 py-2 hover:bg-gray-100 text-sm"
-                  onClick={() => setOpen(false)}
-                >
-                  My Payment
-                </Link>
-                <button
-                  className="w-full text-left rounded-md px-3 py-2 hover:bg-gray-100 text-sm"
-                  onClick={() => {
-                    setOpen(false);
-                    logout();
-                    router.replace('/');
-                  }}
-                >
-                  Sign out
-                </button>
-              </>
-            );
-          })()}
+      {/* dropdown with fade+scale */}
+      <div
+        ref={panelRef}
+        className={cn(
+          "absolute right-0 mt-2 w-64 rounded-xl border bg-white shadow-lg z-50 origin-top-right",
+          "transition",
+          open
+            ? "opacity-100 scale-100"
+            : "pointer-events-none opacity-0 scale-95",
+          "[&]:[@media(prefers-reduced-motion:reduce)]:scale-100"
+        )}
+        role="menu"
+        tabIndex={-1}
+      >
+        {/* arrow caret */}
+        <div className="absolute -top-2 right-6 h-4 w-4 rotate-45 bg-white border-l border-t" />
+        <div className="p-2">
+          <div className="px-3 py-2 text-xs text-gray-600">
+            Current plan: <span className="font-semibold">{planLabel}</span>
+          </div>
+          <div className="h-px bg-gray-100 my-2" />
+          <Link
+            href="/profile"
+            className="block px-3 py-2 rounded-md hover:bg-gray-50 text-sm focus:bg-gray-50 focus:outline-none"
+            onClick={() => setOpen(false)}
+            role="menuitem"
+          >
+            Profile
+          </Link>
+          <Link
+            href="/orders"
+            className="block px-3 py-2 rounded-md hover:bg-gray-50 text-sm focus:bg-gray-50 focus:outline-none"
+            onClick={() => setOpen(false)}
+            role="menuitem"
+          >
+            Orders
+          </Link>
+
+          {subscriptionLevel !== "premium" && (
+            <Link
+              href="/upgrade"
+              className="block px-3 py-2 rounded-md hover:bg-gray-50 text-sm text-blue-700 font-medium focus:bg-gray-50 focus:outline-none"
+              onClick={() => setOpen(false)}
+              role="menuitem"
+            >
+              Upgrade
+            </Link>
+          )}
+
+          {normalizeRole(user) === "admin" && (
+            <Link
+              href="/admin/dashboard"
+              className="block px-3 py-2 rounded-md hover:bg-gray-50 text-sm focus:bg-gray-50 focus:outline-none"
+              onClick={() => setOpen(false)}
+              role="menuitem"
+            >
+              Admin
+            </Link>
+          )}
+
+          <button
+            className="w-full text-left px-3 py-2 rounded-md hover:bg-gray-50 text-sm text-red-600 focus:bg-gray-50 focus:outline-none"
+            onClick={async () => {
+              setOpen(false);
+              await logout();
+              const next = encodeURIComponent(pathname || "/");
+              window.location.href = `/?next=${next}`;
+            }}
+            role="menuitem"
+          >
+            Sign out
+          </button>
         </div>
-      )}
+      </div>
     </div>
   );
 }
+
+/* ========= Logo ========= */
 function SoulLogo() {
   return (
     <div className="relative">
@@ -153,7 +199,7 @@ function SoulLogo() {
   );
 }
 
-// --- A single nav item with underline/slide animation ---
+/* ========= Nav Item ========= */
 function NavItem({
   href,
   label,
@@ -167,7 +213,7 @@ function NavItem({
     <Link
       href={href}
       className={cn(
-        "relative px-3 py-2 rounded-xl transition-all",
+        "group relative px-3 py-2 rounded-xl transition-all",
         "text-base font-semibold tracking-wide",
         active ? "text-zinc-900" : "text-zinc-700 hover:text-zinc-900"
       )}
@@ -186,22 +232,40 @@ function NavItem({
   );
 }
 
+/* ========= Header ========= */
 export default function Header() {
-  const pathname = usePathname();
+  const { subscriptionLevel } = useAuth();
   const { count } = useCart();
+  const pathname = usePathname();
+  const scrolled = useScrolled(8);
+
+  // bump animation when count changes
+  const [bump, setBump] = useState(false);
+  useEffect(() => {
+    if (count <= 0) return;
+    setBump(true);
+    const t = setTimeout(() => setBump(false), 300);
+    return () => clearTimeout(t);
+  }, [count]);
+
   const nav = [
     { href: "/", label: "Home" },
     { href: "/book", label: "Books" },
     { href: "/podcast", label: "Podcasts" },
-    { href: "/upgrade", label: "Upgrade" },
+    ...(subscriptionLevel === "premium" ? [] : [{ href: "/upgrade", label: "Upgrade" }]),
     { href: "/about", label: "About" },
   ];
 
   return (
     <header className="sticky top-0 z-40">
-      <div className="backdrop-blur supports-[backdrop-filter]:bg-white/70 bg-white/90 border-b border-zinc-200 shadow-sm">
-        <div className="container-max">
-          <div className="flex items-center justify-between py-3">
+      <div
+        className={cn(
+          "backdrop-blur supports-[backdrop-filter]:bg-white/70 bg-white/90 border-b transition-shadow",
+          scrolled ? "shadow-sm" : "shadow-none"
+        )}
+      >
+        <div className="container mx-auto px-4">
+          <div className="flex items-center justify-between h-16">
             {/* Brand */}
             <Link href="/" className="flex items-center gap-3 group">
               <SoulLogo />
@@ -211,35 +275,31 @@ export default function Header() {
             </Link>
 
             {/* Nav */}
-            <nav className="hidden md:flex items-center gap-1 group">
-              {nav.map((n) => (
-                <NavItem
-                  key={n.href}
-                  href={n.href}
-                  label={n.label}
-                  active={
-                    pathname === n.href ||
-                    (n.href !== "/" && pathname?.startsWith(n.href))
-                  }
-                />
-              ))}
+            <nav className="hidden md:flex items-center gap-1">
+              {nav.map((n) => {
+                const active =
+                  pathname === n.href || (n.href !== "/" && pathname?.startsWith(n.href));
+                return <NavItem key={n.href} href={n.href} label={n.label} active={active} />;
+              })}
             </nav>
 
             {/* Right area */}
-            <div className="flex items-center gap-4">
-              {/* Cart Icon */}
+            <div className="flex items-center gap-3">
               <Link
-                href="/orders"
-                className="relative p-2 rounded-lg hover:bg-gray-100 transition"
+                href="/cart"
+                className={cn(
+                  "relative p-2 rounded-lg hover:bg-gray-100 transition",
+                  bump && "animate-[cartbump_.3s_ease-out]"
+                )}
+                aria-label="Open cart"
               >
                 <ShoppingCartIcon className="h-6 w-6 text-zinc-700" />
                 {count > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold px-1.5 py-0.5 rounded-full">
+                  <span className="absolute -top-1 -right-1 bg-blue-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full grid place-items-center min-w-5 h-5">
                     {count}
                   </span>
                 )}
               </Link>
-
               <HeaderAuthArea />
             </div>
           </div>
@@ -247,16 +307,16 @@ export default function Header() {
 
         <div className="h-px bg-gradient-to-r from-transparent via-zinc-300 to-transparent" />
       </div>
+
+      {/* keyframes (Tailwind arbitrary) */}
+      <style jsx global>{`
+        @keyframes cartbump {
+          0% { transform: scale(1); }
+          10% { transform: scale(0.95); }
+          50% { transform: scale(1.06); }
+          100% { transform: scale(1); }
+        }
+      `}</style>
     </header>
   );
 }
-
-/* --------- NOTES ----------
-- Typography: text-base + font-semibold cho nav; brand font-extrabold.
-- Khoảng cách: px-3 py-2, gap-1/3 giúp thoáng hơn.
-- Animation:
-  + Underline scale-x mượt (duration-300) khi hover, và giữ nguyên nếu active.
-  + Glass effect cho nền header (backdrop-blur + opacity).
-- Logo: khối gradient phát sáng nhẹ (blur-md + gradient).
-- Sticky: header dính đỉnh trang (sticky top-0).
--------------------------------- */

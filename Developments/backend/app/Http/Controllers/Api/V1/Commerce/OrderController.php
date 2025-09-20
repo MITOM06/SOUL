@@ -2,9 +2,9 @@
 
 
 namespace App\Http\Controllers\Api\V1\Commerce;
-
-use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB; 
+use App\Http\Controllers\Controller;
 use App\Models\Order;
 use App\Models\User; // Để sử dụng model User
 
@@ -41,29 +41,43 @@ public function index(Request $request)
 public function store(Request $request)
 {
     $request->validate([
-        'product_id'   => 'required|exists:products,id',
-        'quantity'     => 'nullable|integer|min:1',
-        'payment_method' => 'nullable|string'
+
+        'product_id'      => 'required|exists:products,id',
+        'quantity'        => 'nullable|integer|min:1',
+        'payment_method'  => 'nullable|string'
     ]);
 
     $user = $request->user();
-    $qty = $request->input('quantity', 1);
+    $qty  = (int) $request->input('quantity', 1);
 
-    // 👉 Tìm hoặc tạo order status = 'pending'
+    // 1) Tìm hoặc tạo order pending cho user
     $order = $user->orders()->firstOrCreate(
         ['status' => 'pending'],
-        ['payment_method' => $request->input('payment_method', 'cod'), 'total_cents' => 0]
+        [
+            'payment_method' => $request->input('payment_method', 'cod'),
+            'total_cents'    => 0
+        ]
     );
 
-    // 👉 Thêm/Update item
-    $item = $order->items()->updateOrCreate(
-        ['product_id' => $request->product_id],
-        ['quantity' => \DB::raw("quantity + $qty")]
-    );
+    // 2) Tìm item theo product_id
+    $item = $order->items()->where('product_id', $request->product_id)->first();
 
-    // 👉 Recalculate total
+    if ($item) {
+        // đã có, tăng số lượng
+        $item->increment('quantity', $qty);
+        $item->refresh();
+    } else {
+        // chưa có, tạo mới
+        $item = $order->items()->create([
+            'product_id' => $request->product_id,
+            'quantity'   => $qty,
+        ]);
+    }
+
+    // 3) Tính lại tổng
     if (method_exists($order, 'recalculateTotal')) {
         $order->recalculateTotal();
+        $order->refresh();
     }
 
     return response()->json([
@@ -96,5 +110,3 @@ public function checkout(Request $request)
 
 
 }
-
-

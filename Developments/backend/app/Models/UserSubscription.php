@@ -5,10 +5,6 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 
-/**
- * Represents a user's subscription to a plan.  Subscriptions may be linked
- * to a payment and have start/end dates as DateTime instances.
- */
 class UserSubscription extends Model
 {
     use HasFactory;
@@ -17,11 +13,11 @@ class UserSubscription extends Model
 
     protected $fillable = [
         'user_id',
-        'plan_key',
-        'price_cents',
+        'plan_key',     // 👈 dùng đúng cột DB
+        'status',
         'start_date',
         'end_date',
-        'status',
+        'price_cents',
         'payment_id',
     ];
 
@@ -31,13 +27,12 @@ class UserSubscription extends Model
         'price_cents' => 'integer',
     ];
 
-    public function user()
-    {
-        return $this->belongsTo(User::class);
-    }
+    public function user()  { return $this->belongsTo(User::class); }
+    public function payment(){ return $this->belongsTo(Payment::class, 'payment_id'); }
 
-    public function payment()
+    // (Tuỳ chọn) alias để đọc cho tiện: $sub->plan
+    public function getPlanAttribute()
     {
-        return $this->belongsTo(Payment::class, 'payment_id');
+        return $this->plan_key;
     }
 }
