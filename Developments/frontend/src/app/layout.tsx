@@ -11,11 +11,11 @@ export const metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="vi">
+    <html lang="en">
       <body className="min-h-screen">
         <Providers>
           <Header />
-          <main className="pt-6 pb-20">
+          <main className="pt-6 pb-20 neon-main">
             <div className="container-max">
               {children}
             </div>

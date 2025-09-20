@@ -47,22 +47,22 @@ export default function CheckoutPage() {
 	}
   };
   
-  if (!orderId) return <p>Không có order nào.</p>;
-  if (!paymentData) return <p>Đang khởi tạo thanh toán...</p>;
+  if (!orderId) return <p>No order found.</p>;
+  if (!paymentData) return <p>Initializing payment...</p>;
 
   if (paid) {
     return (
       <div className="max-w-lg mx-auto p-6 text-center">
         <h1 className="text-2xl font-bold text-green-600 mb-4">
-          Thanh toán thành công 🎉
+          Payment successful 🎉
         </h1>
-        <p className="mb-2">Đơn hàng #{orderId} đã được thanh toán</p>
+        <p className="mb-2">Order #{orderId} has been paid.</p>
         <img src={paymentData.qr_url} alt="QR Code" className="mx-auto border rounded-lg" />
         <button
           onClick={() => router.push("/orders")}
           className="mt-6 px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
         >
-          Quay lại Đơn hàng
+          Back to Orders
         </button>
       </div>
     );

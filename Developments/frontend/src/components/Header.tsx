@@ -60,7 +60,7 @@ export function HeaderAuthArea() {
     return (
       <Link
         href={`/auth/login?next=${next}`}
-        className="px-3 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition"
+        className="px-3 py-2 rounded-lg text-white transition bg-[color:var(--brand-500)] hover:bg-[color:var(--brand-600)]"
       >
         Sign in
       </Link>
@@ -249,7 +249,8 @@ export default function Header() {
   }, [count]);
 
   const nav = [
-    { href: "/", label: "Home" },
+    { href: "/", label: "(SOUL) Stories Online, Unified Library" },
+    { href: "/hot", label: "Hot" },
     { href: "/book", label: "Books" },
     { href: "/podcast", label: "Podcasts" },
     ...(subscriptionLevel === "premium" ? [] : [{ href: "/upgrade", label: "Upgrade" }]),
@@ -260,7 +261,7 @@ export default function Header() {
     <header className="sticky top-0 z-40">
       <div
         className={cn(
-          "backdrop-blur supports-[backdrop-filter]:bg-white/70 bg-white/90 border-b transition-shadow",
+          "backdrop-blur supports-[backdrop-filter]:bg-white/50 bg-white/60 border-b transition-shadow neon-bar",
           scrolled ? "shadow-sm" : "shadow-none"
         )}
       >
@@ -295,7 +296,7 @@ export default function Header() {
               >
                 <ShoppingCartIcon className="h-6 w-6 text-zinc-700" />
                 {count > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-blue-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full grid place-items-center min-w-5 h-5">
+                  <span className="absolute -top-1 -right-1 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full grid place-items-center min-w-5 h-5 bg-[color:var(--brand-500)]">
                     {count}
                   </span>
                 )}

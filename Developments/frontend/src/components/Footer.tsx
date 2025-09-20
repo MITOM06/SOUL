@@ -6,7 +6,7 @@ export default function Footer() {
       <div className="container-max py-10 grid gap-6 md:grid-cols-4">
         <div>
           <div className="flex items-center gap-3">
-            <div className="h-9 w-9 rounded-md bg-blue-600 text-white grid place-items-center font-bold shadow-sm">S</div>
+            <div className="h-9 w-9 rounded-md text-white grid place-items-center font-bold shadow-sm bg-gradient-to-tr from-indigo-500 via-fuchsia-500 to-rose-500">S</div>
             <span className="font-semibold tracking-wide">SOUL</span>
           </div>
           <p className="mt-3 text-sm text-zinc-600 max-w-xs">
@@ -17,8 +17,7 @@ export default function Footer() {
         <div>
           <h4 className="font-semibold mb-3">Products</h4>
           <ul className="space-y-2 text-sm text-zinc-700">
-
-            <li><Link href="/library" className="hover:underline">Library</Link></li>
+            <li><Link href="/book" className="hover:underline">Books</Link></li>
             <li><Link href="/podcast" className="hover:underline">Podcasts</Link></li>
           </ul>
         </div>
