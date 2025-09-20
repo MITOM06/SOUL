@@ -49,7 +49,7 @@ class RegisterController extends Controller
                 'name'       => $user->name,
                 'role'       => $user->role,
                 'is_active'  => $user->is_active,
-                'token'      => $token, 
+                'token'      => $token, // 👈 QUAN TRỌNG: gửi token cho FE
             ],
             'message' => 'User registered successfully.',
         ], 201);

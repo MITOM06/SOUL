@@ -2,9 +2,9 @@
 
 
 namespace App\Http\Controllers\Api\V1\Commerce;
-
-use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB; 
+use App\Http\Controllers\Controller;
 use App\Models\Order;
 use App\Models\User; // Để sử dụng model User
 
@@ -15,111 +15,7 @@ use App\Models\User; // Để sử dụng model User
 
 class OrderController extends Controller
 {
-//     // Lấy danh sách orders
-//     public function index(Request $r)
-//     {
-//         $user = $r->user();
-//         if ($user->hasRole('admin')) {
-//             $orders = Order::with('items.product', 'user')->paginate(20);
-//         } else {
-//             $orders = $user->orders()->with('items.product')->paginate(20);
-//         }
-//         return response()->json(['success' => true, 'data' => $orders]);
-//     }
 
-//     // Tạo mới một order
-//     public function store(OrderRequest $request)
-//     {
-//         $user = $request->user();
-//         $items = $request->validated()['items'];
-
-//         DB::beginTransaction();
-//         try {
-//             $total = 0;
-//             $order = Order::create(['user_id' => $user->id, 'total' => 0, 'status' => 'pending']);
-
-//             foreach ($items as $it) {
-//                 $product = Product::findOrFail($it['product_id']);
-//                 $price = $product->price;
-//                 $qty = $it['quantity'];
-//                 $total += $price * $qty;
-//                 $order->items()->create([
-//                     'product_id' => $product->id,
-//                     'price' => $price,
-//                     'quantity' => $qty,
-//                     'meta' => ['title' => $product->title]
-//                 ]);
-//             }
-
-//             $order->update(['total' => $total, 'status' => 'paid']); // adjust status based on your flow
-//             DB::commit();
-//             return response()->json(['success' => true, 'data' => $order->load('items.product')], 201);
-//         } catch (\Throwable $e) {
-//             DB::rollBack();
-//             report($e);
-//             return response()->json(['success' => false, 'message' => 'Could not create order'], 500);
-//         }
-//     }
-
-//     // Lấy thông tin chi tiết một order
-//     public function show(Request $r, Order $order)
-//     {
-//         $user = $r->user();
-//         if (!$user->hasRole('admin') && $order->user_id !== $user->id) {
-//             return response()->json(['success' => false, 'message' => 'Unauthorized'], 403);
-//         }
-//         $order->load('items.product');
-//         return response()->json(['success' => true, 'data' => $order]);
-//     }
-
-//     // Cập nhật thông tin order
-//     public function update(Request $request, Order $order)
-//     {
-//         $request->validate([
-//             'status' => 'string',
-//             'total_amount' => 'numeric'
-//         ]);
-
-//         $order->update($request->only('status', 'total_amount'));
-
-//         return response()->json(['success' => true, 'data' => $order->load('items')], 200);
-//     }
-
-//     // Xóa một order
-//     public function destroy(Order $order)
-//     {
-//         $order->delete();
-//         return response()->json(['success' => true, 'message' => 'Order deleted successfully'], 204);
-//     }
-// 
-// Lấy đơn hàng pending của user (giống cart)
-
-
-
-
-
-
-    // Lấy đơn hàng pending (giống cart) của user
-//    public function index(Request $request)
-// {
-//     $user = $request->user();
-//     if (!$user) {
-//         return response()->json(['success' => false, 'message' => 'Unauthenticated'], 401);
-//     }
-
-//     $order = Order::with('items.product')
-//         ->where('user_id', $user->id)
-//         ->where('status', 'pending')
-//         ->first();
-
-//     return response()->json([
-//         'success' => true,
-//         'data' => $order, // có thể null
-//         'message' => $order ? 'Pending order found' : 'No pending order found'
-//     ]);
-// }
-
-//test
 public function index(Request $request)
 {
     $user = $request->user();
@@ -142,34 +38,53 @@ public function index(Request $request)
     ]);
 }
 
-// public function checkout(Request $request)
-// {
-//     $user = $request->user();
-//     if (!$user) {
-//         return response()->json(['success' => false, 'message' => 'Unauthenticated'], 401);
-//     }
+public function store(Request $request)
+{
+    $request->validate([
+        'product_id'      => 'required|exists:products,id',
+        'quantity'        => 'nullable|integer|min:1',
+        'payment_method'  => 'nullable|string'
+    ]);
 
-//     $order = Order::with('items.product')
-//         ->where('user_id', $user->id)
-//         ->where('status', 'pending')
-//         ->first();
+    $user = $request->user();
+    $qty  = (int) $request->input('quantity', 1);
 
-//     if (!$order || $order->items->count() === 0) {
-//         return response()->json([
-//             'success' => false,
-//             'message' => 'No pending order to checkout'
-//         ], 404);
-//     }
+    // 1) Tìm hoặc tạo order pending cho user
+    $order = $user->orders()->firstOrCreate(
+        ['status' => 'pending'],
+        [
+            'payment_method' => $request->input('payment_method', 'cod'),
+            'total_cents'    => 0
+        ]
+    );
 
-//     $order->update(['status' => 'paid']);
+    // 2) Tìm item theo product_id
+    $item = $order->items()->where('product_id', $request->product_id)->first();
 
-//     return response()->json([
-//         'success' => true,
-//         'message' => 'Order checked out successfully',
-//         'data' => $order
-//     ]);
-// }
+    if ($item) {
+        // đã có, tăng số lượng
+        $item->increment('quantity', $qty);
+        $item->refresh();
+    } else {
+        // chưa có, tạo mới
+        $item = $order->items()->create([
+            'product_id' => $request->product_id,
+            'quantity'   => $qty,
+        ]);
+    }
 
+    // 3) Tính lại tổng
+    if (method_exists($order, 'recalculateTotal')) {
+        $order->recalculateTotal();
+        $order->refresh();
+    }
+
+    return response()->json([
+        'success' => true,
+        'message' => 'Product added to cart',
+        'order'   => $order->load('items.product'),
+    ]);
+}
 //test
 public function checkout(Request $request)
 {
@@ -194,5 +109,3 @@ public function checkout(Request $request)
 
 
 }
-
-

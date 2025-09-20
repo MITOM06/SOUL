@@ -13,13 +13,14 @@ use App\Http\Controllers\Api\V1\Commerce\OrderItemController;
 use App\Http\Controllers\Api\V1\Commerce\PaymentController;
 
 use App\Http\Controllers\Api\V1\Users\UserController;
-use App\Http\Controllers\Api\V1\Admin\UserController as AdminUserController;
+
 
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\V1\Admin\AdminOrderController;
 use App\Http\Controllers\Api\V1\Admin\AdminOrderItemController;
 
 use App\Http\Controllers\Api\V1\Admin\SubscriptionController;
+use App\Http\Controllers\Api\V1\Admin\AdminUserController;
 
 use App\Http\Controllers\Api\V1\Library\FavouriteController;
 use App\Http\Controllers\Api\V1\Catalog\ProductReadController;
@@ -66,10 +67,10 @@ Route::prefix('v1')->group(function () {
         Route::put ('profile/password',    [UserController::class, 'changePassword']);
 
         // Favourites
-        Route::get   ('favourites',               [FavouriteController::class, 'index']);
-        Route::post  ('favourites',               [FavouriteController::class, 'store']);
-        Route::post  ('favourites/toggle',        [FavouriteController::class, 'toggle']);
-        Route::delete('favourites/{product}',     [FavouriteController::class, 'destroy']);
+           Route::get('favourites', [FavouriteController::class, 'index']);
+        Route::post('favourites', [FavouriteController::class, 'store']);
+        Route::post('favourites/toggle', [FavouriteController::class, 'toggle']);
+        Route::delete('favourites/{product}', [FavouriteController::class, 'destroy']);
 
         // Transactions
         Route::get('transactions',     [PaymentController::class, 'listTransactions']);
@@ -82,8 +83,10 @@ Route::prefix('v1')->group(function () {
         Route::post('orders/checkout',      [OrderController::class, 'checkout']);
 
         // Cart
-        Route::get('cart',        [OrderController::class,   'getCart']);
+      //  Route::get('cart',        [OrderController::class,   'getCart']);
         Route::get('cart/count',  [OrderItemController::class,'cartCount']);
+           Route::post('cart', [OrderItemController::class, 'addToCart']);     // 👈 thêm vào giỏ
+        Route::delete('cart/{product}', [OrderItemController::class, 'removeFromCart']); // 👈 xóa khỏi giỏ
 
         // Order Items
         Route::post  ('orders/items',          [OrderItemController::class, 'store']);
@@ -127,11 +130,11 @@ Route::prefix('v1')->group(function () {
         Route::delete('orders/{order}',[AdminOrderController::class, 'destroy']);
 
         // Subscriptions (plan/catalog of subs) – đã có sẵn
-        Route::get   ('subscriptions',       [SubscriptionController::class, 'index']);
-        Route::get   ('subscriptions/{id}',  [SubscriptionController::class, 'show']);
-        Route::post  ('subscriptions',       [SubscriptionController::class, 'store']);
-        Route::put   ('subscriptions/{id}',  [SubscriptionController::class, 'update']);
-        Route::delete('subscriptions/{id}',  [SubscriptionController::class, 'destroy']);
+        // Route::get   ('subscriptions',       [SubscriptionController::class, 'index']);
+        // Route::get   ('subscriptions/{id}',  [SubscriptionController::class, 'show']);
+        // Route::post  ('subscriptions',       [SubscriptionController::class, 'store']);
+        // Route::put   ('subscriptions/{id}',  [SubscriptionController::class, 'update']);
+        // Route::delete('subscriptions/{id}',  [SubscriptionController::class, 'destroy']);
 
         // Order Items
         Route::get   ('orders/items',        [AdminOrderItemController::class, 'index']);
