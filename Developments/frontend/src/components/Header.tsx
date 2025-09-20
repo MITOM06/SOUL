@@ -54,21 +54,45 @@ export function HeaderAuthArea() {
     return <div className="h-8 w-28 bg-gray-200 animate-pulse rounded" />;
   }
 
-  // Not logged in
+// Not logged in
   if (!user) {
     const next = encodeURIComponent(pathname || "/");
     return (
-      <Link
-        href={`/auth/login?next=${next}`}
-        className="px-3 py-2 rounded-lg text-white transition bg-[color:var(--brand-500)] hover:bg-[color:var(--brand-600)]"
-      >
-        Sign in
-      </Link>
+      <div className="flex items-center gap-2">
+        <Link
+          href={`/auth/register?next=${next}`}
+          className="px-3 py-2 rounded-lg border border-[color:var(--brand-500)] text-[color:var(--brand-600)] hover:bg-[color:var(--brand-50)] transition"
+        >
+          Sign up
+        </Link>
+        <Link
+          href={`/auth/login?next=${next}`}
+          className="px-3 py-2 rounded-lg text-white transition bg-[color:var(--brand-500)] hover:bg-[color:var(--brand-600)]"
+        >
+          Sign in
+        </Link>
+      </div>
     );
   }
 
-  const planLabel = subscriptionLevel ? subscriptionLevel.toUpperCase() : "FREE";
+  const role = normalizeRole(user); // 'admin' | 'user'
   const isPremium = subscriptionLevel === "premium";
+  const planLabel = subscriptionLevel ? subscriptionLevel.toUpperCase() : "FREE";
+
+  // Build menu items per role
+  const userMenu = [
+    { href: "/profile", label: "Profile" },
+    { href: "/favorites", label: "Favourite" },
+    { href: "/orders", label: "Orders" },
+    { href: "/continues", label: "Continues" },     // e.g. continue reading/listening
+    { href: "/payments", label: "Payments" },
+    { href: "/my-package", label: "My Package" },
+  ];
+
+  const adminMenu = [
+    { href: "/profile", label: "Profile" },
+    { href: "/admin/dashboard", label: "Admin Panel" },
+  ];
 
   return (
     <div className="relative">
@@ -82,6 +106,17 @@ export function HeaderAuthArea() {
         )}
         onClick={() => setOpen((v) => !v)}
       >
+        {/* Upgrade chip: only for normal user & not premium */}
+        {role === "user" && !isPremium && (
+          <Link
+            href="/upgrade"
+            className="ml-2 px-2 py-1 rounded-md text-xs bg-[color:var(--brand-50)] text-[color:var(--brand-700)] hover:bg-[color:var(--brand-100)] border border-[color:var(--brand-200)]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            Upgrade
+          </Link>
+        )}
+
         <div
           className={cn(
             "h-8 w-8 rounded-full grid place-items-center text-white font-semibold",
@@ -90,13 +125,13 @@ export function HeaderAuthArea() {
           )}
         >
           {user.name?.[0]?.toUpperCase() || user.email[0].toUpperCase()}
-          {/* subtle pulse for premium */}
           {isPremium && (
             <span className="pointer-events-none absolute inset-0 rounded-full ring-2 ring-amber-400/40 animate-[pulse_2s_ease-out_infinite] [@media(prefers-reduced-motion:reduce)]:hidden" />
           )}
         </div>
+
         <span className="hidden sm:block text-sm">{user.name || user.email}</span>
-        {/* chevron with rotate when open */}
+
         <svg
           className={cn(
             "h-4 w-4 opacity-70 transition-transform",
@@ -109,66 +144,44 @@ export function HeaderAuthArea() {
         </svg>
       </button>
 
-      {/* dropdown with fade+scale */}
+      {/* Dropdown */}
       <div
         ref={panelRef}
         className={cn(
           "absolute right-0 mt-2 w-64 rounded-xl border bg-white shadow-lg z-50 origin-top-right",
           "transition",
-          open
-            ? "opacity-100 scale-100"
-            : "pointer-events-none opacity-0 scale-95",
+          open ? "opacity-100 scale-100" : "pointer-events-none opacity-0 scale-95",
           "[&]:[@media(prefers-reduced-motion:reduce)]:scale-100"
         )}
         role="menu"
         tabIndex={-1}
       >
-        {/* arrow caret */}
         <div className="absolute -top-2 right-6 h-4 w-4 rotate-45 bg-white border-l border-t" />
         <div className="p-2">
-          <div className="px-3 py-2 text-xs text-gray-600">
-            Current plan: <span className="font-semibold">{planLabel}</span>
-          </div>
-          <div className="h-px bg-gray-100 my-2" />
-          <Link
-            href="/profile"
-            className="block px-3 py-2 rounded-md hover:bg-gray-50 text-sm focus:bg-gray-50 focus:outline-none"
-            onClick={() => setOpen(false)}
-            role="menuitem"
-          >
-            Profile
-          </Link>
-          <Link
-            href="/orders"
-            className="block px-3 py-2 rounded-md hover:bg-gray-50 text-sm focus:bg-gray-50 focus:outline-none"
-            onClick={() => setOpen(false)}
-            role="menuitem"
-          >
-            Orders
-          </Link>
-
-          {subscriptionLevel !== "premium" && (
-            <Link
-              href="/upgrade"
-              className="block px-3 py-2 rounded-md hover:bg-gray-50 text-sm text-blue-700 font-medium focus:bg-gray-50 focus:outline-none"
-              onClick={() => setOpen(false)}
-              role="menuitem"
-            >
-              Upgrade
-            </Link>
+          {/* Plan label only for user; hide for admin */}
+          {role === "user" && (
+            <>
+              <div className="px-3 py-2 text-xs text-gray-600">
+                Current plan: <span className="font-semibold">{planLabel}</span>
+              </div>
+              <div className="h-px bg-gray-100 my-2" />
+            </>
           )}
 
-          {normalizeRole(user) === "admin" && (
+          {/* Menu items */}
+          {(role === "admin" ? adminMenu : userMenu).map((item) => (
             <Link
-              href="/admin/dashboard"
+              key={item.href}
+              href={item.href}
               className="block px-3 py-2 rounded-md hover:bg-gray-50 text-sm focus:bg-gray-50 focus:outline-none"
               onClick={() => setOpen(false)}
               role="menuitem"
             >
-              Admin
+              {item.label}
             </Link>
-          )}
+          ))}
 
+          {/* Sign out (common) */}
           <button
             className="w-full text-left px-3 py-2 rounded-md hover:bg-gray-50 text-sm text-red-600 focus:bg-gray-50 focus:outline-none"
             onClick={async () => {
@@ -253,7 +266,6 @@ export default function Header() {
     { href: "/hot", label: "Hot" },
     { href: "/book", label: "Books" },
     { href: "/podcast", label: "Podcasts" },
-    ...(subscriptionLevel === "premium" ? [] : [{ href: "/upgrade", label: "Upgrade" }]),
     { href: "/about", label: "About" },
   ];
 
