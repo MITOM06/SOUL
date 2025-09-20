@@ -106,6 +106,20 @@ public function checkout(Request $request)
     ]);
 }
 
+public function show(Request $request, $orderId)
+{
+    $user = $request->user();
+    $order = Order::with(['items.product'])
+        ->where('id', $orderId)
+        ->where('user_id', $user?->id)
+        ->firstOrFail();
+
+    return response()->json([
+        'success' => true,
+        'data' => $order,
+    ]);
+}
+
 
 
 

@@ -6,7 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { normalizeRole } from "@/lib/role";
-import { ShoppingCartIcon } from "@heroicons/react/24/outline";
+import { ShoppingCartIcon, BellIcon } from "@heroicons/react/24/outline";
 import { useCart } from "@/contexts/CartContext";
 
 /* ========= Small helpers ========= */
@@ -85,7 +85,7 @@ export function HeaderAuthArea() {
     { href: "/favorites", label: "Favourite" },
     { href: "/orders", label: "Orders" },
     { href: "/continues", label: "Continues" },     // e.g. continue reading/listening
-    { href: "/payments", label: "Payments" },
+    { href: "/payment-history", label: "My Payment" },
     { href: "/my-package", label: "My Package" },
   ];
 
@@ -107,15 +107,7 @@ export function HeaderAuthArea() {
         onClick={() => setOpen((v) => !v)}
       >
         {/* Upgrade chip: only for normal user & not premium */}
-        {role === "user" && !isPremium && (
-          <Link
-            href="/upgrade"
-            className="ml-2 px-2 py-1 rounded-md text-xs bg-[color:var(--brand-50)] text-[color:var(--brand-700)] hover:bg-[color:var(--brand-100)] border border-[color:var(--brand-200)]"
-            onClick={(e) => e.stopPropagation()}
-          >
-            Upgrade
-          </Link>
-        )}
+        {/* Upgrade chip removed here; a standalone Upgrade button exists on header right */}
 
         <div
           className={cn(
@@ -247,10 +239,11 @@ function NavItem({
 
 /* ========= Header ========= */
 export default function Header() {
-  const { subscriptionLevel } = useAuth();
+  const { subscriptionLevel, user } = useAuth();
   const { count } = useCart();
   const pathname = usePathname();
   const scrolled = useScrolled(8);
+  const role = normalizeRole(user);
 
   // bump animation when count changes
   const [bump, setBump] = useState(false);
@@ -277,7 +270,7 @@ export default function Header() {
           scrolled ? "shadow-sm" : "shadow-none"
         )}
       >
-        <div className="container mx-auto px-4">
+        <div className="px-4 full-bleed">
           <div className="flex items-center justify-between h-16">
             {/* Brand */}
             <Link href="/" className="flex items-center gap-3 group">
@@ -298,8 +291,29 @@ export default function Header() {
 
             {/* Right area */}
             <div className="flex items-center gap-3">
+              {/* Standalone Upgrade button */}
+              {(!user || (normalizeRole(user) === 'user' && subscriptionLevel !== 'premium' && subscriptionLevel !== 'vip')) && (
+                <Link
+                  href="/upgrade"
+                  className="relative px-3 py-2 rounded-xl text-white bg-gradient-to-r from-fuchsia-500 to-indigo-500 shadow hover:shadow-md transition hover:-translate-y-0.5"
+                >
+                  <span className="relative z-10">Upgrade</span>
+                  <span className="absolute inset-0 rounded-xl animate-pulse bg-white/10" />
+                </Link>
+              )}
+              {/* Notifications – users to /notifications, admins to /admin/notifications */}
               <Link
-                href="/cart"
+                href={role === 'admin' ? "/admin/notifications" : "/notifications"}
+                className="relative p-2 rounded-lg hover:bg-gray-100 transition"
+                aria-label="Notifications"
+              >
+                <BellIcon className="h-6 w-6 text-zinc-700" />
+              </Link>
+
+              {/* Cart (hide for admin); link to Orders detail */}
+              {role !== 'admin' && (
+              <Link
+                href="/orders"
                 className={cn(
                   "relative p-2 rounded-lg hover:bg-gray-100 transition",
                   bump && "animate-[cartbump_.3s_ease-out]"
@@ -313,6 +327,7 @@ export default function Header() {
                   </span>
                 )}
               </Link>
+              )}
               <HeaderAuthArea />
             </div>
           </div>

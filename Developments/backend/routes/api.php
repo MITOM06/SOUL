@@ -179,3 +179,5 @@ Route::prefix('v1')->group(function () {
     // ---------------- Fallback ----------------
     Route::fallback(fn () => response()->json(['message' => 'Endpoint not found'], 404));
 });
+        // Subscription checkout (requires auth)
+        Route::post('subscriptions/checkout', [PaymentController::class, 'checkoutSubscription']);

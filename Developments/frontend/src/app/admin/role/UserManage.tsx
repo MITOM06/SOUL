@@ -24,6 +24,7 @@ export default function UserManage({ roleFilter }: UserManageProps) {
   const [form, setForm] = useState<Partial<User & { password: string }>>({});
   const [meta, setMeta] = useState<any>(null);
   const [currentPage, setCurrentPage] = useState(1);
+  const [query, setQuery] = useState("");
 
   // load khi mount hoặc page thay đổi
   useEffect(() => {
@@ -34,7 +35,7 @@ export default function UserManage({ roleFilter }: UserManageProps) {
   const fetchUsers = async (page = 1, role: "user" | "admin") => {
     setLoading(true);
     try {
-      const res = await adminUsersAPI.getAll({ page, role });
+      const res = await adminUsersAPI.getAll({ page, role, per_page: 15 });
 
       // sort latest (mới nhất trước)
       const sortedUsers = (res.data.data ?? []).sort(
@@ -106,11 +107,28 @@ export default function UserManage({ roleFilter }: UserManageProps) {
 
   return (
     <div className="space-y-4 animate-fade-in">
-      {/* Tiêu đề */}
-      <div className="flex items-center justify-between">
+      {/* Tiêu đề + thanh tìm kiếm + nút thêm */}
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <h1 className="text-2xl font-bold">
           {roleFilter === "admin" ? "Admins Management" : "Users Management"}
         </h1>
+        <div className="flex w-full md:w-auto items-center gap-2">
+          <div className="relative flex-1 md:w-80">
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search by name or email..."
+              className="w-full border rounded-lg pl-9 pr-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">🔎</span>
+          </div>
+          <button
+            onClick={() => { setSelectedUser(null); setForm({ is_active: true }); setShowForm(true); }}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:brightness-110"
+          >
+            Add {roleFilter === 'admin' ? 'Admin' : 'User'}
+          </button>
+        </div>
       </div>
 
       {/* Table */}
@@ -127,7 +145,16 @@ export default function UserManage({ roleFilter }: UserManageProps) {
             </tr>
           </thead>
           <tbody className="bg-white">
-            {users.map((user, index) => (
+            {users
+              .filter((u) => {
+                if (!query.trim()) return true;
+                const q = query.toLowerCase();
+                return (
+                  (u.name ?? "").toLowerCase().includes(q) ||
+                  u.email.toLowerCase().includes(q)
+                );
+              })
+              .map((user, index) => (
               <tr key={user.id} className="text-center hover:bg-gray-50 transition">
                 <td className="border p-2">{(meta?.from ?? 0) + index}</td>
                 <td className="border p-2">{user.name || "(No name)"}</td>
@@ -183,51 +210,85 @@ export default function UserManage({ roleFilter }: UserManageProps) {
         )}
       </div>
 
-      {/* Modal Form */}
+      {/* Profile-style Edit/Add Panel */}
       {showForm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-30">
-          <div className="bg-white p-6 rounded-lg w-96 space-y-4 shadow-lg">
-            <h2 className="text-xl font-bold">
-              {selectedUser ? "Edit User" : "Add User"}
-            </h2>
-            <input
-              className="w-full border px-3 py-2 rounded"
-              placeholder="Name"
-              value={form.name ?? ""}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-            />
-            <input
-              className="w-full border px-3 py-2 rounded"
-              placeholder="Email"
-              value={form.email ?? ""}
-              onChange={(e) => setForm({ ...form, email: e.target.value })}
-            />
-            <input
-              className="w-full border px-3 py-2 rounded"
-              placeholder="Password"
-              type="password"
-              value={form.password ?? ""}
-              onChange={(e) => setForm({ ...form, password: e.target.value })}
-            />
-            <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={form.is_active ?? true}
-                onChange={(e) => setForm({ ...form, is_active: e.target.checked })}
-              />
-              Active
-            </label>
-
-            <div className="flex justify-end gap-2">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-30 animate-fade-in">
+          <div className="bg-white rounded-2xl w-[min(720px,92vw)] shadow-xl overflow-hidden animate-zoom-in">
+            {/* Header */}
+            <div className="px-6 py-5 border-b bg-gray-50 flex items-center gap-4">
+              <div className="h-12 w-12 rounded-full bg-blue-600 text-white grid place-items-center text-lg font-bold">
+                {(form.name ?? selectedUser?.name ?? selectedUser?.email ?? 'U').toString().charAt(0).toUpperCase()}
+              </div>
+              <div className="flex-1 min-w-0">
+                <h2 className="text-lg font-semibold truncate">
+                  {selectedUser ? 'Edit Profile' : 'Add Profile'}
+                </h2>
+                <p className="text-sm text-gray-500">Role: {roleFilter === 'admin' ? 'Admin' : 'User'}</p>
+              </div>
               <button
                 onClick={() => setShowForm(false)}
-                className="px-4 py-2 bg-gray-400 text-white rounded"
+                className="px-3 py-2 text-gray-600 hover:bg-gray-200 rounded"
+                aria-label="Close"
+              >✕</button>
+            </div>
+
+            {/* Body */}
+            <div className="px-6 py-5 grid gap-4">
+              <div className="grid md:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm text-gray-600">Full name</label>
+                  <input
+                    className="mt-1 w-full border px-3 py-2 rounded"
+                    placeholder="Name"
+                    value={form.name ?? ""}
+                    onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="text-sm text-gray-600">Email</label>
+                  <input
+                    className="mt-1 w-full border px-3 py-2 rounded"
+                    placeholder="Email"
+                    value={form.email ?? ""}
+                    onChange={(e) => setForm({ ...form, email: e.target.value })}
+                  />
+                </div>
+              </div>
+              <div className="grid md:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm text-gray-600">Password</label>
+                  <input
+                    className="mt-1 w-full border px-3 py-2 rounded"
+                    placeholder="Set new password"
+                    type="password"
+                    value={form.password ?? ""}
+                    onChange={(e) => setForm({ ...form, password: e.target.value })}
+                  />
+                </div>
+                <div className="flex items-center gap-3 pt-6">
+                  <input
+                    id="active"
+                    type="checkbox"
+                    className="h-4 w-4"
+                    checked={form.is_active ?? true}
+                    onChange={(e) => setForm({ ...form, is_active: e.target.checked })}
+                  />
+                  <label htmlFor="active" className="text-sm">Active account</label>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 border-t bg-gray-50 flex justify-end gap-2">
+              <button
+                onClick={() => setShowForm(false)}
+                className="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300"
               >
                 Cancel
               </button>
               <button
                 onClick={selectedUser ? updateUser : createUser}
-                className="px-4 py-2 bg-blue-600 text-white rounded"
+                className="px-4 py-2 bg-blue-600 text-white rounded hover:brightness-110"
               >
                 {selectedUser ? "Update" : "Create"}
               </button>
@@ -238,4 +299,3 @@ export default function UserManage({ roleFilter }: UserManageProps) {
     </div>
   );
 }
-

@@ -44,14 +44,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { href: '/admin/orders', label: 'Orders' },
     // Users Sub (quản lý user_subscriptions)
     { href: '/admin/users-sub', label: 'Users Sub' },
-    { href: '/', label: 'Back to Home' },
+    { href: '/admin/notifications', label: 'Notifications' },
   ];
 
   return (
-    <div className="min-h-screen grid grid-cols-1 lg:grid-cols-[260px_1fr]">
+    <div className="full-bleed min-h-screen grid grid-cols-1 lg:grid-cols-[280px_minmax(0,1fr)]">
       {/* Sidebar */}
-      <aside className="border-r bg-white">
-        <div className="flex items-center justify-between p-4 lg:block">
+      <aside className="border-r bg-white flex flex-col min-h-screen">
+        <div className="flex items-center justify-between p-4 lg:block border-b">
           <div className="font-extrabold text-xl">Admin</div>
           <button
             className="lg:hidden px-3 py-2 rounded bg-gray-100"
@@ -62,14 +62,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </button>
         </div>
 
-        <nav className={`px-2 pb-4 ${open ? 'block' : 'hidden lg:block'}`}>
+        <nav className={`px-2 py-3 ${open ? 'block' : 'hidden lg:block'} flex-1`}> {/* grow */}
           {links.map(link => {
             const active = pathname === link.href || pathname.startsWith(link.href + '/');
             return (
               <Link
                 key={link.href}
                 href={link.href}
-                className={`block px-3 py-2 rounded mb-1 ${
+                className={`block px-3 py-2 rounded mb-1 transition ${
                   active ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-gray-700 hover:bg-gray-50'
                 }`}
                 onClick={() => setOpen(false)}
@@ -81,11 +81,25 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
           {/* Roles dropdown with stable hover/click behavior */}
           <StableDropdown pathname={pathname} />
+
+          {/* Back to Home just below Roles */}
+          <Link
+            href="/"
+            className={`mt-1 block px-3 py-2 rounded text-gray-700 hover:bg-gray-50 transition ${
+              pathname === '/' ? 'bg-blue-50 text-blue-700 font-semibold' : ''
+            }`}
+            onClick={() => setOpen(false)}
+          >
+            Back to Home
+          </Link>
         </nav>
+        
       </aside>
 
       {/* Content */}
-      <main className="p-4 lg:p-8 bg-gray-50">{children}</main>
+      <main className="min-h-screen w-full p-3 md:p-4 lg:p-6 neon-main">
+        <div className="animate-fade-in">{children}</div>
+      </main>
     </div>
   );
 }

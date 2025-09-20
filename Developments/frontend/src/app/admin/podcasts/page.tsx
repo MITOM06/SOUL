@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 
 type ProductType = 'ebook' | 'podcast';
@@ -164,6 +164,84 @@ export default function AdminPodcasts() {
     if (!title) setTitle(j.data.title || title);
     if (!thumb) setThumb(j.data.thumbnail_url || thumb);
   };
+
+  // New list toolbar
+  const [query, setQuery] = useState('');
+  const [catFilter, setCatFilter] = useState('all');
+  const categories = useMemo(() => {
+    const set = new Set<string>();
+    items.forEach(i => { if (i.category) set.add(i.category); });
+    return ['all', ...Array.from(set.values())];
+  }, [items]);
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return items.filter(it => {
+      const okCat = catFilter === 'all' || (it.category || '').toLowerCase() === catFilter.toLowerCase();
+      const okQ = !q || it.title.toLowerCase().includes(q);
+      return okCat && okQ;
+    });
+  }, [items, query, catFilter]);
+
+  const [page, setPage] = useState(1);
+  const perPage = 15;
+
+  // New list-only UI
+  const listUI = (
+    <section className="space-y-4 animate-fade-in">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <h1 className="text-2xl font-bold">Podcasts Management</h1>
+        <div className="flex flex-col md:flex-row gap-2 md:items-center w-full md:w-auto">
+          <div className="relative md:w-80">
+            <input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search by product name..." className="w-full border rounded-lg pl-9 pr-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">🔎</span>
+          </div>
+          <select value={catFilter} onChange={(e)=>setCatFilter(e.target.value)} className="border rounded-lg px-3 py-2">
+            {categories.map(c => <option key={c} value={c}>{c === 'all' ? 'All' : c}</option>)}
+          </select>
+          <Link href="/admin/podcasts/create" className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:brightness-110 text-center">Add New Podcast</Link>
+        </div>
+      </div>
+
+      <div className="overflow-hidden rounded-xl border">
+        <table className="w-full">
+          <thead className="bg-gray-100">
+            <tr>
+              <th className="p-2 border text-left">#</th>
+              <th className="p-2 border text-left">Title</th>
+              <th className="p-2 border text-left">Category</th>
+              <th className="p-2 border text-left">Price</th>
+              <th className="p-2 border text-left">Active</th>
+              <th className="p-2 border text-left">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="bg-white">
+            {filtered.slice((page-1)*perPage, page*perPage).map((it, idx) => (
+              <tr key={it.id} className="hover:bg-gray-50">
+                <td className="p-2 border">{(page-1)*perPage + idx + 1}</td>
+                <td className="p-2 border">{it.title}</td>
+                <td className="p-2 border">{it.category || '-'}</td>
+                <td className="p-2 border">{it.price_cents ? formatVND(it.price_cents) : 'Free'}</td>
+                <td className="p-2 border">{(it.is_active ?? 1) ? '✅' : '❌'}</td>
+                <td className="p-2 border">
+                  <div className="flex gap-2">
+                    <Link className="px-3 py-1 border rounded" href={`/podcast/${it.id}`} target="_blank">View</Link>
+                    <Link className="px-3 py-1 bg-yellow-500 text-white rounded" href={`/admin/podcasts/${it.id}/edit`}>Edit</Link>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="flex justify-between items-center p-3">
+        <button className="px-3 py-1 border rounded disabled:opacity-50" disabled={page===1} onClick={()=>setPage(p=>Math.max(1,p-1))}>Prev</button>
+        <span className="text-sm text-zinc-600">Page {page}</span>
+        <button className="px-3 py-1 border rounded disabled:opacity-50" disabled={filtered.length <= page*perPage} onClick={()=>setPage(p=>p+1)}>Next</button>
+      </div>
+    </section>
+  );
+
+  return listUI;
 
   return (
     <div className="p-6 max-w-6xl mx-auto">

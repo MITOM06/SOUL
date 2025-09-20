@@ -37,13 +37,14 @@ export default function UserPanelLayout({
     { href: '/continues', label: 'Continues' },
     { href: '/orders', label: 'My Orders' },
     { href: '/payment-history', label: 'My Payment' },
+    { href: '/my-package', label: 'My Package' },
   ];
 
   const links = role === 'admin' ? baseLinks : [...baseLinks, ...userOnlyLinks];
 
   return (
-    <div className="flex flex-col md:flex-row">
-      <aside className="md:w-60 md:border-r p-4 space-y-2 bg-white">
+    <div className="full-bleed min-h-screen grid grid-cols-1 lg:grid-cols-[280px_minmax(0,1fr)]">
+      <aside className="border-r bg-white p-4 space-y-2 min-h-screen">
         {links.map((link) => {
           const active =
             pathname === link.href ||
@@ -61,7 +62,9 @@ export default function UserPanelLayout({
           );
         })}
       </aside>
-      <main className="flex-1 p-4 bg-white">{children}</main>
+      <main className="min-h-screen w-full p-3 md:p-4 lg:p-6 neon-main">
+        <div className="animate-fade-in">{children}</div>
+      </main>
     </div>
   );
 }

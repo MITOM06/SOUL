@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 
 type ProductType = 'ebook';
 
@@ -66,6 +67,25 @@ export default function AdminProductsV2() {
     const s = v.toLocaleString('vi-VN', { maximumFractionDigits: 0 });
     return withSymbol ? `${s} đ` : s;
   };
+
+  // New list toolbar states
+  const [query, setQuery] = useState('');
+  const [cat, setCat] = useState('all');
+  const categories = useMemo(() => {
+    const set = new Set<string>();
+    items.forEach(i => { if (i.category) set.add(i.category); });
+    return ['all', ...Array.from(set.values())];
+  }, [items]);
+  const [page, setPage] = useState(1);
+  const perPage = 15;
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return items.filter(it => {
+      const okCat = cat === 'all' || (it.category || '').toLowerCase() === cat.toLowerCase();
+      const okQ = !q || it.title.toLowerCase().includes(q);
+      return okCat && okQ;
+    });
+  }, [items, query, cat]);
 
   const uploadLocalFiles = async (productId: number, queue: { file: File; is_preview: boolean }[]) => {
     if (!queue.length) return { ok: true };
@@ -225,6 +245,83 @@ export default function AdminProductsV2() {
   const addUrlRow = () =>
     setForm({ ...form, files: [...(form.files || []), { file_type: 'pdf', file_url: '', is_preview: false }] });
 
+  // New edge-to-edge list UI with search + category + actions
+  // Keep legacy UI below for reference but not rendered.
+  const listUI = (
+    <section className="space-y-4 animate-fade-in">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <h1 className="text-2xl font-bold">Books Management</h1>
+        <div className="flex flex-col md:flex-row gap-2 md:items-center w-full md:w-auto">
+          <div className="relative md:w-80">
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search by product name..."
+              className="w-full border rounded-lg pl-9 pr-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">🔎</span>
+          </div>
+          <select
+            value={cat}
+            onChange={(e) => setCat(e.target.value)}
+            className="border rounded-lg px-3 py-2"
+          >
+            {categories.map(c => <option key={c} value={c}>{c === 'all' ? 'All' : c}</option>)}
+          </select>
+          <Link href="/admin/books/create" className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:brightness-110 text-center">
+            Add New Book
+          </Link>
+        </div>
+      </div>
+
+      <div className="overflow-hidden rounded-xl border">
+        <table className="w-full">
+          <thead className="bg-gray-100">
+            <tr>
+              <th className="p-2 border text-left">#</th>
+              <th className="p-2 border text-left">Title</th>
+              <th className="p-2 border text-left">Category</th>
+              <th className="p-2 border text-left">Price</th>
+              <th className="p-2 border text-left">Active</th>
+              <th className="p-2 border text-left">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="bg-white">
+            {loading && (
+              <tr><td className="p-3 text-center" colSpan={6}>Loading...</td></tr>
+            )}
+            {!loading && filtered.length === 0 && (
+              <tr><td className="p-3 text-center" colSpan={6}>No items</td></tr>
+            )}
+            {filtered.slice((page-1)*perPage, page*perPage).map((it, idx) => (
+              <tr key={it.id} className="hover:bg-gray-50">
+                <td className="p-2 border">{(page-1)*perPage + idx + 1}</td>
+                <td className="p-2 border">{it.title}</td>
+                <td className="p-2 border">{it.category || '-'}</td>
+                <td className="p-2 border">{(it.price_cents/100).toLocaleString()} ₫</td>
+                <td className="p-2 border">{(it.is_active ?? 1) ? '✅' : '❌'}</td>
+                <td className="p-2 border">
+                  <div className="flex gap-2">
+                    <Link href={`/book/${it.id}`} className="px-3 py-1 border rounded">View</Link>
+                    <Link href={`/admin/books/${it.id}/edit`} className="px-3 py-1 bg-yellow-500 text-white rounded">Edit</Link>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="flex justify-between items-center p-3">
+        <button className="px-3 py-1 border rounded disabled:opacity-50" disabled={page===1} onClick={()=>setPage(p=>Math.max(1,p-1))}>Prev</button>
+        <span className="text-sm text-zinc-600">Page {page}</span>
+        <button className="px-3 py-1 border rounded disabled:opacity-50" disabled={filtered.length <= page*perPage} onClick={()=>setPage(p=>p+1)}>Next</button>
+      </div>
+    </section>
+  );
+
+  return listUI;
+
+  // Legacy UI (hidden)
   return (
     <div className="p-6 max-w-6xl mx-auto">
       <h1 className="text-2xl font-bold mb-4">Admin · Book Management</h1>

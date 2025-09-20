@@ -105,6 +105,9 @@ export const transactionsAPI = {
 export const paymentsAPI = {
   initCheckout: (orderId: number, provider = 'fake') =>
     api.post('/v1/payment/checkout', { order_id: orderId, provider }),
+  autoSuccess: (paymentId: number) => api.get(`/v1/payments/${paymentId}/auto-success`),
+  initSubscriptionCheckout: (plan_key: 'basic' | 'premium' | 'vip', provider = 'fake') =>
+    api.post('/v1/subscriptions/checkout', { plan_key, provider }),
 };
 
 /* ======================= ORDERS ======================= */
@@ -145,8 +148,8 @@ export const adminOrderItemsAPI = {
 
 /* ======================= ADMIN USERS ======================= */
 export const adminUsersAPI = {
-  getAll: ({ page = 1, role }: { page?: number; role?: 'user' | 'admin' }) =>
-    api.get('/v1/admin/users', { params: { page, role } }),
+  getAll: ({ page = 1, role, per_page = 15 }: { page?: number; role?: 'user' | 'admin'; per_page?: number }) =>
+    api.get('/v1/admin/users', { params: { page, role, per_page } }),
   create: (data: any) => api.post('/v1/admin/users', data),
   update: (id: number, data: any) => api.put(`/v1/admin/users/${id}`, data),
   delete: (id: number) => api.delete(`/v1/admin/users/${id}`),
@@ -169,8 +172,8 @@ export const userSubscriptionsAPI = {
   // Tạo subscription mới theo 1 trong 3 gói
   create: (
     payload:
-      | { plan_key: 'basic' | 'standard' | 'premium' }
-      | { plan: 'basic' | 'standard' | 'premium' }
+      | { plan_key: 'basic' | 'standard' | 'premium' | 'vip' }
+      | { plan: 'basic' | 'standard' | 'premium' | 'vip' }
   ) => api.post('/v1/subscriptions', payload),
 
   // Huỷ subscription của chính mình

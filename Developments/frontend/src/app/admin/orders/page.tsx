@@ -39,7 +39,12 @@ export default function AdminOrderManage() {
 
   // pagination
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10;
+  const itemsPerPage = 15;
+
+  // search & filters
+  const [query, setQuery] = useState("");
+  const [minPrice, setMinPrice] = useState<string>("");
+  const [maxPrice, setMaxPrice] = useState<string>("");
 
   useEffect(() => {
     fetchOrders();
@@ -89,19 +94,65 @@ export default function AdminOrderManage() {
 
   if (loading) return <p className="p-6">Loading...</p>;
 
+  // filter by query + price range
+  const filtered = orders.filter((o) => {
+    const q = query.trim().toLowerCase();
+    const name = (o.user?.name || '').toLowerCase();
+    const email = (o.user?.email || '').toLowerCase();
+    if (q && !(name.includes(q) || email.includes(q))) return false;
+    const total = o.total_cents || 0;
+    const min = minPrice ? Number(minPrice) * 100 : null; // assume input in currency
+    const max = maxPrice ? Number(maxPrice) * 100 : null;
+    if (min !== null && total < min) return false;
+    if (max !== null && total > max) return false;
+    return true;
+  });
+
   // tính toán pagination
-  const totalPages = Math.ceil(orders.length / itemsPerPage);
+  const totalPages = Math.ceil(filtered.length / itemsPerPage) || 1;
   const startIndex = (currentPage - 1) * itemsPerPage;
-  const currentOrders = orders.slice(startIndex, startIndex + itemsPerPage);
+  const currentOrders = filtered.slice(startIndex, startIndex + itemsPerPage);
 
   return (
     <div className="space-y-4 animate-fade-in">
       {/* Toolbar */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <h1 className="text-2xl font-bold">Orders Management</h1>
-        <button onClick={fetchOrders} className="px-3 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700 transition">
-          Refresh
-        </button>
+        <div className="flex flex-col md:flex-row gap-2 md:items-center w-full md:w-auto">
+          <div className="relative md:w-80">
+            <input
+              value={query}
+              onChange={(e) => { setCurrentPage(1); setQuery(e.target.value); }}
+              placeholder="Search by customer name or email..."
+              className="w-full border rounded-lg pl-9 pr-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">🔎</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              type="number"
+              inputMode="numeric"
+              min={0}
+              placeholder="Min price"
+              value={minPrice}
+              onChange={(e) => { setCurrentPage(1); setMinPrice(e.target.value); }}
+              className="w-28 border rounded-lg px-3 py-2"
+            />
+            <span className="text-gray-400">-</span>
+            <input
+              type="number"
+              inputMode="numeric"
+              min={0}
+              placeholder="Max price"
+              value={maxPrice}
+              onChange={(e) => { setCurrentPage(1); setMaxPrice(e.target.value); }}
+              className="w-28 border rounded-lg px-3 py-2"
+            />
+          </div>
+          <button onClick={fetchOrders} className="px-3 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700 transition">
+            Refresh
+          </button>
+        </div>
       </div>
 
       {/* Table */}
@@ -121,9 +172,7 @@ export default function AdminOrderManage() {
           <tbody className="bg-white">
             {currentOrders.map((order, index) => (
               <tr key={order.id} className="text-center hover:bg-gray-50 transition">
-                <td className="border p-2">
-                  {orders.length - (startIndex + index)}
-                </td>
+                <td className="border p-2">{startIndex + index + 1}</td>
                 <td
                   className="border p-2 text-blue-600 cursor-pointer"
                   onClick={() => setSelectedOrder(order)}

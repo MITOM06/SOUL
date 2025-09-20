@@ -3,6 +3,7 @@
 
 import React, { useEffect, useState } from 'react';
 import UserPanelLayout from '@/components/UserPanelLayout';
+import { transactionsAPI } from '@/lib/api';
 
 interface Transaction {
   id: number;
@@ -19,10 +20,9 @@ export default function PaymentHistoryPage() {
     async function fetchData() {
       setLoading(true);
       try {
-        // TODO: call your backend API to fetch payment/transaction history
-        // const res = await fetch('/api/v1/commerce/transactions');
-        // const data = await res.json();
-        // if (data.success) setTransactions(data.data);
+        const res = await transactionsAPI.getAll();
+        const data = res.data?.data || [];
+        setTransactions(data);
       } catch (err) {
         setTransactions([]);
       } finally {
@@ -65,9 +65,7 @@ export default function PaymentHistoryPage() {
               {transactions.map((t, idx) => (
                 <tr key={t.id} className="hover:bg-gray-50">
                   <td className="px-4 py-2 text-sm text-gray-500">{idx + 1}</td>
-                  <td className="px-4 py-2 text-sm text-gray-900">
-                    {t.amount_cents / 100} $
-                  </td>
+                  <td className="px-4 py-2 text-sm text-gray-900">{(t.amount_cents/100).toLocaleString()} ₫</td>
                   <td className="px-4 py-2 text-sm text-gray-900 capitalize">
                     {t.status}
                   </td>

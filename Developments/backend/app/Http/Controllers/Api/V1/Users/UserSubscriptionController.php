@@ -34,13 +34,14 @@ class UserSubscriptionController extends Controller
         $request->merge(['plan_key' => $planKey]);
 
         $request->validate([
-            'plan_key' => ['required', Rule::in(['basic', 'standard', 'premium'])],
+            'plan_key' => ['required', Rule::in(['basic', 'premium', 'vip', 'standard'])],
         ]);
 
         $pricing = [
             'basic'    => 0,
             'standard' => 9900,
             'premium'  => 19900,
+            'vip'      => 29900,
         ];
 
         $now = Carbon::now();

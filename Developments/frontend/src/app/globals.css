@@ -112,3 +112,14 @@ body {
 .footer-gradient {
   background: linear-gradient(180deg, rgba(var(--neon-from-rgb), 0.08), transparent);
 }
+
+/* Allow nested routes (e.g., admin) to escape the site container and go edge-to-edge */
+.full-bleed {
+  position: relative;
+  left: 50%;
+  right: 50%;
+  margin-left: -50vw;
+  margin-right: -50vw;
+  width: 100vw;
+  max-width: 100vw;
+}

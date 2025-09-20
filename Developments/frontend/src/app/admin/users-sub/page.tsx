@@ -19,6 +19,10 @@ type Sub = {
 export default function AdminUserSubsPage() {
   const [items, setItems] = useState<Sub[]>([]);
   const [loading, setLoading] = useState(true);
+  const [query, setQuery] = useState("");
+  const [showForm, setShowForm] = useState(false);
+  const [page, setPage] = useState(1);
+  const perPage = 15;
 
   // form nhỏ để thêm/sửa
   const emptyForm: Partial<Sub> = {
@@ -65,6 +69,7 @@ export default function AdminUserSubsPage() {
       await adminUserSubscriptionsAPI.create(payload);
       toast.success("Created");
       setForm(emptyForm);
+      setShowForm(false);
       fetchAll();
     } catch (err: any) {
       toast.error(err?.response?.data?.message || "Create failed");
@@ -86,6 +91,7 @@ export default function AdminUserSubsPage() {
       toast.success("Updated");
       setEditingId(null);
       setForm(emptyForm);
+      setShowForm(false);
       fetchAll();
     } catch (err: any) {
       toast.error(err?.response?.data?.message || "Update failed");
@@ -114,85 +120,44 @@ export default function AdminUserSubsPage() {
       price_cents: sub.price_cents ?? 0,
       payment_id: sub.payment_id ?? undefined,
     });
+    setShowForm(true);
   };
 
   const cancelEdit = () => {
     setEditingId(null);
     setForm(emptyForm);
+    setShowForm(false);
   };
 
   return (
     <section className="space-y-6">
-      <h1 className="text-3xl font-bold">Users Subscriptions</h1>
-
-      {/* Form create / edit */}
-      <div className="card p-4 space-y-3">
-        <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
-          <input
-            type="number"
-            value={form.user_id ?? ""}
-            onChange={(e) => setForm({ ...form, user_id: Number(e.target.value) })}
-            className="input"
-            placeholder="user_id"
-          />
-          <select
-            value={form.plan}
-            onChange={(e) => setForm({ ...form, plan: e.target.value as any })}
-            className="input"
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <h1 className="text-3xl font-bold">Users Subscriptions</h1>
+        <div className="flex w-full md:w-auto items-center gap-2">
+          <div className="relative flex-1 md:w-80">
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search by user name or email..."
+              className="w-full border rounded-lg pl-9 pr-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">🔎</span>
+          </div>
+          <button
+            onClick={() => { setEditingId(null); setForm(emptyForm); setShowForm(true); }}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:brightness-110"
           >
-            <option value="basic">basic</option>
-            <option value="standard">standard</option>
-            <option value="premium">premium</option>
-          </select>
-          <select
-            value={form.status}
-            onChange={(e) => setForm({ ...form, status: e.target.value as any })}
-            className="input"
-          >
-            <option value="active">active</option>
-            <option value="canceled">canceled</option>
-            <option value="expired">expired</option>
-          </select>
-          <input
-            type="date"
-            value={form.start_date ?? ""}
-            onChange={(e) => setForm({ ...form, start_date: e.target.value })}
-            className="input"
-            placeholder="start_date"
-          />
-          <input
-            type="date"
-            value={form.end_date ?? ""}
-            onChange={(e) => setForm({ ...form, end_date: e.target.value })}
-            className="input"
-            placeholder="end_date"
-          />
-          <input
-            type="number"
-            value={form.price_cents ?? 0}
-            onChange={(e) => setForm({ ...form, price_cents: Number(e.target.value) })}
-            className="input"
-            placeholder="price_cents"
-          />
-        </div>
-        <div className="flex gap-2">
-          {editingId ? (
-            <>
-              <button className="btn" onClick={onUpdate}>Save</button>
-              <button className="btn-secondary" onClick={cancelEdit}>Cancel</button>
-            </>
-          ) : (
-            <button className="btn" onClick={onCreate}>Create</button>
-          )}
+            Add Subscription
+          </button>
         </div>
       </div>
 
       {/* Table */}
-      <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-200">
+      <div className="overflow-hidden rounded-xl border">
+        <table className="w-full">
           <thead className="bg-gray-100">
             <tr>
-              <th className="px-4 py-2 text-left text-sm font-semibold">ID</th>
+              <th className="px-4 py-2 text-left text-sm font-semibold">#</th>
               <th className="px-4 py-2 text-left text-sm font-semibold">User</th>
               <th className="px-4 py-2 text-left text-sm font-semibold">Plan</th>
               <th className="px-4 py-2 text-left text-sm font-semibold">Status</th>
@@ -202,33 +167,165 @@ export default function AdminUserSubsPage() {
               <th className="px-4 py-2 text-left text-sm font-semibold">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-200">
+          <tbody className="bg-white">
             {!loading && items.length === 0 && (
               <tr><td colSpan={8} className="px-4 py-4 text-center text-sm text-zinc-500">No data</td></tr>
             )}
-            {items.map((s) => (
-              <tr key={s.id}>
-                <td className="px-4 py-2">{s.id}</td>
-                <td className="px-4 py-2">
-                  {s.user?.email ?? s.user_id}
-                </td>
-                <td className="px-4 py-2">{s.plan}</td>
-                <td className="px-4 py-2">{s.status}</td>
-                <td className="px-4 py-2">{s.start_date?.slice(0,10) ?? '-'}</td>
-                <td className="px-4 py-2">{s.end_date?.slice(0,10) ?? '-'}</td>
-                <td className="px-4 py-2">{((s.price_cents ?? 0)/100).toFixed(2)}</td>
-                <td className="px-4 py-2 flex gap-2">
-                  <button className="btn-secondary" onClick={() => startEdit(s)}>Edit</button>
-                  <button className="btn-danger" onClick={() => onDelete(s.id)}>Delete</button>
-                </td>
-              </tr>
-            ))}
+            {items
+              .filter((s) => {
+                if (!query.trim()) return true;
+                const q = query.toLowerCase();
+                const email = s.user?.email?.toLowerCase() || '';
+                const name = (s.user?.name || '').toLowerCase();
+                return email.includes(q) || name.includes(q);
+              })
+              .slice((page-1)*perPage, page*perPage)
+              .map((s, idx) => (
+                <tr key={s.id} className="text-left hover:bg-gray-50 transition">
+                  <td className="px-4 py-2 border">{(page-1)*perPage + idx + 1}</td>
+                  <td className="px-4 py-2 border">{s.user?.name || s.user?.email || s.user_id}</td>
+                  <td className="px-4 py-2 border">{s.plan}</td>
+                  <td className="px-4 py-2 border">{s.status}</td>
+                  <td className="px-4 py-2 border">{s.start_date?.slice(0,10) ?? '-'}</td>
+                  <td className="px-4 py-2 border">{s.end_date?.slice(0,10) ?? '-'}</td>
+                  <td className="px-4 py-2 border">{((s.price_cents ?? 0)/100).toFixed(2)}</td>
+                  <td className="px-4 py-2 border">
+                    <div className="flex gap-2">
+                      <button className="px-3 py-1 bg-yellow-500 text-white rounded" onClick={() => startEdit(s)}>Edit</button>
+                      <button className="px-3 py-1 bg-red-600 text-white rounded" onClick={() => onDelete(s.id)}>Delete</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
             {loading && (
               <tr><td colSpan={8} className="px-4 py-4 text-center text-sm text-zinc-500">Loading...</td></tr>
             )}
           </tbody>
         </table>
       </div>
+      {/* Pagination */}
+      <div className="flex justify-between items-center p-3">
+        <button
+          className="px-3 py-1 border rounded disabled:opacity-50"
+          disabled={page === 1}
+          onClick={() => setPage(p => Math.max(1, p-1))}
+        >Prev</button>
+        <span className="text-sm text-zinc-600">Page {page}</span>
+        <button
+          className="px-3 py-1 border rounded disabled:opacity-50"
+          disabled={items.filter((s) => {
+            if (!query.trim()) return true;
+            const q = query.toLowerCase();
+            const email = s.user?.email?.toLowerCase() || '';
+            const name = (s.user?.name || '').toLowerCase();
+            return email.includes(q) || name.includes(q);
+          }).length <= page*perPage}
+          onClick={() => setPage(p => p+1)}
+        >Next</button>
+      </div>
+
+      {/* Profile-style modal for create/edit */}
+      {showForm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-30 animate-fade-in">
+          <div className="bg-white rounded-2xl w-[min(720px,92vw)] shadow-xl overflow-hidden animate-zoom-in">
+            <div className="px-6 py-5 border-b bg-gray-50 flex items-center gap-4">
+              <div className="h-12 w-12 rounded-full bg-blue-600 text-white grid place-items-center text-lg font-bold">S</div>
+              <div className="flex-1 min-w-0">
+                <h2 className="text-lg font-semibold truncate">{editingId ? 'Edit Subscription' : 'Add Subscription'}</h2>
+                <p className="text-sm text-gray-500">Manage user plan and billing metadata</p>
+              </div>
+              <button onClick={cancelEdit} className="px-3 py-2 text-gray-600 hover:bg-gray-200 rounded" aria-label="Close">✕</button>
+            </div>
+
+            <div className="px-6 py-5 grid gap-4">
+              <div className="grid md:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm text-gray-600">User ID</label>
+                  <input
+                    type="number"
+                    value={form.user_id ?? ''}
+                    onChange={(e) => setForm({ ...form, user_id: Number(e.target.value) })}
+                    className="mt-1 w-full border px-3 py-2 rounded"
+                    placeholder="user_id"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm text-gray-600">Plan</label>
+                  <select
+                    value={form.plan}
+                    onChange={(e) => setForm({ ...form, plan: e.target.value as any })}
+                    className="mt-1 w-full border px-3 py-2 rounded"
+                  >
+                    <option value="basic">basic</option>
+                    <option value="standard">standard</option>
+                    <option value="premium">premium</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm text-gray-600">Status</label>
+                  <select
+                    value={form.status}
+                    onChange={(e) => setForm({ ...form, status: e.target.value as any })}
+                    className="mt-1 w-full border px-3 py-2 rounded"
+                  >
+                    <option value="active">active</option>
+                    <option value="canceled">canceled</option>
+                    <option value="expired">expired</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-sm text-gray-600">Price (cents)</label>
+                  <input
+                    type="number"
+                    value={form.price_cents ?? 0}
+                    onChange={(e) => setForm({ ...form, price_cents: Number(e.target.value) })}
+                    className="mt-1 w-full border px-3 py-2 rounded"
+                  />
+                </div>
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm text-gray-600">Start date</label>
+                  <input
+                    type="date"
+                    value={form.start_date ?? ''}
+                    onChange={(e) => setForm({ ...form, start_date: e.target.value })}
+                    className="mt-1 w-full border px-3 py-2 rounded"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm text-gray-600">End date</label>
+                  <input
+                    type="date"
+                    value={form.end_date ?? ''}
+                    onChange={(e) => setForm({ ...form, end_date: e.target.value })}
+                    className="mt-1 w-full border px-3 py-2 rounded"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-sm text-gray-600">Payment ID</label>
+                <input
+                  type="number"
+                  value={form.payment_id ?? ''}
+                  onChange={(e) => setForm({ ...form, payment_id: Number(e.target.value) })}
+                  className="mt-1 w-full border px-3 py-2 rounded"
+                />
+              </div>
+            </div>
+
+            <div className="px-6 py-4 border-t bg-gray-50 flex justify-end gap-2">
+              <button onClick={cancelEdit} className="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300">Cancel</button>
+              <button onClick={editingId ? onUpdate : onCreate} className="px-4 py-2 bg-blue-600 text-white rounded hover:brightness-110">{editingId ? 'Update' : 'Create'}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
