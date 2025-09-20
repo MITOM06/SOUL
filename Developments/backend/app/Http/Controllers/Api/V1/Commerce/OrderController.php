@@ -41,6 +41,7 @@ public function index(Request $request)
 public function store(Request $request)
 {
     $request->validate([
+
         'product_id'      => 'required|exists:products,id',
         'quantity'        => 'nullable|integer|min:1',
         'payment_method'  => 'nullable|string'

@@ -14,7 +14,6 @@ use App\Http\Controllers\Api\V1\Commerce\PaymentController;
 
 use App\Http\Controllers\Api\V1\Users\UserController;
 
-
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\V1\Admin\AdminOrderController;
 use App\Http\Controllers\Api\V1\Admin\AdminOrderItemController;
@@ -67,7 +66,9 @@ Route::prefix('v1')->group(function () {
         Route::put ('profile/password',    [UserController::class, 'changePassword']);
 
         // Favourites
+
            Route::get('favourites', [FavouriteController::class, 'index']);
+
         Route::post('favourites', [FavouriteController::class, 'store']);
         Route::post('favourites/toggle', [FavouriteController::class, 'toggle']);
         Route::delete('favourites/{product}', [FavouriteController::class, 'destroy']);
@@ -83,9 +84,11 @@ Route::prefix('v1')->group(function () {
         Route::post('orders/checkout',      [OrderController::class, 'checkout']);
 
         // Cart
+
       //  Route::get('cart',        [OrderController::class,   'getCart']);
         Route::get('cart/count',  [OrderItemController::class,'cartCount']);
            Route::post('cart', [OrderItemController::class, 'addToCart']);     // 👈 thêm vào giỏ
+
         Route::delete('cart/{product}', [OrderItemController::class, 'removeFromCart']); // 👈 xóa khỏi giỏ
 
         // Order Items
@@ -124,6 +127,7 @@ Route::prefix('v1')->group(function () {
         Route::delete('products/{product}', [ProductController::class, 'destroy']);
 
         // Orders
+
         Route::get   ('orders',        [AdminOrderController::class, 'index']);
         Route::get   ('orders/{order}',[AdminOrderController::class, 'show']);
         Route::put   ('orders/{order}',[AdminOrderController::class, 'update']);
