@@ -50,12 +50,12 @@ const LoginPage = () => {
             Sign in to your account
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600">
-            Hoặc{' '}
+            Or{' '}
             <Link
               href="/auth/register"
               className="font-medium text-blue-600 hover:text-blue-500"
             >
-              tạo tài khoản mới
+              create a new account
             </Link>
           </p>
         </div>
@@ -70,10 +70,10 @@ const LoginPage = () => {
               </label>
               <input
                 {...register('email', {
-                  required: 'Email là bắt buộc',
+                  required: 'Email is required',
                   pattern: {
                     value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
-                    message: 'Email không hợp lệ'
+                    message: 'Invalid email address'
                   }
                 })}
                 type="email"

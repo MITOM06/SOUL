@@ -136,9 +136,9 @@ function YoutubeAudio({ embedUrl, cover, title }: { embedUrl: string; cover?: st
       <button
         onClick={toggle}
         className="px-4 py-2 rounded bg-indigo-600 text-white hover:bg-indigo-700"
-        aria-label={playing ? 'Tạm dừng' : 'Nghe podcast'}
+        aria-label={playing ? 'Pause' : 'Play podcast'}
       >
-        {playing ? 'Tạm dừng' : 'Nghe podcast'}
+        {playing ? 'Pause' : 'Play podcast'}
       </button>
       <span className="text-sm text-gray-500">{title || 'YouTube'}</span>
 
@@ -179,7 +179,7 @@ export default function PodcastDetailPage() {
         const j = await r.json();
         setData(j?.data || null);
       } catch (e: any) {
-        if (e?.name !== 'AbortError') setErr(e?.message || 'Không tải được dữ liệu');
+        if (e?.name !== 'AbortError') setErr(e?.message || 'Failed to load data');
       } finally {
         setLoading(false);
       }
@@ -187,10 +187,10 @@ export default function PodcastDetailPage() {
     return () => ac.abort();
   }, [id]);
 
-  if (!id)   return <div className="p-6 text-red-600">URL không hợp lệ.</div>;
-  if (loading) return <div className="p-6">Đang tải…</div>;
-  if (err)   return <div className="p-6 text-red-600">Lỗi: {err}</div>;
-  if (!data) return <div className="p-6">Không có dữ liệu.</div>;
+  if (!id)   return <div className="p-6 text-red-600">Invalid URL.</div>;
+  if (loading) return <div className="p-6">Loading…</div>;
+  if (err)   return <div className="p-6 text-red-600">Error: {err}</div>;
+  if (!data) return <div className="p-6">No data.</div>;
 
   const p = data.product;
   const files = data.files || [];
@@ -214,11 +214,11 @@ export default function PodcastDetailPage() {
           <h1 className="text-2xl font-bold">{p.title}</h1>
           <div className="text-gray-600">{p.category || '—'}</div>
           <div className="mt-1 font-medium">
-            {p.price_cents > 0 ? formatVND(p.price_cents) : 'Miễn phí'}
+            {p.price_cents > 0 ? formatVND(p.price_cents) : 'Free'}
           </div>
 
           <div className="mt-6 space-y-3">
-            <h2 className="font-semibold">Nghe podcast</h2>
+            <h2 className="font-semibold">Listen</h2>
 
             {aud ? (
               <div className="border rounded-xl p-4">
@@ -230,12 +230,12 @@ export default function PodcastDetailPage() {
               <div className="space-y-2">
                 <YoutubeAudio embedUrl={yt.embed} cover={cover} title={p.title} />
                 <a href={yt.watch} target="_blank" rel="noreferrer" className="text-sm text-blue-600 hover:underline">
-                  Mở trên YouTube
+                  Open on YouTube
                 </a>
-                <div className="text-xs text-gray-500">* Video ẩn – chỉ phát âm thanh từ YouTube.</div>
+                <div className="text-xs text-gray-500">* Hidden video — audio playback from YouTube only.</div>
               </div>
             ) : (
-              <div className="text-gray-500">Hiện chưa có tệp âm thanh.</div>
+              <div className="text-gray-500">No audio file available yet.</div>
             )}
           </div>
         </div>
@@ -243,7 +243,7 @@ export default function PodcastDetailPage() {
 
       {p.description ? (
         <div className="mt-8">
-          <h2 className="font-semibold mb-2">Mô tả</h2>
+          <h2 className="font-semibold mb-2">Description</h2>
           <p className="whitespace-pre-wrap text-gray-800">{p.description}</p>
         </div>
       ) : null}

@@ -79,9 +79,9 @@ export default function FavouritesPage() {
       await favouritesAPI.remove(id);
       setBooks((prev) => prev.filter((x) => x.id !== id));
       setPodcasts((prev) => prev.filter((x) => x.id !== id));
-      toast.success('Đã xoá khỏi yêu thích');
+      toast.success('Removed from favourites');
     } catch (e: any) {
-      toast.error(e?.response?.data?.message || 'Xoá thất bại');
+      toast.error(e?.response?.data?.message || 'Failed to remove');
     }
   };
 

@@ -4,12 +4,28 @@
 
 /* Design tokens */
 :root{
-  --brand-500: #4c80ff;
-  --brand-600: #355fe6;
+  /* Brand colors tuned to neon logo */
+  --brand-500: #d946ef; /* fuchsia-500 */
+  --brand-600: #c026d3; /* fuchsia-600 */
   --muted: #6b7280;
   --glass: rgba(255,255,255,0.6);
   --accent-500: #F59E0B; /* amber */
   --accent-600: #D97706;
+
+  /* Neon gradient palette based on SOUL logo */
+  --neon-from: #6366f1; /* indigo-500 */
+  --neon-via: #d946ef;  /* fuchsia-500 */
+  --neon-to:  #f43f5e;  /* rose-500 */
+  --neon-from-rgb: 99, 102, 241;
+  --neon-via-rgb: 217, 70, 239;
+  --neon-to-rgb:  244, 63, 94;
+
+  /* Site background (more visible neon on a light base) */
+  --site-bg:
+    radial-gradient(1400px 1000px at -20% -10%, rgba(var(--neon-from-rgb), .24), transparent 55%),
+    radial-gradient(1200px 900px at 120% -10%, rgba(var(--neon-via-rgb), .20), transparent 55%),
+    radial-gradient(1200px 1000px at 50% 120%, rgba(var(--neon-to-rgb),  .18), transparent 60%),
+    #f8fafc; /* slate-50 base */
 }
 
 /* Body */
@@ -17,8 +33,26 @@ html,body,#root {
   height: 100%;
 }
 body {
-  @apply bg-gray-50 text-slate-900 antialiased;
+  @apply text-slate-900 antialiased;
+  background: var(--site-bg);
+  background-attachment: fixed; /* pleasant parallax on scroll */
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+}
+
+/* Neon header bar overlay */
+.neon-bar {
+  background-image: linear-gradient(90deg,
+    rgba(var(--neon-from-rgb), .14),
+    rgba(var(--neon-via-rgb), .10),
+    rgba(var(--neon-to-rgb),  .14)
+  );
+}
+
+/* Subtle neon wash for page content area */
+.neon-main {
+  background-image:
+    linear-gradient(180deg, rgba(var(--neon-from-rgb), .06), transparent 40%),
+    radial-gradient(800px 320px at 0% 0%, rgba(var(--neon-via-rgb), .06), transparent 60%);
 }
 
 /* Common helpers */
@@ -74,5 +108,7 @@ body {
 .hover-raise { transition: transform .2s ease, box-shadow .2s ease; }
 .hover-raise:hover { transform: translateY(-2px); box-shadow: 0 8px 22px rgba(0,0,0,.07); }
 
-/* Footer gradient */
-.footer-gradient { background: linear-gradient(180deg, rgba(76,128,255,0.06), transparent); }
+/* Footer gradient — tie to neon palette */
+.footer-gradient {
+  background: linear-gradient(180deg, rgba(var(--neon-from-rgb), 0.08), transparent);
+}

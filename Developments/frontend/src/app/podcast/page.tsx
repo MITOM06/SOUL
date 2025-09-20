@@ -61,7 +61,7 @@ export default function PodcastsListPage() {
           setCanFav(true);
         } else setCanFav(false);
       } catch (e: any) {
-        if (e?.name !== 'AbortError') setErr(e?.message || 'Không tải được danh sách');
+        if (e?.name !== 'AbortError') setErr(e?.message || 'Failed to load list');
       } finally {
         setLoading(false);
       }
@@ -70,7 +70,7 @@ export default function PodcastsListPage() {
   }, []);
 
   const toggleFav = async (productId: number) => {
-    if (!canFav) return alert('Vui lòng đăng nhập để dùng Yêu thích.');
+    if (!canFav) return alert('Please sign in to use Favorites.');
     const on = !favIds.has(productId);
 
     // optimistic
@@ -85,14 +85,14 @@ export default function PodcastsListPage() {
     if (!res.ok) {
       // revert
       setFavIds(prev => { const s = new Set(prev); on ? s.delete(productId) : s.add(productId); return s; });
-      if (res.status === 401) { setCanFav(false); alert('Hết hạn đăng nhập.'); }
-      else alert('Có lỗi khi cập nhật Yêu thích.');
+      if (res.status === 401) { setCanFav(false); alert('Session expired. Please sign in.'); }
+      else alert('Failed to update Favorites.');
     }
   };
 
-  if (loading) return <div className="p-6">Đang tải podcasts…</div>;
-  if (err) return <div className="p-6 text-red-600">Lỗi: {err}</div>;
-  if (!items.length) return <div className="p-6">Chưa có podcast nào.</div>;
+  if (loading) return <div className="p-6">Loading podcasts…</div>;
+  if (err) return <div className="p-6 text-red-600">Error: {err}</div>;
+  if (!items.length) return <div className="p-6">No podcasts yet.</div>;
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
@@ -112,24 +112,24 @@ export default function PodcastsListPage() {
 
               {/* Nút trái tim */}
               <button
-                aria-label={isFav ? 'Bỏ yêu thích' : 'Yêu thích'}
+                aria-label={isFav ? 'Remove from Favorites' : 'Add to Favorites'}
                 onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleFav(p.id); }}
                 className={`absolute top-2 right-2 px-2 py-1 rounded-full shadow text-sm
                   ${isFav ? 'bg-red-600 text-white' : 'bg-white text-red-600 border'}`}
-                title={isFav ? 'Bỏ yêu thích' : 'Yêu thích'}
+                title={isFav ? 'Remove from Favorites' : 'Add to Favorites'}
               >
                 {isFav ? '♥' : '♡'}
               </button>
 
               <div className="mt-2 font-medium line-clamp-2">{p.title}</div>
               <div className="text-sm text-gray-500">{p.category || '—'}</div>
-              <div className="text-sm">{p.price_cents > 0 ? formatVND(p.price_cents) : 'Miễn phí'}</div>
+              <div className="text-sm">{p.price_cents > 0 ? formatVND(p.price_cents) : 'Free'}</div>
             </Link>
           );
         })}
       </div>
 
-      {!canFav && <div className="mt-4 text-sm text-gray-600">* Hãy đăng nhập để dùng tính năng Yêu thích.</div>}
+      {!canFav && <div className="mt-4 text-sm text-gray-600">* Please sign in to use Favorites.</div>}
     </div>
   );
 }
