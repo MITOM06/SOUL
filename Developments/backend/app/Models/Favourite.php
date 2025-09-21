@@ -6,9 +6,8 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 /**
- * Represents a user favouriting a product.  The favourites table has a
- * composite unique key on user_id and product_id.  Timestamps are enabled
- * to capture when the favourite was created.
+ * Represents a user favouriting a product.
+ * The favourites table enforces unique (user_id, product_id).
  */
 class Favourite extends Model
 {

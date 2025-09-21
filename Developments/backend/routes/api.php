@@ -68,11 +68,18 @@ Route::prefix('v1')->group(function () {
 
         // Favourites
 
-           Route::get('favourites', [FavouriteController::class, 'index']);
+        //    Route::get('favourites', [FavouriteController::class, 'index']);
 
-        Route::post('favourites', [FavouriteController::class, 'store']);
-        Route::post('favourites/toggle', [FavouriteController::class, 'toggle']);
-        Route::delete('favourites/{product}', [FavouriteController::class, 'destroy']);
+        // Route::post('favourites', [FavouriteController::class, 'store']);
+        // Route::post('favourites/toggle', [FavouriteController::class, 'toggle']);
+        // Route::delete('favourites/{product}', [FavouriteController::class, 'destroy']);
+
+        // Favourites (User)
+Route::get   ('favourites',           [\App\Http\Controllers\Api\V1\Library\FavouriteController::class, 'index']);
+Route::post  ('favourites',           [\App\Http\Controllers\Api\V1\Library\FavouriteController::class, 'store']);
+Route::post  ('favourites/toggle',    [\App\Http\Controllers\Api\V1\Library\FavouriteController::class, 'toggle']);
+Route::delete('favourites/{product}', [\App\Http\Controllers\Api\V1\Library\FavouriteController::class, 'destroy']);
+
 
         // Transactions
         Route::get('transactions',     [PaymentController::class, 'listTransactions']);

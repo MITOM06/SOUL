@@ -129,7 +129,6 @@ function useContinue(productId: number | null) {
 export default function BookDetail() {
   const params = useParams();
   const { add } = useCart();
-  const authFetch: typeof fetch = (input, init) => fetch(input, { credentials: 'include', ...(init ?? {}) });
 
   const id = useMemo(() => {
     const raw = (params as any)?.id;
@@ -152,30 +151,31 @@ export default function BookDetail() {
     (async () => {
       try {
         setErr(null);
+        // Lấy product (public) và cố enrich bằng call có Bearer token
         const r = await fetch(`${API_BASE}/v1/catalog/products/${id}`, { signal: ac.signal });
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         const j = await r.json();
         let payload = j?.data || null;
-        // Try to get access info with Bearer token via axios
         try {
           const ar = await api.get(`/v1/catalog/products/${id}`);
           if (ar.data?.data) payload = ar.data.data;
         } catch {}
         setData(payload);
-        await load();
-        // Load favourite status for this product
-        try {
-          const rf = await authFetch(`${API_BASE}/v1/favourites`, { signal: ac.signal });
-          if (rf.status === 401) { setCanFav(false); setFavOn(false); }
-          else if (rf.ok) {
-            const jf = await rf.json();
-            const ids: number[] = jf?.data?.product_ids || [];
-            setFavOn(ids.includes(id));
-            setCanFav(true);
-          }
-        } catch { /* ignore */ }
 
-        // Load related items (same category → latest ebooks)
+        await load();
+
+        // ===== FAVOURITE (dùng axios api với Bearer token) =====
+        try {
+          const rf = await api.get('/v1/favourites', { signal: ac.signal as any });
+          const d = rf.data?.data || rf.data || {};
+          const ids: number[] = d.product_ids || [];
+          setFavOn(ids.includes(id!));
+          setCanFav(true);
+        } catch (e: any) {
+          if (e?.response?.status === 401) { setCanFav(false); setFavOn(false); }
+        }
+
+        // Related items
         try {
           const cat = (j?.data?.product?.category || '').trim();
           const qs = cat ? `type=ebook&per_page=12&category=${encodeURIComponent(cat)}` : `type=ebook&per_page=12`;
@@ -247,22 +247,24 @@ export default function BookDetail() {
   };
   const onBuy = async () => {
     await add(p.id, 1);
-    // Cart badge in header will reflect the change
   };
 
+  // ====== FAVOURITE TOGGLE (axios api) ======
   const toggleFav = async () => {
     if (!canFav) { alert('Please sign in to use Favorites'); return; }
     const next = !favOn;
     setFavOn(next); // optimistic
-    const url = next ? `${API_BASE}/v1/favourites` : `${API_BASE}/v1/favourites/${p.id}`;
-    const init: RequestInit = next
-      ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ product_id: p.id }) }
-      : { method: 'DELETE' };
-    const res = await authFetch(url, init);
-    if (!res.ok) {
+    try {
+      if (next) await api.post('/v1/favourites', { product_id: p.id });
+      else      await api.delete(`/v1/favourites/${p.id}`);
+    } catch (e: any) {
       setFavOn(!next); // revert
-      if (res.status === 401) { setCanFav(false); alert('Session expired. Please sign in again.'); }
-      else alert('Failed to update Favorites.');
+      if (e?.response?.status === 401) {
+        setCanFav(false);
+        alert('Session expired. Please sign in again.');
+      } else {
+        alert('Failed to update Favorites.');
+      }
     }
   };
 
@@ -366,7 +368,7 @@ export default function BookDetail() {
             {/* Price card */}
             <div className="mt-6 max-w-md">
               <div className="relative rounded-2xl border border-zinc-200 bg-white p-4 shadow-lg">
-                <div className="absolute -top-3 left-4 text-xs font-bold text-white px-2 py-0.5 rounded-full bg-[color:var(--brand-500)]">One‑off</div>
+                <div className="absolute -top-3 left-4 text-xs font-bold text-white px-2 py-0.5 rounded-full bg-[color:var(--brand-500)]">One-off</div>
                 <div className="flex items-end gap-3">
                   {compareAt > 0 && (
                     <div className="text-zinc-500 line-through text-lg">{formatVND(compareAt)}</div>
