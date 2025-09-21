@@ -19,16 +19,27 @@ class AuthController extends Controller
 				'message' => 'Not authenticated.'
 			], 401);
 		}
-		return response()->json([
-			'success' => true,
-			'data' => [
-				'id' => $user->id,
-				'email' => $user->email,
-				'name' => $user->name,
-				'role' => $user->role,
-				'is_active' => $user->is_active,
-			]
-		]);
+        // Lấy gói hiện tại (nếu có)
+        $currentSub = $user->subscriptions()
+            ->where('status', 'active')
+            ->orderByDesc('end_date')
+            ->first();
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'id' => $user->id,
+                'email' => $user->email,
+                'name' => $user->name,
+                'role' => $user->role,
+                'is_active' => $user->is_active,
+                // Dùng cho FE hiện plan hiện tại
+                'subscription_level' => $currentSub?->plan_key ?? 'free',
+                'current_plan' => $currentSub?->plan_key,
+                'current_plan_status' => $currentSub?->status,
+                'current_plan_end_date' => $currentSub?->end_date,
+            ]
+        ]);
 	}
 
 	// Backwards-compatible alias used by routes: getUser

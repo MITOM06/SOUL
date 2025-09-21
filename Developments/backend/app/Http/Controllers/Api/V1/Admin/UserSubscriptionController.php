@@ -9,9 +9,17 @@ use App\Models\UserSubscription;
 
 class UserSubscriptionController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $subs = UserSubscription::with('user')->orderByDesc('id')->get();
+        $query = UserSubscription::with('user')->orderByDesc('id');
+        if ($request->filled('status')) {
+            $st = $request->query('status');
+            if (in_array($st, ['active','canceled','expired','pending'])) {
+                $query->where('status', $st);
+            }
+        }
+        // Trả về mảng thuần (FE tự phân trang client-side 15 dòng)
+        $subs = $query->get();
 
         return response()->json([
             'success' => true,
@@ -36,13 +44,20 @@ class UserSubscriptionController extends Controller
 
         $data = $request->validate([
             'user_id'     => ['required', 'exists:users,id'],
-            'plan_key'    => ['required', Rule::in(['basic', 'standard', 'premium'])],
-            'status'      => ['required', Rule::in(['active', 'canceled', 'expired'])],
+            'plan_key'    => ['required', Rule::in(['basic', 'premium', 'vip'])],
+            'status'      => ['required', Rule::in(['active', 'canceled', 'expired', 'pending'])],
             'start_date'  => ['nullable', 'date'],
             'end_date'    => ['nullable', 'date', 'after_or_equal:start_date'],
             'price_cents' => ['nullable', 'integer', 'min:0'],
             'payment_id'  => ['nullable', 'exists:payments,id'],
         ]);
+
+        // If creating an active sub, cancel other active subs of this user first
+        if (($data['status'] ?? null) === 'active') {
+            UserSubscription::where('user_id', $data['user_id'])
+                ->where('status', 'active')
+                ->update(['status' => 'canceled']);
+        }
 
         $sub = UserSubscription::create($data);
 
@@ -66,13 +81,21 @@ class UserSubscriptionController extends Controller
         }
 
         $data = $request->validate([
-            'plan_key'    => ['sometimes', Rule::in(['basic', 'standard', 'premium'])],
-            'status'      => ['sometimes', Rule::in(['active', 'canceled', 'expired'])],
+            'plan_key'    => ['sometimes', Rule::in(['basic', 'premium', 'vip'])],
+            'status'      => ['sometimes', Rule::in(['active', 'canceled', 'expired', 'pending'])],
             'start_date'  => ['nullable', 'date'],
             'end_date'    => ['nullable', 'date', 'after_or_equal:start_date'],
             'price_cents' => ['nullable', 'integer', 'min:0'],
             'payment_id'  => ['nullable', 'exists:payments,id'],
         ]);
+
+        // If setting to active, cancel other actives for the same user
+        if (($data['status'] ?? null) === 'active') {
+            UserSubscription::where('user_id', $sub->user_id)
+                ->where('id', '!=', $sub->id)
+                ->where('status', 'active')
+                ->update(['status' => 'canceled']);
+        }
 
         $sub->update($data);
 

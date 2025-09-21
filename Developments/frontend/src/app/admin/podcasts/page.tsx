@@ -72,9 +72,17 @@ export default function AdminPodcasts() {
   const [previewVideo, setPreviewVideo] = useState(false);
 
   // load list
+  const [minPriceVND, setMinPriceVND] = useState<string>('');
+  const [maxPriceVND, setMaxPriceVND] = useState<string>('');
+
   const load = async () => {
     setLoadingList(true);
-    const r = await fetch(`${API}/v1/catalog/products?type=podcast&per_page=100`);
+    const params = new URLSearchParams({ type: 'podcast', per_page: '100' });
+    const min = Number(minPriceVND);
+    const max = Number(maxPriceVND);
+    if (!Number.isNaN(min) && min > 0) params.set('min_price', String(min * 100));
+    if (!Number.isNaN(max) && max > 0) params.set('max_price', String(max * 100));
+    const r = await fetch(`${API}/v1/catalog/products?${params.toString()}`);
     const j = await r.json();
     setItems(j?.data?.items || []);
     setLoadingList(false);
@@ -184,6 +192,7 @@ export default function AdminPodcasts() {
 
   const [page, setPage] = useState(1);
   const perPage = 15;
+  const [selectedId, setSelectedId] = useState<number | null>(null);
 
   // New list-only UI
   const listUI = (
@@ -198,6 +207,33 @@ export default function AdminPodcasts() {
           <select value={catFilter} onChange={(e)=>setCatFilter(e.target.value)} className="border rounded-lg px-3 py-2">
             {categories.map(c => <option key={c} value={c}>{c === 'all' ? 'All' : c}</option>)}
           </select>
+          <div className="flex items-center gap-2">
+            <input
+              type="number"
+              value={minPriceVND}
+              onChange={(e)=>setMinPriceVND(e.target.value)}
+              placeholder="Min ₫"
+              className="w-28 border rounded px-2 py-2"
+            />
+            <span>–</span>
+            <input
+              type="number"
+              value={maxPriceVND}
+              onChange={(e)=>setMaxPriceVND(e.target.value)}
+              placeholder="Max ₫"
+              className="w-28 border rounded px-2 py-2"
+            />
+            <button
+              onClick={() => {
+                const min = Number(minPriceVND || '0');
+                const max = Number(maxPriceVND || '0');
+                if (min && max && max < min) { alert('Max price must be ≥ Min price'); return; }
+                setPage(1);
+                load();
+              }}
+              className="px-3 py-2 border rounded-lg bg-white hover:bg-gray-50"
+            >Apply</button>
+          </div>
           <Link href="/admin/podcasts/create" className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:brightness-110 text-center">Add New Podcast</Link>
         </div>
       </div>
@@ -216,17 +252,26 @@ export default function AdminPodcasts() {
           </thead>
           <tbody className="bg-white">
             {filtered.slice((page-1)*perPage, page*perPage).map((it, idx) => (
-              <tr key={it.id} className="hover:bg-gray-50">
+              <tr
+                key={it.id}
+                className={`cursor-pointer ${selectedId===it.id ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
+                onClick={() => setSelectedId(prev => prev===it.id ? null : it.id)}
+              >
                 <td className="p-2 border">{(page-1)*perPage + idx + 1}</td>
                 <td className="p-2 border">{it.title}</td>
                 <td className="p-2 border">{it.category || '-'}</td>
                 <td className="p-2 border">{it.price_cents ? formatVND(it.price_cents) : 'Free'}</td>
                 <td className="p-2 border">{(it.is_active ?? 1) ? '✅' : '❌'}</td>
                 <td className="p-2 border">
-                  <div className="flex gap-2">
-                    <Link className="px-3 py-1 border rounded" href={`/podcast/${it.id}`} target="_blank">View</Link>
-                    <Link className="px-3 py-1 bg-yellow-500 text-white rounded" href={`/admin/podcasts/${it.id}/edit`}>Edit</Link>
-                  </div>
+                  {selectedId===it.id ? (
+                    <div className="flex gap-2">
+                      <Link className="px-3 py-1 border rounded" href={`/podcast/${it.id}`} target="_blank" onClick={(e)=>e.stopPropagation()}>View</Link>
+                      <Link className="px-3 py-1 bg-yellow-500 text-white rounded" href={`/admin/podcasts/${it.id}/edit`} onClick={(e)=>e.stopPropagation()}>Edit</Link>
+                      <button className="px-3 py-1 bg-red-600 text-white rounded" onClick={(e)=>{ e.stopPropagation(); remove(it.id); }}>Delete</button>
+                    </div>
+                  ) : (
+                    <span className="text-xs text-zinc-500">Click row to select</span>
+                  )}
                 </td>
               </tr>
             ))}

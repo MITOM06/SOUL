@@ -306,6 +306,24 @@ class ProductWriteController extends Controller
             return response()->json(['success' => false, 'message' => 'File not found'], 404);
         }
 
+        // Gate: allow previews, restrict full files to paid users
+        $isPreview = (bool) ($file->is_preview ?? 0);
+        if (!$isPreview) {
+            $user = auth()->user();
+            if (!$user) {
+                return response()->json(['success' => false, 'message' => 'Authentication required'], 401);
+            }
+            $canView = DB::table('order_items')
+                ->join('orders', 'orders.id', '=', 'order_items.order_id')
+                ->where('orders.user_id', $user->id)
+                ->where('orders.status', 'paid')
+                ->where('order_items.product_id', $productId)
+                ->exists();
+            if (!$canView) {
+                return response()->json(['success' => false, 'message' => 'Please purchase this product to access full content'], 403);
+            }
+        }
+
         $urlPath = parse_url((string)$file->file_url, PHP_URL_PATH) ?: (string)$file->file_url;
 
         if (Str::startsWith($urlPath, '/storage/')) {
@@ -410,4 +428,3 @@ public function attachYoutube(Request $r, int $id)
 
 
 }
-

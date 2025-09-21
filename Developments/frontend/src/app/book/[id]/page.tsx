@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
+import api from '@/lib/api';
 import BookCard from '@/components/BookCard';
 import { useCart } from '@/contexts/CartContext';
 
@@ -137,7 +138,7 @@ export default function BookDetail() {
     return Number.isFinite(n) && n > 0 ? n : null;
   }, [params]);
 
-  const [data, setData] = useState<{ product: Product; files: ProductFile[] } | null>(null);
+  const [data, setData] = useState<{ product: Product; files: ProductFile[]; access?: { can_view?: boolean } } | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const { progress, load, save } = useContinue(id);
   const [page, setPage] = useState<number>(0);
@@ -154,7 +155,13 @@ export default function BookDetail() {
         const r = await fetch(`${API_BASE}/v1/catalog/products/${id}`, { signal: ac.signal });
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         const j = await r.json();
-        setData(j?.data || null);
+        let payload = j?.data || null;
+        // Try to get access info with Bearer token via axios
+        try {
+          const ar = await api.get(`/v1/catalog/products/${id}`);
+          if (ar.data?.data) payload = ar.data.data;
+        } catch {}
+        setData(payload);
         await load();
         // Load favourite status for this product
         try {
@@ -195,8 +202,9 @@ export default function BookDetail() {
 
   const p = data.product;
   const files = data.files || [];
-  const preview = files.find(f => !!f.is_preview && canOpenDirect(f.file_url)) ||
-    files.find(f => f.file_type === 'pdf' && canOpenDirect(f.file_url)) || null;
+  const canView = Boolean((data as any)?.access?.can_view);
+  const preview = files.find(f => !!f.is_preview && canOpenDirect(f.file_url)) || null;
+  const fullPdf = files.find(f => f.file_type === 'pdf' && !f.is_preview) || null;
   const coverSrc = toAbs(p.thumbnail_url) || FALLBACK_IMG;
 
   const meta = (() => {
@@ -214,6 +222,20 @@ export default function BookDetail() {
   const onRead = () => {
     const url = toAbs(preview?.file_url || '') || '';
     if (url) window.open(url, '_blank');
+  };
+  const onReadFull = () => {
+    if (!fullPdf) return;
+    (async () => {
+      try {
+        const res = await api.get(`/v1/catalog/products/${p.id}/files/${fullPdf.id}/download`, { responseType: 'blob' });
+        const blob = new Blob([res.data], { type: res.headers['content-type'] || 'application/pdf' });
+        const url = URL.createObjectURL(blob);
+        window.open(url, '_blank');
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
+      } catch (e) {
+        alert('Unable to open full content. Please ensure you are logged in and have purchased.');
+      }
+    })();
   };
   const onShare = async () => {
     try {
@@ -323,10 +345,15 @@ export default function BookDetail() {
             </div>
 
             {/* CTAs */}
-            <div className="mt-6 flex items-center gap-3">
+            <div className="mt-6 flex items-center gap-3 flex-wrap">
               <button onClick={onRead} disabled={!preview} className="inline-flex items-center gap-2 bg-[color:var(--brand-500)] hover:bg-[color:var(--brand-600)] disabled:opacity-50 text-white font-semibold px-5 py-2.5 rounded-xl shadow transition">
-                Read
+                Read Preview
               </button>
+              {canView && fullPdf && (
+                <button onClick={onReadFull} className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold px-5 py-2.5 rounded-xl shadow transition">
+                  Read Full
+                </button>
+              )}
               <button onClick={toggleFav} className={`h-10 px-4 inline-flex items-center gap-2 rounded-full border transition ${favOn ? 'bg-rose-50 text-rose-600 border-rose-200' : 'border-zinc-300 text-zinc-700 hover:bg-zinc-50'}`} aria-pressed={favOn}>
                 <span className="text-lg">{favOn ? '♥' : '♡'}</span>
                 <span className="text-sm hidden sm:inline">{favOn ? 'Unfavorite' : 'Favorite'}</span>
@@ -347,7 +374,11 @@ export default function BookDetail() {
                   <div className="text-3xl font-extrabold text-zinc-900">{priceCents > 0 ? formatVND(priceCents) : 'Free'}</div>
                 </div>
                 <div className="mt-2 text-emerald-600 text-sm font-semibold">Own this ebook forever</div>
-                <button onClick={onBuy} className="mt-4 w-full rounded-xl bg-[color:var(--brand-500)] hover:bg-[color:var(--brand-600)] text-white font-semibold py-2.5">Buy now</button>
+                {canView ? (
+                  <button onClick={onReadFull} className="mt-4 w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2.5">Read Full</button>
+                ) : (
+                  <button onClick={onBuy} className="mt-4 w-full rounded-xl bg-[color:var(--brand-500)] hover:bg-[color:var(--brand-600)] text-white font-semibold py-2.5">Buy now</button>
+                )}
               </div>
             </div>
           </div>

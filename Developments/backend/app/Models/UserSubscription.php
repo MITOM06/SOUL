@@ -11,6 +11,9 @@ class UserSubscription extends Model
 
     protected $table = 'user_subscriptions';
 
+    // Đảm bảo khi toArray()/toJson() có trường 'plan' (alias của plan_key)
+    protected $appends = ['plan'];
+
     protected $fillable = [
         'user_id',
         'plan_key',     // 👈 dùng đúng cột DB

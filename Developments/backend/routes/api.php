@@ -25,6 +25,7 @@ use App\Http\Controllers\Api\V1\Library\FavouriteController;
 use App\Http\Controllers\Api\V1\Catalog\ProductReadController;
 use App\Http\Controllers\Api\V1\Catalog\ProductWriteController;
 use App\Http\Controllers\Api\V1\Library\ContinueLiteController;
+use App\Http\Controllers\Api\V1\Library\LibraryController;
 use App\Http\Controllers\Api\V1\Media\YoutubeController;
 
 // ➕ Users Subscriptions (thêm mới)
@@ -99,11 +100,14 @@ Route::prefix('v1')->group(function () {
         // File download
         Route::get('products/{product}/files/{file}/download', [ProductController::class, 'downloadFile']);
 
+        // Library (purchased items)
+        Route::get('library', [LibraryController::class, 'index']);
+
         // =====================================================
         // ➕ Users Subscriptions (USER) – dùng cho người dùng đang đăng nhập
         // =====================================================
         Route::get   ('subscriptions',           [UserSubController::class, 'index']);   // list sub của chính user
-        Route::post  ('subscriptions',           [UserSubController::class, 'store']);   // tạo sub: { plan: basic|standard|premium }
+        Route::post  ('subscriptions',           [UserSubController::class, 'store']);   // tạo sub: { plan: basic|premium|vip }
         Route::delete('subscriptions/{id}',      [UserSubController::class, 'destroy']); // huỷ sub của chính user
     });
 
@@ -160,6 +164,7 @@ Route::prefix('v1')->group(function () {
     // 🔹 Catalog + Media
     // =====================================================
     Route::get   ('catalog/products',                  [ProductReadController::class,  'index']);
+    Route::get   ('catalog/podcast/categories',       [ProductReadController::class,  'categories']);
     Route::get   ('catalog/products/{id}',             [ProductReadController::class,  'show']);
 
     Route::post  ('catalog/products',                  [ProductWriteController::class, 'store']);
@@ -167,6 +172,7 @@ Route::prefix('v1')->group(function () {
     Route::delete('catalog/products/{id}',             [ProductWriteController::class, 'destroy']);
     Route::post  ('catalog/products/{id}/files',       [ProductWriteController::class, 'uploadFiles']);
     Route::post  ('catalog/products/{id}/thumbnail',   [ProductWriteController::class, 'uploadThumbnail']);
+    Route::post  ('catalog/products/{id}/youtube',     [ProductWriteController::class, 'attachYoutube']);
     Route::get   ('catalog/products/{product}/files/{file}/download', [ProductWriteController::class, 'downloadFile']);
 
     // Continue progress

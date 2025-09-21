@@ -72,9 +72,15 @@ class PaymentController extends Controller
                 $payment->order->update(['status' => 'paid']);
             }
             if ($payment->subscription) {
-                // activate linked subscription
+                // activate linked subscription and ensure only one active per user
                 $now = Carbon::now();
-                $payment->subscription->update([
+                $sub = $payment->subscription;
+                UserSubscription::where('user_id', $sub->user_id)
+                    ->where('id', '!=', $sub->id)
+                    ->where('status', 'active')
+                    ->update(['status' => 'canceled']);
+
+                $sub->update([
                     'status' => 'active',
                     'start_date' => $now,
                     'end_date' => (clone $now)->addMonth(),
@@ -94,6 +100,25 @@ class PaymentController extends Controller
         if ($status === 'success') {
             $payment->status = Payment::STATUS_SUCCESS;  
             $payment->save();
+
+            // Mirror webhook success side-effects
+            if ($payment->order) {
+                $payment->order->update(['status' => 'paid']);
+            }
+            if ($payment->subscription) {
+                $now = Carbon::now();
+                $sub = $payment->subscription;
+                UserSubscription::where('user_id', $sub->user_id)
+                    ->where('id', '!=', $sub->id)
+                    ->where('status', 'active')
+                    ->update(['status' => 'canceled']);
+
+                $sub->update([
+                    'status' => 'active',
+                    'start_date' => $now,
+                    'end_date' => (clone $now)->addMonth(),
+                ]);
+            }
 
             return response()->json([
                 'success' => true,
@@ -122,7 +147,13 @@ class PaymentController extends Controller
     }
     if ($payment->subscription) {
         $now = Carbon::now();
-        $payment->subscription->update([
+        $sub = $payment->subscription;
+        UserSubscription::where('user_id', $sub->user_id)
+            ->where('id', '!=', $sub->id)
+            ->where('status', 'active')
+            ->update(['status' => 'canceled']);
+
+        $sub->update([
             'status' => 'active',
             'start_date' => $now,
             'end_date' => (clone $now)->addMonth(),
@@ -185,8 +216,15 @@ public function showTransaction($id, Request $request)
             'status' => Payment::STATUS_INITIATED,
         ]);
 
-        // Create (or upsert) a pending subscription linked to this payment
+        // Create (or upsert) a subscription linked to this payment
         $now = Carbon::now();
+        // If free (basic), immediately cancel other actives and set active
+        if ($amount == 0) {
+            UserSubscription::where('user_id', $user->id)
+                ->where('status', 'active')
+                ->update(['status' => 'canceled']);
+        }
+
         $sub = UserSubscription::create([
             'user_id'     => $user->id,
             'plan_key'    => $planKey,

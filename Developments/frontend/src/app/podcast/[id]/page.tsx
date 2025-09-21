@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
+import Link from 'next/link';
+import { useCart } from '@/contexts/CartContext';
 
 type ProductType = 'ebook' | 'podcast';
 interface Product {
@@ -156,6 +158,8 @@ function YoutubeAudio({ embedUrl, cover, title }: { embedUrl: string; cover?: st
 
 export default function PodcastDetailPage() {
   const params = useParams();
+  const { add } = useCart();
+  const authFetch: typeof fetch = (input, init) => fetch(input, { credentials: 'include', ...(init ?? {}) });
 
   const id = useMemo(() => {
     const raw = (params as any)?.id;
@@ -167,6 +171,9 @@ export default function PodcastDetailPage() {
   const [data, setData] = useState<{ product: Product; files: ProductFile[] } | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [favOn, setFavOn] = useState(false);
+  const [canFav, setCanFav] = useState(true);
+  const [related, setRelated] = useState<Array<{ id: number; title: string; thumb: string }>>([]);
 
   useEffect(() => {
     if (!id) return;
@@ -178,6 +185,31 @@ export default function PodcastDetailPage() {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         const j = await r.json();
         setData(j?.data || null);
+        // Load favourite status
+        try {
+          const rf = await authFetch(`${API_BASE}/v1/favourites`, { signal: ac.signal });
+          if (rf.status === 401) { setCanFav(false); setFavOn(false); }
+          else if (rf.ok) {
+            const jf = await rf.json();
+            const ids: number[] = jf?.data?.product_ids || [];
+            setFavOn(ids.includes(id));
+            setCanFav(true);
+          }
+        } catch {}
+        // Load related podcasts (same category)
+        try {
+          const cat = (j?.data?.product?.category || '').trim();
+          const qs = cat ? `type=podcast&per_page=12&category=${encodeURIComponent(cat)}` : `type=podcast&per_page=12`;
+          const rr = await fetch(`${API_BASE}/v1/catalog/products?${qs}`, { signal: ac.signal });
+          if (rr.ok) {
+            const j2 = await rr.json();
+            const items: any[] = j2?.data?.items || [];
+            const mapped = items
+              .filter((it) => Number(it?.id) !== id)
+              .map((it) => ({ id: it.id, title: it.title, thumb: toAbs(it.thumbnail_url) || FALLBACK_IMG }));
+            setRelated(mapped.slice(0, 6));
+          }
+        } catch {}
       } catch (e: any) {
         if (e?.name !== 'AbortError') setErr(e?.message || 'Failed to load data');
       } finally {
@@ -195,58 +227,138 @@ export default function PodcastDetailPage() {
   const p = data.product;
   const files = data.files || [];
 
-  const yt  = extractYoutubeFromFiles(files) || extractYoutubeFromProductMeta(p);
-  const aud = files.find(f => f.file_type === 'audio' || /\.mp3(\?|$)/i.test(f.file_url));
-
+  const canView = Boolean((data as any)?.access?.can_view);
+  const ytPreviewFile = files.find(f => String(f.file_type).toLowerCase()==='youtube' && (f.is_preview===1 || f.is_preview===true));
+  const ytFullFile    = files.find(f => String(f.file_type).toLowerCase()==='youtube' && !(f.is_preview===1 || f.is_preview===true));
+  const pickYt = (f?: any) => f ? {
+    embed: (parseMaybeJSON(f.meta)?.embed_url) || f.file_url,
+    watch: (parseMaybeJSON(f.meta)?.watch_url) || f.file_url,
+    thumb: (parseMaybeJSON(f.meta)?.thumbnail_url) || p.thumbnail_url || FALLBACK_IMG,
+  } : null;
+  const yt  = canView ? (pickYt(ytFullFile) || pickYt(ytPreviewFile) || extractYoutubeFromFiles(files) || extractYoutubeFromProductMeta(p))
+                      : (pickYt(ytPreviewFile) || null);
+  const aud = files.find(f => (f.file_type === 'audio' || /\.mp3(\?|$)/i.test(f.file_url)) && (canView || f.is_preview));
   const cover = toAbs(p.thumbnail_url) || yt?.thumb || FALLBACK_IMG;
+  const priceCents = Number(p.price_cents || 0);
+
+  const onBuy = async () => { await add(p.id, 1); };
+  const toggleFav = async () => {
+    if (!canFav) { alert('Please sign in to use Favorites'); return; }
+    const next = !favOn; setFavOn(next);
+    const url = next ? `${API_BASE}/v1/favourites` : `${API_BASE}/v1/favourites/${p.id}`;
+    const init: RequestInit = next
+      ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ product_id: p.id }) }
+      : { method: 'DELETE' };
+    const res = await authFetch(url, init);
+    if (!res.ok) { setFavOn(!next); alert('Failed to update Favorites'); }
+  };
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
-      <div className="flex items-start gap-6">
-        <img
-          src={cover}
-          alt={p.title}
-          className="w-40 h-56 object-cover rounded-md"
-          onError={(e) => { (e.currentTarget as HTMLImageElement).src = FALLBACK_IMG; }}
-        />
+    <div className="relative">
+      {/* Background blur */}
+      <div className="absolute inset-0 -z-10">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={cover} alt="" className="w-full h-full object-cover opacity-10" />
+        <div className="absolute inset-0 bg-gradient-to-br from-white/40 via-white/30 to-white/50" />
+      </div>
 
-        <div className="flex-1">
-          <h1 className="text-2xl font-bold">{p.title}</h1>
-          <div className="text-gray-600">{p.category || '—'}</div>
-          <div className="mt-1 font-medium">
-            {p.price_cents > 0 ? formatVND(p.price_cents) : 'Free'}
+      {/* Breadcrumb */}
+      <div className="container mx-auto px-6 md:px-12 pt-6 text-sm text-zinc-800">
+        <Link href="/podcast" className="hover:underline">Podcasts</Link>
+        <span className="px-2">›</span>
+        <span className="opacity-90 line-clamp-1 align-middle">{p.title}</span>
+      </div>
+
+      {/* Two columns: left info, right player */}
+      <section className="relative w-screen left-[50%] right-[50%] -ml-[50vw] -mr-[50vw]">
+        <div className="grid md:grid-cols-[1fr_1.2fr] gap-6 md:gap-10 p-6 md:p-12">
+          {/* Left: info */}
+          <div className="max-w-2xl">
+            <div className="inline-flex items-center gap-2 text-xs font-bold tracking-wide bg-black/5 backdrop-blur px-3 py-1 rounded-full border border-black/5">
+              <span className="inline-block h-2 w-2 rounded-full bg-indigo-500" />
+              {p.category || 'Podcast'}
+            </div>
+            <h1 className="mt-2 text-3xl md:text-4xl font-extrabold leading-tight text-zinc-900 drop-shadow-sm">{p.title}</h1>
+            {p.description && (
+              <p className="mt-2 text-zinc-700 whitespace-pre-wrap">{String(p.description).slice(0, 300)}{String(p.description).length>300?'…':''}</p>
+            )}
+
+            {/* CTAs */}
+            <div className="mt-5 flex items-center gap-3">
+              <button onClick={onBuy} className="inline-flex items-center gap-2 bg-[color:var(--brand-500)] hover:bg-[color:var(--brand-600)] text-white font-semibold px-5 py-2.5 rounded-xl shadow transition">
+                Buy {priceCents>0 ? `(${formatVND(priceCents)})` : '(Free)'}
+              </button>
+              <button onClick={toggleFav} className={`h-10 px-4 inline-flex items-center gap-2 rounded-full border transition ${favOn ? 'bg-rose-50 text-rose-600 border-rose-200' : 'border-zinc-300 text-zinc-700 hover:bg-zinc-50'}`} aria-pressed={favOn}>
+                <span className="text-lg">{favOn ? '♥' : '♡'}</span>
+                <span className="text-sm hidden sm:inline">{favOn ? 'Unfavorite' : 'Favorite'}</span>
+              </button>
+            </div>
+
+            {/* Price card */}
+            <div className="mt-6 max-w-sm">
+              <div className="relative rounded-2xl border border-zinc-200 bg-white p-4 shadow-lg">
+                <div className="absolute -top-3 left-4 text-xs font-bold text-white px-2 py-0.5 rounded-full bg-[color:var(--brand-500)]">One‑off</div>
+                <div className="text-3xl font-extrabold text-zinc-900">{priceCents>0?formatVND(priceCents):'Free'}</div>
+                <div className="mt-2 text-sm text-zinc-600">Own this podcast forever</div>
+                <button onClick={onBuy} className="mt-4 w-full rounded-xl bg-[color:var(--brand-500)] hover:bg-[color:var(--brand-600)] text-white font-semibold py-2.5">Buy now</button>
+              </div>
+            </div>
           </div>
 
-          <div className="mt-6 space-y-3">
-            <h2 className="font-semibold">Listen</h2>
-
-            {aud ? (
-              <div className="border rounded-xl p-4">
+          {/* Right: player */}
+          <div>
+            {yt ? (
+              <div className="rounded-2xl overflow-hidden shadow-2xl ring-1 ring-black/10 bg-black">
+                <div className="relative w-full" style={{ paddingTop: '56.25%' }}>
+                  <iframe
+                    src={`${yt.embed}?rel=0&modestbranding=1`}
+                    title={p.title}
+                    className="absolute inset-0 w-full h-full"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                    allowFullScreen
+                  />
+                </div>
+              </div>
+            ) : aud ? (
+              <div className="rounded-2xl overflow-hidden shadow-lg ring-1 ring-black/10 bg-white p-4">
                 <audio controls className="w-full">
                   <source src={toAbs(aud.file_url)} />
                 </audio>
               </div>
-            ) : yt ? (
-              <div className="space-y-2">
-                <YoutubeAudio embedUrl={yt.embed} cover={cover} title={p.title} />
-                <a href={yt.watch} target="_blank" rel="noreferrer" className="text-sm text-blue-600 hover:underline">
-                  Open on YouTube
-                </a>
-                <div className="text-xs text-gray-500">* Hidden video — audio playback from YouTube only.</div>
-              </div>
             ) : (
-              <div className="text-gray-500">No audio file available yet.</div>
+              <div className="rounded-2xl border p-6 text-zinc-600 bg-white">
+                {canView ? 'No media available.' : 'Please purchase to watch the full podcast. A demo may be unavailable.'}
+              </div>
             )}
           </div>
         </div>
-      </div>
+      </section>
 
-      {p.description ? (
-        <div className="mt-8">
-          <h2 className="font-semibold mb-2">Description</h2>
-          <p className="whitespace-pre-wrap text-gray-800">{p.description}</p>
-        </div>
-      ) : null}
+      {/* Full Description */}
+      {p.description && (
+        <section className="px-6 md:px-12 max-w-4xl mx-auto mt-6">
+          <h2 className="text-xl font-semibold mb-2">Description</h2>
+          <p className="text-zinc-700 whitespace-pre-wrap">{p.description}</p>
+        </section>
+      )}
+
+      {/* You may also like (grid) */}
+      {related.length>0 && (
+        <section className="px-6 md:px-12 mt-10 mb-16">
+          <h2 className="text-xl font-semibold mb-3">You may also like</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+            {related.map(r => (
+              <Link key={r.id} href={`/podcast/${r.id}`} className="group rounded-xl border overflow-hidden bg-white shadow-sm hover:shadow-md transition">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={r.thumb} alt={r.title} className="w-full aspect-video object-cover group-hover:scale-[1.02] transition-transform duration-300" />
+                <div className="p-3">
+                  <div className="font-medium line-clamp-2 group-hover:text-blue-600 transition-colors">{r.title}</div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   );
 }

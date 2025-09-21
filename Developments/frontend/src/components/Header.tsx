@@ -83,6 +83,7 @@ export function HeaderAuthArea() {
   const userMenu = [
     { href: "/profile", label: "Profile" },
     { href: "/favorites", label: "Favourite" },
+    { href: "/library", label: "Library" },
     { href: "/orders", label: "Orders" },
     { href: "/continues", label: "Continues" },     // e.g. continue reading/listening
     { href: "/payment-history", label: "My Payment" },

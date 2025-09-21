@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { userSubscriptionsAPI } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
 
 type PlanKey = 'basic'|'premium'|'vip';
 
@@ -10,6 +11,7 @@ export default function SubscriptionCheckoutPage() {
   const sp = useSearchParams();
   const router = useRouter();
   const [provider, setProvider] = useState('bank');
+  const { refreshUser } = useAuth();
 
   const plan: PlanKey = (sp.get('plan') as PlanKey) || 'premium';
   const amount: number = Number(sp.get('amount') || (plan === 'vip' ? 29900 : plan === 'premium' ? 19900 : 0));
@@ -22,6 +24,7 @@ export default function SubscriptionCheckoutPage() {
   const confirm = async () => {
     const res = await userSubscriptionsAPI.create({ plan });
     if (res.data?.success) {
+      try { await refreshUser(); } catch {}
       setTimeout(() => router.replace('/my-package'), 600);
     }
   };

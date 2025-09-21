@@ -19,7 +19,7 @@ class AdminUserController extends Controller
         $users = User::query()
             ->when($role, fn($q) => $q->where('role', $role))
             ->latest() // 👈 chính là orderBy('created_at','desc')
-            ->paginate(10);
+            ->paginate(15);
     
         return response()->json($users);
     }

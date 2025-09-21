@@ -36,6 +36,7 @@ export default function AdminOrderManage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [selectedRowId, setSelectedRowId] = useState<number | null>(null);
 
   // pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -171,14 +172,13 @@ export default function AdminOrderManage() {
           </thead>
           <tbody className="bg-white">
             {currentOrders.map((order, index) => (
-              <tr key={order.id} className="text-center hover:bg-gray-50 transition">
+              <tr
+                key={order.id}
+                className={`text-center transition cursor-pointer ${selectedRowId===order.id ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
+                onClick={() => setSelectedRowId(prev => prev===order.id ? null : order.id)}
+              >
                 <td className="border p-2">{startIndex + index + 1}</td>
-                <td
-                  className="border p-2 text-blue-600 cursor-pointer"
-                  onClick={() => setSelectedOrder(order)}
-                >
-                  {order.user?.name}
-                </td>
+                <td className="border p-2 text-blue-600">{order.user?.name}</td>
                 <td className="border p-2">{order.user?.email}</td>
                 <td className="border p-2">
                   {(order.total_cents / 100).toLocaleString()} ₫
@@ -188,18 +188,24 @@ export default function AdminOrderManage() {
                   {new Date(order.created_at).toLocaleString()}
                 </td>
                 <td className="border p-2 space-x-2">
-                  <button
-                    onClick={() => setSelectedOrder(order)}
-                    className="px-3 py-1 bg-yellow-500 text-white rounded hover:brightness-105"
-                  >
-                    View
-                  </button>
-                  <button
-                    onClick={() => deleteOrder(order.id)}
-                    className="px-3 py-1 bg-red-500 text-white rounded hover:brightness-105"
-                  >
-                    Delete
-                  </button>
+                  {selectedRowId===order.id ? (
+                    <>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setSelectedOrder(order); }}
+                        className="px-3 py-1 bg-yellow-500 text-white rounded hover:brightness-105"
+                      >
+                        View
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); deleteOrder(order.id); }}
+                        className="px-3 py-1 bg-red-500 text-white rounded hover:brightness-105"
+                      >
+                        Delete
+                      </button>
+                    </>
+                  ) : (
+                    <span className="text-xs text-zinc-500">Click row to select</span>
+                  )}
                 </td>
               </tr>
             ))}
