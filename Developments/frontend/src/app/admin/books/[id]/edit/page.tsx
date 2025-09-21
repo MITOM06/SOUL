@@ -78,7 +78,7 @@ export default function EditBookPage() {
               </select>
             </div>
             <div>
-              <label className="block text-sm text-gray-600">Price (cents)</label>
+              <label className="block text-sm text-gray-600">Price (vnd)</label>
               <input type="number" value={form.price_cents} onChange={e => setForm({ ...form, price_cents: Number(e.target.value) })} className="w-full border rounded px-3 py-2" />
             </div>
           </div>

@@ -32,6 +32,12 @@ interface User {
   email: string;
 }
 
+/** Format cents → "xxx.xxx đ" */
+const formatVNDFromCents = (cents: number | null | undefined) => {
+  const vnd = Math.round(Number(cents ?? 0) / 100);
+  return `${vnd.toLocaleString("vi-VN")} đ`;
+};
+
 export default function AdminOrderManage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
@@ -98,11 +104,11 @@ export default function AdminOrderManage() {
   // filter by query + price range
   const filtered = orders.filter((o) => {
     const q = query.trim().toLowerCase();
-    const name = (o.user?.name || '').toLowerCase();
-    const email = (o.user?.email || '').toLowerCase();
+    const name = (o.user?.name || "").toLowerCase();
+    const email = (o.user?.email || "").toLowerCase();
     if (q && !(name.includes(q) || email.includes(q))) return false;
     const total = o.total_cents || 0;
-    const min = minPrice ? Number(minPrice) * 100 : null; // assume input in currency
+    const min = minPrice ? Number(minPrice) * 100 : null; // input theo VND
     const max = maxPrice ? Number(maxPrice) * 100 : null;
     if (min !== null && total < min) return false;
     if (max !== null && total > max) return false;
@@ -123,7 +129,10 @@ export default function AdminOrderManage() {
           <div className="relative md:w-80">
             <input
               value={query}
-              onChange={(e) => { setCurrentPage(1); setQuery(e.target.value); }}
+              onChange={(e) => {
+                setCurrentPage(1);
+                setQuery(e.target.value);
+              }}
               placeholder="Search by customer name or email..."
               className="w-full border rounded-lg pl-9 pr-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
@@ -134,9 +143,12 @@ export default function AdminOrderManage() {
               type="number"
               inputMode="numeric"
               min={0}
-              placeholder="Min price"
+              placeholder="Min (đ)"
               value={minPrice}
-              onChange={(e) => { setCurrentPage(1); setMinPrice(e.target.value); }}
+              onChange={(e) => {
+                setCurrentPage(1);
+                setMinPrice(e.target.value);
+              }}
               className="w-28 border rounded-lg px-3 py-2"
             />
             <span className="text-gray-400">-</span>
@@ -144,13 +156,19 @@ export default function AdminOrderManage() {
               type="number"
               inputMode="numeric"
               min={0}
-              placeholder="Max price"
+              placeholder="Max (đ)"
               value={maxPrice}
-              onChange={(e) => { setCurrentPage(1); setMaxPrice(e.target.value); }}
+              onChange={(e) => {
+                setCurrentPage(1);
+                setMaxPrice(e.target.value);
+              }}
               className="w-28 border rounded-lg px-3 py-2"
             />
           </div>
-          <button onClick={fetchOrders} className="px-3 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700 transition">
+          <button
+            onClick={fetchOrders}
+            className="px-3 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700 transition"
+          >
             Refresh
           </button>
         </div>
@@ -163,7 +181,7 @@ export default function AdminOrderManage() {
             <tr>
               <th className="p-2 border">#</th>
               <th className="p-2 border">User</th>
-<th className="p-2 border">Email</th>
+              <th className="p-2 border">Email</th>
               <th className="p-2 border">Total</th>
               <th className="p-2 border">Status</th>
               <th className="p-2 border">Created</th>
@@ -174,30 +192,40 @@ export default function AdminOrderManage() {
             {currentOrders.map((order, index) => (
               <tr
                 key={order.id}
-                className={`text-center transition cursor-pointer ${selectedRowId===order.id ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
-                onClick={() => setSelectedRowId(prev => prev===order.id ? null : order.id)}
+                className={`text-center transition cursor-pointer ${
+                  selectedRowId === order.id ? "bg-blue-50" : "hover:bg-gray-50"
+                }`}
+                onClick={() =>
+                  setSelectedRowId((prev) => (prev === order.id ? null : order.id))
+                }
               >
                 <td className="border p-2">{startIndex + index + 1}</td>
                 <td className="border p-2 text-blue-600">{order.user?.name}</td>
                 <td className="border p-2">{order.user?.email}</td>
                 <td className="border p-2">
-                  {(order.total_cents / 100).toLocaleString()} ₫
+                  {formatVNDFromCents(order.total_cents)}
                 </td>
                 <td className="border p-2">{order.status}</td>
                 <td className="border p-2">
                   {new Date(order.created_at).toLocaleString()}
                 </td>
                 <td className="border p-2 space-x-2">
-                  {selectedRowId===order.id ? (
+                  {selectedRowId === order.id ? (
                     <>
                       <button
-                        onClick={(e) => { e.stopPropagation(); setSelectedOrder(order); }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedOrder(order);
+                        }}
                         className="px-3 py-1 bg-yellow-500 text-white rounded hover:brightness-105"
                       >
                         View
                       </button>
                       <button
-                        onClick={(e) => { e.stopPropagation(); deleteOrder(order.id); }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteOrder(order.id);
+                        }}
                         className="px-3 py-1 bg-red-500 text-white rounded hover:brightness-105"
                       >
                         Delete
@@ -239,13 +267,11 @@ export default function AdminOrderManage() {
             <div className="bg-white p-6 rounded-lg w-11/12 md:w-2/3 max-h-[80vh] overflow-y-auto shadow-xl animate-zoom-in">
               <h2 className="text-xl font-bold mb-4">
                 Order #{selectedOrder.id} - {selectedOrder.user?.name}
-</h2>
+              </h2>
               <p>Email: {selectedOrder.user?.email}</p>
               <p>Status: {selectedOrder.status}</p>
-              <p>Total: {selectedOrder.total_cents} cents</p>
-              <p>
-                Created: {new Date(selectedOrder.created_at).toLocaleString()}
-              </p>
+              <p>Total: <strong>{formatVNDFromCents(selectedOrder.total_cents)}</strong></p>
+              <p>Created: {new Date(selectedOrder.created_at).toLocaleString()}</p>
 
               <h3 className="text-lg font-semibold mt-4 mb-2">Products</h3>
               <div className="space-y-3">
@@ -263,7 +289,7 @@ export default function AdminOrderManage() {
                       <div>
                         <p className="font-semibold">{item.product?.title}</p>
                         <p className="text-sm text-gray-600">
-                          Qty: {item.quantity} × {item.unit_price_cents} cents
+                          Qty: {item.quantity} × {formatVNDFromCents(item.unit_price_cents)}
                         </p>
                       </div>
                     </div>

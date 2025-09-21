@@ -69,7 +69,7 @@ export default function CreatePodcastPage() {
 
           <div className="grid grid-cols-2 gap-3 mt-3">
             <div>
-              <label className="block text-sm">Price (cents)</label>
+              <label className="block text-sm">Price (vnd)</label>
               <input type="number" value={price} onChange={e=>setPrice(Number(e.target.value))} className="w-full border rounded px-3 py-2" />
             </div>
             <div>
