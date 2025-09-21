@@ -26,6 +26,13 @@ const toAbs = (u?: string|null) => {
   if (s.startsWith('/')) return `${ORIGIN}${s}`;
   return s;
 };
+const FALLBACK_IMG = `data:image/svg+xml;utf8,${encodeURIComponent(
+  `<svg xmlns='http://www.w3.org/2000/svg' width='600' height='800'>
+     <rect width='100%' height='100%' fill='#f1f5f9'/>
+     <text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle'
+       font-family='sans-serif' font-size='18' fill='#94a3b8'>No cover</text>
+   </svg>`
+)}`;
 
 export default function LibraryPage() {
   const [items, setItems] = useState<Item[]>([]);
@@ -90,7 +97,12 @@ export default function LibraryPage() {
             {filtered.map(i => (
               <Link key={i.id} href={i.type==='ebook' ? `/book/${i.id}` : `/podcast/${i.id}`} className="group rounded-xl border overflow-hidden bg-white shadow-sm hover:shadow-md transition">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={toAbs(i.thumbnail_url)} alt={i.title} className="w-full aspect-[3/4] object-cover group-hover:scale-[1.02] transition-transform duration-300" />
+                <img
+                  src={toAbs(i.thumbnail_url) || FALLBACK_IMG}
+                  alt={i.title}
+                  className="w-full aspect-[3/4] object-cover group-hover:scale-[1.02] transition-transform duration-300"
+                  onError={(e)=>{ (e.currentTarget as HTMLImageElement).src = FALLBACK_IMG; }}
+                />
                 <div className="p-3">
                   <div className="text-xs text-zinc-500">{i.type.toUpperCase()} · {i.category || '-'}</div>
                   <div className="font-medium line-clamp-2 group-hover:text-blue-600 transition-colors">{i.title}</div>
@@ -103,4 +115,3 @@ export default function LibraryPage() {
     </UserPanelLayout>
   );
 }
-

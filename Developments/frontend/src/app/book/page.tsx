@@ -27,6 +27,13 @@ const toAbs = (u?: string | null) => {
   if (s.startsWith('/')) return `${ORIGIN}${s}`;
   return s;
 };
+const FALLBACK_IMG = `data:image/svg+xml;utf8,${encodeURIComponent(
+  `<svg xmlns='http://www.w3.org/2000/svg' width='600' height='800'>
+     <rect width='100%' height='100%' fill='#f1f5f9'/>
+     <text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle'
+       font-family='sans-serif' font-size='18' fill='#94a3b8'>No cover</text>
+   </svg>`
+)}`;
 
 /* ===================== Favourite helpers ===================== */
 function useFavourites() {
@@ -127,7 +134,7 @@ function BooksHero({ items, loading }: { items: Array<any>; loading: boolean }) 
   if (loading) {
     return (
       <div className="relative w-screen left-[50%] right-[50%] -ml-[50vw] -mr-[50vw]">
-        <div className="relative overflow-hidden min-h={[56] as any} md:min-h-[64vh]">
+        <div className="relative overflow-hidden min-h-[56vh] md:min-h-[64vh]">
           <div className="absolute inset-0 bg-gradient-to-br from-zinc-900 via-zinc-800 to-zinc-900" />
           <div className="relative grid md:grid-cols-2 gap-8 p-6 md:p-12">
             <div className="space-y-4">
@@ -204,7 +211,12 @@ function BooksHero({ items, loading }: { items: Array<any>; loading: boolean }) 
                 ${anim === 'prev' ? 'left-[33%] w-[34%] opacity-100 scale-100 rotate-0 z-20' : anim === 'next' ? '-left-[20%] opacity-0 scale-75 -rotate-2 z-0' : 'opacity-70 scale-90 -rotate-2 z-10'}`}
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={toAbs(prevItem.thumbnail_url || prevItem.cover)} alt={prevItem.title || ''} className="w-full h-full object-cover" />
+              <img
+                src={toAbs(prevItem.thumbnail_url || prevItem.cover) || FALLBACK_IMG}
+                alt={prevItem.title || ''}
+                className="w-full h-full object-cover"
+                onError={(e)=>{ (e.currentTarget as HTMLImageElement).src = FALLBACK_IMG; }}
+              />
             </Link>
           )}
           {/* current */}
@@ -212,7 +224,12 @@ function BooksHero({ items, loading }: { items: Array<any>; loading: boolean }) 
             ${anim === 'next' ? 'left-[56%] w-[36%] opacity-70 scale-90 rotate-2 z-10' : anim === 'prev' ? 'left-[8%] w-[36%] opacity-70 scale-90 -rotate-2 z-10' : 'opacity-100 scale-100 rotate-0 z-20'}`}
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={toAbs(cur.thumbnail_url || cur.cover)} alt={cur.title} className="w-full h-full object-cover" />
+            <img
+              src={toAbs(cur.thumbnail_url || cur.cover) || FALLBACK_IMG}
+              alt={cur.title}
+              className="w-full h-full object-cover"
+              onError={(e)=>{ (e.currentTarget as HTMLImageElement).src = FALLBACK_IMG; }}
+            />
           </Link>
           {/* next */}
           {nextItem && (
@@ -222,7 +239,12 @@ function BooksHero({ items, loading }: { items: Array<any>; loading: boolean }) 
                 ${anim === 'next' ? 'left-[33%] w-[34%] opacity-100 scale-100 rotate-0 z-20' : anim === 'prev' ? 'left-[120%] opacity-0 scale-75 rotate-2 z-0' : 'opacity-70 scale-90 rotate-2 z-10'}`}
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={toAbs(nextItem.thumbnail_url || nextItem.cover)} alt={nextItem.title || ''} className="w-full h-full object-cover" />
+              <img
+                src={toAbs(nextItem.thumbnail_url || nextItem.cover) || FALLBACK_IMG}
+                alt={nextItem.title || ''}
+                className="w-full h-full object-cover"
+                onError={(e)=>{ (e.currentTarget as HTMLImageElement).src = FALLBACK_IMG; }}
+              />
             </Link>
           )}
 
