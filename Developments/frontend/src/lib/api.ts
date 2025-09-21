@@ -218,3 +218,21 @@ export const adminUserSubscriptionsAPI = {
   // Xoá
   delete: (id: number) => api.delete(`/v1/admin/users-sub/${id}`),
 };
+
+/* ======================= FAVOURITES (USER) ======================= */
+export const favouritesAPI = {
+  /** Lấy danh sách favourite của user hiện tại (books, podcasts, product_ids). */
+  getAll: () => api.get('/v1/favourites'),
+
+  /** Thêm favourite (idempotent). */
+  add: (productId: number) =>
+    api.post('/v1/favourites', { product_id: productId }),
+
+  /** Toggle favourite (trả về { on: true|false }). */
+  toggle: (productId: number) =>
+    api.post('/v1/favourites/toggle', { product_id: productId }),
+
+  /** Xóa favourite theo productId (idempotent). */
+  remove: (productId: number) =>
+    api.delete(`/v1/favourites/${productId}`),
+};

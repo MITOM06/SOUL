@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import BookCard from '@/components/BookCard';
+import api from '@/lib/api';
 
 type ProductType = 'ebook' | 'podcast';
 interface ProductApi {
@@ -26,6 +27,61 @@ const toAbs = (u?: string | null) => {
   if (s.startsWith('/')) return `${ORIGIN}${s}`;
   return s;
 };
+
+/* ===================== Favourite helpers ===================== */
+function useFavourites() {
+  const [favIds, setFavIds] = useState<Set<number>>(new Set());
+  const [canFav, setCanFav] = useState(true);
+  const [loading, setLoading] = useState(false);
+
+  const load = async (signal?: AbortSignal) => {
+    setLoading(true);
+    try {
+      const res = await api.get('/v1/favourites', { signal: signal as any });
+      const data = res.data?.data || res.data || {};
+      const ids: number[] = data.product_ids || [];
+      setFavIds(new Set(ids));
+      setCanFav(true);
+    } catch (e: any) {
+      if (e?.response?.status === 401) {
+        setCanFav(false);
+        setFavIds(new Set());
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const toggle = async (productId: number) => {
+    if (!canFav) {
+      alert('Please sign in to use Favorites');
+      return;
+    }
+    const next = new Set(favIds);
+    const willAdd = !favIds.has(productId);
+    // optimistic
+    if (willAdd) next.add(productId); else next.delete(productId);
+    setFavIds(next);
+
+    try {
+      if (willAdd) await api.post('/v1/favourites', { product_id: productId });
+      else         await api.delete(`/v1/favourites/${productId}`);
+    } catch (e: any) {
+      // revert on failure
+      const revert = new Set(next);
+      if (willAdd) revert.delete(productId); else revert.add(productId);
+      setFavIds(revert);
+      if (e?.response?.status === 401) {
+        setCanFav(false);
+        alert('Session expired. Please sign in again.');
+      } else {
+        alert('Failed to update Favorites.');
+      }
+    }
+  };
+
+  return { favIds, canFav, loading, load, toggle };
+}
 
 /* ===================== Hero (Books) ===================== */
 function BooksHero({ items, loading }: { items: Array<any>; loading: boolean }) {
@@ -63,7 +119,7 @@ function BooksHero({ items, loading }: { items: Array<any>; loading: boolean }) 
     // @ts-ignore
     timer.current = window.setTimeout(tick, 6000);
     return () => { if (timer.current) window.clearTimeout(timer.current); };
-  }, [count, anim]);
+  }, [count, anim, idx]);
 
   // background
   const bg = toAbs(items[idx]?.thumbnail_url || items[idx]?.cover || undefined);
@@ -71,7 +127,7 @@ function BooksHero({ items, loading }: { items: Array<any>; loading: boolean }) 
   if (loading) {
     return (
       <div className="relative w-screen left-[50%] right-[50%] -ml-[50vw] -mr-[50vw]">
-        <div className="relative overflow-hidden min-h-[56vh] md:min-h-[64vh]">
+        <div className="relative overflow-hidden min-h={[56] as any} md:min-h-[64vh]">
           <div className="absolute inset-0 bg-gradient-to-br from-zinc-900 via-zinc-800 to-zinc-900" />
           <div className="relative grid md:grid-cols-2 gap-8 p-6 md:p-12">
             <div className="space-y-4">
@@ -205,7 +261,13 @@ function SectionHeader({ title }: { title: string }) {
   );
 }
 
-function RowWithArrows({ title, children }: { title: string; children: React.ReactNode }) {
+function RowWithArrows({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
   const scrollerRef = useRef<HTMLDivElement>(null);
   const scrollBy = (delta: number) => scrollerRef.current?.scrollBy({ left: delta, behavior: 'smooth' });
   return (
@@ -218,13 +280,51 @@ function RowWithArrows({ title, children }: { title: string; children: React.Rea
       </div>
       {/* scroller full-bleed */}
       <div className="relative w-screen left-[50%] right-[50%] -ml-[50vw] -mr-[50vw]">
-        <div ref={scrollerRef} className="flex gap-4 overflow-x-auto scroll-smooth pb-3 [scrollbar-width:thin] px-4 md:px-8 snap-x snap-mandatory">
+        <div
+          ref={scrollerRef}
+          className="flex gap-4 overflow-x-auto scroll-smooth pb-3 [scrollbar-width:thin] px-4 md:px-8 snap-x snap-mandatory"
+        >
           {children}
         </div>
-        <button aria-label="Scroll left" onClick={() => scrollBy(-600)} className="hidden md:grid place-items-center absolute left-2 md:left-4 top-1/2 -translate-y-1/2 h-10 w-10 rounded-full bg-white/90 shadow hover:bg-white">‹</button>
-        <button aria-label="Scroll right" onClick={() => scrollBy(600)} className="hidden md:grid place-items-center absolute right-2 md:right-4 top-1/2 -translate-y-1/2 h-10 w-10 rounded-full bg-white/90 shadow hover:bg-white">›</button>
+        <button
+          aria-label="Scroll left"
+          onClick={() => scrollBy(-600)}
+          className="hidden md:grid place-items-center absolute left-2 md:left-4 top-1/2 -translate-y-1/2 h-10 w-10 rounded-full bg-white/90 shadow hover:bg-white"
+        >
+          ‹
+        </button>
+        <button
+          aria-label="Scroll right"
+          onClick={() => scrollBy(600)}
+          className="hidden md:grid place-items-center absolute right-2 md:right-4 top-1/2 -translate-y-1/2 h-10 w-10 rounded-full bg-white/90 shadow hover:bg-white"
+        >
+          ›
+        </button>
       </div>
     </div>
+  );
+}
+
+/* ===== Favourite Button (overlay) ===== */
+function FavBtn({
+  on,
+  onToggle,
+}: {
+  on: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggle(); }}
+      aria-pressed={on}
+      aria-label={on ? 'Unfavorite' : 'Favorite'}
+      className={`absolute top-2 right-2 z-20 h-9 px-3 rounded-full border backdrop-blur bg-white/80 hover:bg-white transition text-sm 
+      ${on ? 'border-rose-200 text-rose-600 bg-rose-50' : 'border-zinc-200 text-zinc-700'}`}
+      title={on ? 'Unfavorite' : 'Favorite'}
+    >
+      <span className="text-base align-middle">{on ? '♥' : '♡'}</span>
+      <span className="ml-1 hidden sm:inline">{on ? 'Unfavourite' : 'Favourite'}</span>
+    </button>
   );
 }
 
@@ -234,6 +334,9 @@ export default function BooksListPage() {
   const [error, setError] = useState<string | null>(null);
   const [minVND, setMinVND] = useState<string>('');
   const [maxVND, setMaxVND] = useState<string>('');
+
+  // favourites
+  const { favIds, canFav, load: loadFavs, toggle: toggleFav } = useFavourites();
 
   useEffect(() => {
     const ac = new AbortController();
@@ -255,6 +358,8 @@ export default function BooksListPage() {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const j = await res.json();
         setItems(j?.data?.items || []);
+        // sau khi có danh sách, tải favourites (bearer)
+        await loadFavs(ac.signal);
       } catch (e: any) {
         if (e?.name !== 'AbortError') setError(e?.message || 'Failed to load list');
       } finally {
@@ -262,7 +367,7 @@ export default function BooksListPage() {
       }
     })();
     return () => ac.abort();
-  }, [minVND, maxVND]);
+  }, [minVND, maxVND]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Normalize
   const books = useMemo(() => {
@@ -281,6 +386,7 @@ export default function BooksListPage() {
   return (
     <section className="space-y-10">
       <BooksHero items={books.slice(0, 12)} loading={loading} />
+
       <SectionHeader title="Books" />
       <div className="px-4 md:px-8">
         <div className="flex items-center gap-2">
@@ -296,25 +402,31 @@ export default function BooksListPage() {
         const list = books.filter((b: any) => (b.category || '') === cat);
         return (
           <RowWithArrows key={cat} title={cat}>
-            {(loading ? Array.from({ length: 10 }) : list.slice(0, 10)).map((b: any, i: number) => (
-              <div
-                key={b?.id ?? i}
-                className="snap-start shrink-0 basis-[calc((100vw-3rem)/2)] sm:basis-[calc((100vw-4rem)/3)] md:basis-[calc((100vw-8rem)/5)]"
-              >
-                {loading ? (
-                  <>
-                    <article className="card overflow-hidden">
-                      <div className="w-full aspect-[3/4] bg-zinc-100 animate-pulse" />
-                    </article>
-                    <div className="px-1.5 pt-2">
-                      <div className="h-3.5 w-3/4 bg-zinc-200 rounded animate-pulse" />
-                    </div>
-                  </>
-                ) : (
-                  <BookCard book={b} />
-                )}
-              </div>
-            ))}
+            {(loading ? Array.from({ length: 10 }) : list.slice(0, 10)).map((b: any, i: number) => {
+              const favOn = favIds.has(b?.id);
+              return (
+                <div
+                  key={b?.id ?? i}
+                  className="relative snap-start shrink-0 basis-[calc((100vw-3rem)/2)] sm:basis-[calc((100vw-4rem)/3)] md:basis-[calc((100vw-8rem)/5)]"
+                >
+                  {/* Favourite overlay button */}
+                  <FavBtn on={favOn} onToggle={() => toggleFav(b.id)} />
+                  {/* Card */}
+                  {loading ? (
+                    <>
+                      <article className="card overflow-hidden">
+                        <div className="w-full aspect-[3/4] bg-zinc-100 animate-pulse" />
+                      </article>
+                      <div className="px-1.5 pt-2">
+                        <div className="h-3.5 w-3/4 bg-zinc-200 rounded animate-pulse" />
+                      </div>
+                    </>
+                  ) : (
+                    <BookCard book={b} />
+                  )}
+                </div>
+              );
+            })}
           </RowWithArrows>
         );
       })}

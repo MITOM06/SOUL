@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
+import api from '@/lib/api';
 import { useCart } from '@/contexts/CartContext';
 
 type ProductType = 'ebook' | 'podcast';
@@ -129,6 +130,7 @@ function YoutubeAudio({ embedUrl, cover, title }: { embedUrl: string; cover?: st
 
   return (
     <div className="border rounded-xl p-4 flex items-center gap-4">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={toAbs(cover) || FALLBACK_IMG}
         alt={title || 'podcast'}
@@ -159,7 +161,6 @@ function YoutubeAudio({ embedUrl, cover, title }: { embedUrl: string; cover?: st
 export default function PodcastDetailPage() {
   const params = useParams();
   const { add } = useCart();
-  const authFetch: typeof fetch = (input, init) => fetch(input, { credentials: 'include', ...(init ?? {}) });
 
   const id = useMemo(() => {
     const raw = (params as any)?.id;
@@ -181,21 +182,24 @@ export default function PodcastDetailPage() {
     (async () => {
       try {
         setLoading(true); setErr(null);
+
+        // Lấy dữ liệu podcast
         const r = await fetch(`${API_BASE}/v1/catalog/products/${id}`, { signal: ac.signal });
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         const j = await r.json();
         setData(j?.data || null);
-        // Load favourite status
+
+        // ===== FAVOURITE (axios + Bearer token, giống trang Book) =====
         try {
-          const rf = await authFetch(`${API_BASE}/v1/favourites`, { signal: ac.signal });
-          if (rf.status === 401) { setCanFav(false); setFavOn(false); }
-          else if (rf.ok) {
-            const jf = await rf.json();
-            const ids: number[] = jf?.data?.product_ids || [];
-            setFavOn(ids.includes(id));
-            setCanFav(true);
-          }
-        } catch {}
+          const rf = await api.get('/v1/favourites', { signal: ac.signal as any });
+          const d  = rf.data?.data || rf.data || {};
+          const ids: number[] = d.product_ids || [];
+          setFavOn(ids.includes(id!));
+          setCanFav(true);
+        } catch (e: any) {
+          if (e?.response?.status === 401) { setCanFav(false); setFavOn(false); }
+        }
+
         // Load related podcasts (same category)
         try {
           const cat = (j?.data?.product?.category || '').trim();
@@ -219,10 +223,10 @@ export default function PodcastDetailPage() {
     return () => ac.abort();
   }, [id]);
 
-  if (!id)   return <div className="p-6 text-red-600">Invalid URL.</div>;
+  if (!id)     return <div className="p-6 text-red-600">Invalid URL.</div>;
   if (loading) return <div className="p-6">Loading…</div>;
-  if (err)   return <div className="p-6 text-red-600">Error: {err}</div>;
-  if (!data) return <div className="p-6">No data.</div>;
+  if (err)     return <div className="p-6 text-red-600">Error: {err}</div>;
+  if (!data)   return <div className="p-6">No data.</div>;
 
   const p = data.product;
   const files = data.files || [];
@@ -242,15 +246,24 @@ export default function PodcastDetailPage() {
   const priceCents = Number(p.price_cents || 0);
 
   const onBuy = async () => { await add(p.id, 1); };
+
+  // ====== TOGGLE FAVOURITE (axios api như Book) ======
   const toggleFav = async () => {
     if (!canFav) { alert('Please sign in to use Favorites'); return; }
-    const next = !favOn; setFavOn(next);
-    const url = next ? `${API_BASE}/v1/favourites` : `${API_BASE}/v1/favourites/${p.id}`;
-    const init: RequestInit = next
-      ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ product_id: p.id }) }
-      : { method: 'DELETE' };
-    const res = await authFetch(url, init);
-    if (!res.ok) { setFavOn(!next); alert('Failed to update Favorites'); }
+    const next = !favOn;
+    setFavOn(next); // optimistic
+    try {
+      if (next) await api.post('/v1/favourites', { product_id: p.id });
+      else      await api.delete(`/v1/favourites/${p.id}`);
+    } catch (e: any) {
+      setFavOn(!next); // revert
+      if (e?.response?.status === 401) {
+        setCanFav(false);
+        alert('Session expired. Please sign in again.');
+      } else {
+        alert('Failed to update Favorites.');
+      }
+    }
   };
 
   return (
@@ -297,7 +310,7 @@ export default function PodcastDetailPage() {
             {/* Price card */}
             <div className="mt-6 max-w-sm">
               <div className="relative rounded-2xl border border-zinc-200 bg-white p-4 shadow-lg">
-                <div className="absolute -top-3 left-4 text-xs font-bold text-white px-2 py-0.5 rounded-full bg-[color:var(--brand-500)]">One‑off</div>
+                <div className="absolute -top-3 left-4 text-xs font-bold text-white px-2 py-0.5 rounded-full bg-[color:var(--brand-500)]">One-off</div>
                 <div className="text-3xl font-extrabold text-zinc-900">{priceCents>0?formatVND(priceCents):'Free'}</div>
                 <div className="mt-2 text-sm text-zinc-600">Own this podcast forever</div>
                 <button onClick={onBuy} className="mt-4 w-full rounded-xl bg-[color:var(--brand-500)] hover:bg-[color:var(--brand-600)] text-white font-semibold py-2.5">Buy now</button>
@@ -307,29 +320,48 @@ export default function PodcastDetailPage() {
 
           {/* Right: player */}
           <div>
-            {yt ? (
-              <div className="rounded-2xl overflow-hidden shadow-2xl ring-1 ring-black/10 bg-black">
-                <div className="relative w-full" style={{ paddingTop: '56.25%' }}>
-                  <iframe
-                    src={`${yt.embed}?rel=0&modestbranding=1`}
-                    title={p.title}
-                    className="absolute inset-0 w-full h-full"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                    allowFullScreen
-                  />
+            {(() => {
+              const ytPreviewFile = files.find(f => String(f.file_type).toLowerCase()==='youtube' && (f.is_preview===1 || f.is_preview===true));
+              const ytFullFile    = files.find(f => String(f.file_type).toLowerCase()==='youtube' && !(f.is_preview===1 || f.is_preview===true));
+              const pickYt = (f?: any) => f ? {
+                embed: (parseMaybeJSON(f.meta)?.embed_url) || f.file_url,
+                watch: (parseMaybeJSON(f.meta)?.watch_url) || f.file_url,
+                thumb: (parseMaybeJSON(f.meta)?.thumbnail_url) || p.thumbnail_url || FALLBACK_IMG,
+              } : null;
+              const yt = canView ? (pickYt(ytFullFile) || pickYt(ytPreviewFile) || extractYoutubeFromFiles(files) || extractYoutubeFromProductMeta(p))
+                                 : (pickYt(ytPreviewFile) || null);
+              const aud = files.find(f => (f.file_type === 'audio' || /\.mp3(\?|$)/i.test(f.file_url)) && (canView || f.is_preview));
+
+              if (yt) {
+                return (
+                  <div className="rounded-2xl overflow-hidden shadow-2xl ring-1 ring-black/10 bg-black">
+                    <div className="relative w-full" style={{ paddingTop: '56.25%' }}>
+                      <iframe
+                        src={`${yt.embed}?rel=0&modestbranding=1`}
+                        title={p.title}
+                        className="absolute inset-0 w-full h-full"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                        allowFullScreen
+                      />
+                    </div>
+                  </div>
+                );
+              }
+              if (aud) {
+                return (
+                  <div className="rounded-2xl overflow-hidden shadow-lg ring-1 ring-black/10 bg-white p-4">
+                    <audio controls className="w-full">
+                      <source src={toAbs(aud.file_url)} />
+                    </audio>
+                  </div>
+                );
+              }
+              return (
+                <div className="rounded-2xl border p-6 text-zinc-600 bg-white">
+                  {canView ? 'No media available.' : 'Please purchase to watch the full podcast. A demo may be unavailable.'}
                 </div>
-              </div>
-            ) : aud ? (
-              <div className="rounded-2xl overflow-hidden shadow-lg ring-1 ring-black/10 bg-white p-4">
-                <audio controls className="w-full">
-                  <source src={toAbs(aud.file_url)} />
-                </audio>
-              </div>
-            ) : (
-              <div className="rounded-2xl border p-6 text-zinc-600 bg-white">
-                {canView ? 'No media available.' : 'Please purchase to watch the full podcast. A demo may be unavailable.'}
-              </div>
-            )}
+              );
+            })()}
           </div>
         </div>
       </section>
