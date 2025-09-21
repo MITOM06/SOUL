@@ -6,252 +6,87 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\Order;
 use App\Models\Payment;
-use App\Models\UserSubscription;
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Validation\Rule;
-use Carbon\Carbon;
 
 class PaymentController extends Controller
 {
     /**
-     * Bước 1: User checkout
+     * Checkout – tạo payment (không OTP trong DB, chỉ giả lập).
      */
-  public function checkout(Request $request)
-{
-    $request->validate([
-        'order_id' => 'required|exists:orders,id',
-        'provider' => 'required|string',
-    ]);
-
-    $order = Order::findOrFail($request->order_id);
-
-    $payment = Payment::create([
-        'order_id' => $order->id,
-        'user_id' => $request->user()->id ?? null,
-        'provider' => $request->provider,
-        'amount_cents' => $order->total_cents,
-        'currency' => 'VND',
-        'status' => Payment::STATUS_INITIATED, // 🔥 chưa thành công
-    ]);
-
-    // Fake QR
-    $qrData = "Thanh toán cho đơn #{$order->id}";
-    $qrUrl = "https://api.qrserver.com/v1/create-qr-code/?data=" . urlencode($qrData) . "&size=200x200";
-
-    return response()->json([
-        'success' => true,
-        'payment_id' => $payment->id,
-        'order_id' => $order->id,
-        'provider' => $request->provider,
-        'amount' => $order->total_cents,
-        'currency' => 'VND',
-        'qr_url' => $qrUrl,
-    ]);
-}
-    /**
-     * Bước 2: Gateway gọi webhook báo kết quả
-     */
-    public function webhook(Request $request)
+    public function checkout(Request $request)
     {
-        $payment = Payment::where('provider_payment_id', $request->input('transaction_id'))->first();
-
-        if (!$payment) {
-            return response()->json(['error' => 'Payment not found'], 404);
-        }
-
-        $status = $request->input('status'); // success | failed | refunded
-
-        $payment->update([
-            'status' => $status,
-            'raw_response' => $request->all(),
+        $request->validate([
+            'order_id' => 'required|exists:orders,id',
+            'provider' => 'required|string',
         ]);
 
-        // Nếu thành công → update order thành "paid"
-        if ($status === Payment::STATUS_SUCCESS) {
-            if ($payment->order) {
-                $payment->order->update(['status' => 'paid']);
-            }
-            if ($payment->subscription) {
-                // activate linked subscription and ensure only one active per user
-                $now = Carbon::now();
-                $sub = $payment->subscription;
-                UserSubscription::where('user_id', $sub->user_id)
-                    ->where('id', '!=', $sub->id)
-                    ->where('status', 'active')
-                    ->update(['status' => 'canceled']);
+        $order = Order::findOrFail($request->order_id);
 
-                $sub->update([
-                    'status' => 'active',
-                    'start_date' => $now,
-                    'end_date' => (clone $now)->addMonth(),
-                ]);
-            }
-        }
+        $payment = Payment::create([
+            'order_id'     => $order->id,
+            'user_id'      => $request->user()->id ?? null,
+            'provider'     => $request->provider,
+            'amount_cents' => $order->total_cents,
+            'currency'     => 'VND',
+            'status'       => Payment::STATUS_INITIATED, // chưa thành công
+        ]);
 
-        return response()->json(['success' => true]);
+        // Fake QR
+        $qrData = url("/checkout/otp?payment_id={$payment->id}");
+        $qrUrl  = "https://api.qrserver.com/v1/create-qr-code/?data=" . urlencode($qrData) . "&size=200x200";
+
+        return response()->json([
+            'success'    => true,
+            'status'     => 'initiated',
+            'payment_id' => $payment->id,
+            'order_id'   => $order->id,
+            'provider'   => $request->provider,
+            'amount'     => $order->total_cents,
+            'currency'   => 'VND',
+            'qr_url'     => $qrUrl,
+            'otp_demo'   => '123456', // 👈 chỉ để hiển thị cho dev/test
+            'message'    => 'Quét QR và nhập OTP để hoàn tất thanh toán',
+        ]);
     }
 
-    public function confirm(Request $request, $id)
+    /**
+     * Confirm OTP – chỉ so sánh với "123456".
+     */
+    public function confirmOtp(Request $request, $id)
     {
+        $request->validate([
+            'otp' => 'required|string'
+        ]);
+
         $payment = Payment::findOrFail($id);
 
-        $status = $request->input('status'); // 'success' hoặc 'failed'
-
-        if ($status === 'success') {
-            $payment->status = Payment::STATUS_SUCCESS;  
-            $payment->save();
-
-            // Mirror webhook success side-effects
-            if ($payment->order) {
-                $payment->order->update(['status' => 'paid']);
-            }
-            if ($payment->subscription) {
-                $now = Carbon::now();
-                $sub = $payment->subscription;
-                UserSubscription::where('user_id', $sub->user_id)
-                    ->where('id', '!=', $sub->id)
-                    ->where('status', 'active')
-                    ->update(['status' => 'canceled']);
-
-                $sub->update([
-                    'status' => 'active',
-                    'start_date' => $now,
-                    'end_date' => (clone $now)->addMonth(),
-                ]);
-            }
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Thanh toán thành công'
-            ]);
-        } else {
-            $payment->status = Payment::STATUS_FAILED;   
-            $payment->save();
-
+        if ($payment->status !== Payment::STATUS_INITIATED) {
             return response()->json([
                 'success' => false,
-                'message' => 'Thanh toán thất bại'
+                'message' => 'Giao dịch đã xử lý'
+            ], 400);
+        }
+
+        $otp = $request->input('otp');
+
+        // Check OTP
+        if ($otp !== '123456') {
+            return response()->json([
+                'success' => false,
+                'status'  => 'failed',
+                'message' => $otp === '' 
+                    ? 'Vui lòng nhập OTP' 
+                    : 'OTP không đúng',
             ]);
         }
-    }
 
-    public function autoSuccess($id)
-{
-    $payment = Payment::findOrFail($id);
-    $payment->status = Payment::STATUS_SUCCESS;
-    $payment->save();
-
-    // Mirror webhook success side-effects
-    if ($payment->order) {
-        $payment->order->update(['status' => 'paid']);
-    }
-    if ($payment->subscription) {
-        $now = Carbon::now();
-        $sub = $payment->subscription;
-        UserSubscription::where('user_id', $sub->user_id)
-            ->where('id', '!=', $sub->id)
-            ->where('status', 'active')
-            ->update(['status' => 'canceled']);
-
-        $sub->update([
-            'status' => 'active',
-            'start_date' => $now,
-            'end_date' => (clone $now)->addMonth(),
-        ]);
-    }
-
-    return response()->json([
-        'success' => true,
-        'message' => 'Thanh toán thành công (tự động)',
-    ]);
-}
-
-public function listTransactions(Request $request)
-{
-    $user = $request->user();
-    $transactions = Payment::where('user_id', $user->id)
-        ->orderByDesc('created_at')
-        ->get();
-
-    return response()->json(['success' => true, 'data' => $transactions]);
-}
-
-public function showTransaction($id, Request $request)
-{
-    $user = $request->user();
-    $transaction = Payment::where('user_id', $user->id)->findOrFail($id);
-
-    return response()->json(['success' => true, 'data' => $transaction]);
-}
-
-    /**
-     * Checkout for subscriptions: create a Payment + pending subscription with QR info.
-     */
-    public function checkoutSubscription(Request $request)
-    {
-        $user = $request->user() ?? Auth::user();
-
-        $request->validate([
-            'plan_key' => ['required', Rule::in(['basic','premium','vip'])],
-            'provider' => ['nullable','string'],
-        ]);
-
-        $planKey = $request->input('plan_key');
-        $provider = $request->input('provider', 'fake');
-
-        $pricing = [
-            'basic'   => 0,
-            'premium' => 19900,
-            'vip'     => 29900,
-        ];
-        $amount = $pricing[$planKey] ?? 0;
-
-        // Create a payment record (no order)
-        $payment = Payment::create([
-            'order_id' => null,
-            'user_id' => $user?->id,
-            'provider' => $provider,
-            'amount_cents' => $amount,
-            'currency' => 'VND',
-            'status' => Payment::STATUS_INITIATED,
-        ]);
-
-        // Create (or upsert) a subscription linked to this payment
-        $now = Carbon::now();
-        // If free (basic), immediately cancel other actives and set active
-        if ($amount == 0) {
-            UserSubscription::where('user_id', $user->id)
-                ->where('status', 'active')
-                ->update(['status' => 'canceled']);
-        }
-
-        $sub = UserSubscription::create([
-            'user_id'     => $user->id,
-            'plan_key'    => $planKey,
-            'status'      => $amount > 0 ? 'pending' : 'active',
-            'start_date'  => $now,
-            'end_date'    => (clone $now)->addMonth(),
-            'price_cents' => $amount,
-            'payment_id'  => $payment->id,
-        ]);
-
-        // Generate simple QR code
-        $qrData = "Thanh toán gói {$planKey} cho user #{$user->id} (payment #{$payment->id})";
-        $qrUrl = "https://api.qrserver.com/v1/create-qr-code/?data=" . urlencode($qrData) . "&size=200x200";
+        // Đúng OTP → success
+        $payment->update(['status' => Payment::STATUS_SUCCESS]);
+        $payment->order?->update(['status' => 'paid']);
 
         return response()->json([
             'success' => true,
-            'payment_id' => $payment->id,
-            'plan_key' => $planKey,
-            'amount' => $amount,
-            'currency' => 'VND',
-            'provider' => $provider,
-            'qr_url' => $qrUrl,
-            'subscription_id' => $sub->id,
-            'status' => $sub->status,
+            'status'  => 'success',
+            'message' => 'Thanh toán thành công bằng OTP',
         ]);
     }
-
-
-
 }
