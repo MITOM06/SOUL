@@ -246,4 +246,10 @@ export const favouritesAPI = {
     api.delete(`/v1/favourites/${productId}`),
 };
 
-
+// ======================= ADMIN PAYMENTS =======================
+export const adminPaymentsAPI = {
+   getAll: (params?: any) =>
+  api.get("/v1/admin/payments", { params }),
+  getById: (id: number) => api.get(`/v1/admin/payments/${id}`),
+  delete: (id: number) => api.delete(`/v1/admin/payments/${id}`),
+};

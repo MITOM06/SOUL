@@ -134,6 +134,12 @@ Route::prefix('v1')->group(function () {
 
         // ➕ Users Subscriptions (ADMIN CRUD)
         Route::apiResource('users-sub', AdminUserSubController::class);
+
+        // Payment History
+        // Admin Payments
+        Route::get('payments', [PaymentController::class, 'adminIndex']);
+        Route::get('payments/history', [PaymentController::class, 'adminHistory']);
+        Route::delete('payments/{id}', [PaymentController::class, 'adminDelete']);
     });
 
     // =====================================================

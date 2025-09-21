@@ -150,4 +150,102 @@ class PaymentController extends Controller
             'history' => $payments
         ]);
     }
+
+   public function adminHistory(Request $request)
+{
+    $query = Payment::with(['user'])
+        ->orderBy('created_at', 'desc');
+
+    // lọc theo status
+    if ($request->filled('status')) {
+        $query->where('status', $request->status);
+    }
+
+    // lọc theo provider
+    if ($request->filled('provider')) {
+        $query->where('provider', $request->provider);
+    }
+
+    // lọc theo user_id
+    if ($request->filled('user_id')) {
+        $query->where('user_id', $request->user_id);
+    }
+
+    // lọc theo date range
+    if ($request->filled('from') && $request->filled('to')) {
+        $query->whereBetween('created_at', [$request->from, $request->to]);
+    }
+
+    // 🔥 Thêm lọc theo query (tên/email user)
+    if ($request->filled('query')) {
+        $q = $request->query('query');
+        $query->whereHas('user', function ($sub) use ($q) {
+            $sub->where('name', 'like', "%{$q}%")
+                ->orWhere('email', 'like', "%{$q}%");
+        });
+    }
+
+    $payments = $query->paginate($request->get('per_page', 20));
+
+    return response()->json([
+        'success' => true,
+        'data'    => $payments,
+    ]);
+}
+
+    /**
+     * Admin: Danh sách tất cả payment.
+     */
+
+public function adminIndex(Request $request)
+{
+    $query = Payment::with('user')->orderByDesc('created_at');
+
+    if ($request->filled('status')) {
+        $query->where('status', $request->string('status'));
+    }
+    if ($request->filled('provider')) {
+        $query->where('provider', $request->string('provider'));
+    }
+    if ($request->filled('user_id')) {
+        $query->where('user_id', (int) $request->input('user_id'));
+    }
+    // tìm theo tên/email user
+    if ($request->filled('query')) {
+        $q = $request->query('query');
+        $query->whereHas('user', function ($sub) use ($q) {
+            $sub->where('name', 'like', "%{$q}%")
+                ->orWhere('email', 'like', "%{$q}%");
+        });
+    }
+    // from/to (optional)
+    if ($request->filled('from') || $request->filled('to')) {
+        $from = $request->input('from'); // 'YYYY-MM-DD' hoặc datetime
+        $to   = $request->input('to');
+        if ($from && $to) {
+            $query->whereBetween('created_at', [$from, $to]);
+        } elseif ($from) {
+            $query->where('created_at', '>=', $from);
+        } elseif ($to) {
+            $query->where('created_at', '<=', $to);
+        }
+    }
+
+    $perPage  = (int) $request->get('per_page', 20);
+    $payments = $query->paginate($perPage)->withQueryString();
+
+    // trả paginate RAW: { current_page, data: [...], last_page, ... }
+    return response()->json($payments);
+}
+
+public function adminDelete($id)
+{
+    $payment = Payment::findOrFail($id);
+    $payment->delete();
+
+    return response()->json([
+        'success' => true,
+        'message' => 'Payment deleted successfully',
+    ]);
+}
 }
