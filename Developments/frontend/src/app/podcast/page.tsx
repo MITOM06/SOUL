@@ -3,28 +3,10 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 
-type ProductType = 'ebook' | 'podcast';
-interface Product {
-  id: number;
-  type: ProductType;
-  title: string;
-  thumbnail_url?: string | null;
-  category?: string | null;
-  price_cents: number;
-}
+type Cat = { category: string; count: number; thumbnail_url?: string | null };
 
 const API_BASE = (process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api').replace(/\/$/, '');
 const ORIGIN   = API_BASE.replace(/\/api$/, '');
-const authFetch: typeof fetch = (input, init) => fetch(input, { credentials: 'include', ...(init ?? {}) });
-
-const formatVND = (n: number) => n.toLocaleString('vi-VN', { maximumFractionDigits: 0 }) + ' đ';
-const FALLBACK_IMG = `data:image/svg+xml;utf8,${encodeURIComponent(
-  `<svg xmlns='http://www.w3.org/2000/svg' width='400' height='560'>
-     <rect width='100%' height='100%' fill='#f3f4f6'/>
-     <text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle'
-       font-family='sans-serif' font-size='20' fill='#9ca3af'>Podcast</text>
-   </svg>`
-)}`;
 
 const toAbs = (u?: string|null) => {
   if (!u) return '';
@@ -35,33 +17,31 @@ const toAbs = (u?: string|null) => {
   return s;
 };
 
-export default function PodcastsListPage() {
-  const [items, setItems] = useState<Product[]>([]);
-  const [favIds, setFavIds] = useState<Set<number>>(new Set());
-  const [canFav, setCanFav] = useState(true);
+const FALLBACK_IMG = `data:image/svg+xml;utf8,${encodeURIComponent(
+  `<svg xmlns='http://www.w3.org/2000/svg' width='800' height='400'>
+     <rect width='100%' height='100%' fill='#f8fafc'/>
+     <text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle'
+       font-family='sans-serif' font-size='22' fill='#94a3b8'>Podcast Category</text>
+   </svg>`
+)}`;
+
+export default function PodcastCategoriesPage() {
+  const [cats, setCats] = useState<Cat[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string|null>(null);
+  const [q, setQ] = useState('');
 
   useEffect(() => {
     const ac = new AbortController();
     (async () => {
       try {
         setLoading(true); setErr(null);
-        const [resPods, resFav] = await Promise.all([
-          fetch(`${API_BASE}/v1/catalog/products?type=podcast&per_page=50`, { signal: ac.signal }),
-          authFetch(`${API_BASE}/v1/favourites`, { signal: ac.signal }),
-        ]);
-        if (!resPods.ok) throw new Error(`HTTP ${resPods.status}`);
-        const j = await resPods.json();
-        setItems(j?.data?.items || []);
-        if (resFav.status === 401) { setCanFav(false); setFavIds(new Set()); }
-        else if (resFav.ok) {
-          const jf = await resFav.json();
-          setFavIds(new Set<number>(jf?.data?.product_ids || []));
-          setCanFav(true);
-        } else setCanFav(false);
+        const res = await fetch(`${API_BASE}/v1/catalog/podcast/categories`, { signal: ac.signal });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const j = await res.json();
+        setCats(j?.data || []);
       } catch (e: any) {
-        if (e?.name !== 'AbortError') setErr(e?.message || 'Failed to load list');
+        if (e?.name !== 'AbortError') setErr(e?.message || 'Failed to load categories');
       } finally {
         setLoading(false);
       }
@@ -69,67 +49,39 @@ export default function PodcastsListPage() {
     return () => ac.abort();
   }, []);
 
-  const toggleFav = async (productId: number) => {
-    if (!canFav) return alert('Please sign in to use Favorites.');
-    const on = !favIds.has(productId);
-
-    // optimistic
-    setFavIds(prev => { const s = new Set(prev); on ? s.add(productId) : s.delete(productId); return s; });
-
-    const url  = on ? `${API_BASE}/v1/favourites` : `${API_BASE}/v1/favourites/${productId}`;
-    const init: RequestInit = on
-      ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ product_id: productId }) }
-      : { method: 'DELETE' };
-    const res = await authFetch(url, init);
-
-    if (!res.ok) {
-      // revert
-      setFavIds(prev => { const s = new Set(prev); on ? s.delete(productId) : s.add(productId); return s; });
-      if (res.status === 401) { setCanFav(false); alert('Session expired. Please sign in.'); }
-      else alert('Failed to update Favorites.');
-    }
-  };
-
-  if (loading) return <div className="p-6">Loading podcasts…</div>;
+  if (loading) return <div className="p-6">Loading podcast categories…</div>;
   if (err) return <div className="p-6 text-red-600">Error: {err}</div>;
-  if (!items.length) return <div className="p-6">No podcasts yet.</div>;
+  if (!cats.length) return <div className="p-6">No podcast categories.</div>;
+
+  const filtered = cats.filter(c => !q.trim() || c.category.toLowerCase().includes(q.toLowerCase()));
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
-      <h1 className="text-2xl font-bold mb-4">Podcasts</h1>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {items.map(p => {
-          const isFav = favIds.has(p.id);
-          const img = toAbs(p.thumbnail_url) || FALLBACK_IMG;
+    <section className="space-y-6">
+      <div className="px-4 md:px-8">
+        <h1 className="text-3xl font-bold">Podcast Topics</h1>
+        <div className="mt-3 max-w-2xl">
+          <div className="relative">
+            <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search topics by name..." className="w-full border rounded-xl pl-9 pr-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">🔎</span>
+          </div>
+        </div>
+      </div>
+      <div className="relative w-screen left-[50%] right-[50%] -ml-[50vw] -mr-[50vw] px-4 md:px-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {filtered.map((c) => {
+          const img = toAbs(c.thumbnail_url) || FALLBACK_IMG;
           return (
-            <Link key={p.id} href={`/podcast/${p.id}`} className="relative block border rounded-xl p-3 hover:shadow">
-              <img
-                src={img}
-                alt={p.title}
-                className="w-full h-40 object-cover rounded-md"
-                onError={(e) => { (e.currentTarget as HTMLImageElement).src = FALLBACK_IMG; }}
-              />
-
-              {/* Nút trái tim */}
-              <button
-                aria-label={isFav ? 'Remove from Favorites' : 'Add to Favorites'}
-                onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleFav(p.id); }}
-                className={`absolute top-2 right-2 px-2 py-1 rounded-full shadow text-sm
-                  ${isFav ? 'bg-red-600 text-white' : 'bg-white text-red-600 border'}`}
-                title={isFav ? 'Remove from Favorites' : 'Add to Favorites'}
-              >
-                {isFav ? '♥' : '♡'}
-              </button>
-
-              <div className="mt-2 font-medium line-clamp-2">{p.title}</div>
-              <div className="text-sm text-gray-500">{p.category || '—'}</div>
-              <div className="text-sm">{p.price_cents > 0 ? formatVND(p.price_cents) : 'Free'}</div>
+            <Link key={c.category} href={`/podcast/category/${encodeURIComponent(c.category)}`} className="group relative rounded-3xl overflow-hidden border bg-white shadow-sm hover:shadow-md transition">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={img} alt={c.category} className="w-full h-72 md:h-[420px] object-cover transform transition-transform duration-500 group-hover:translate-y-2" onError={(e)=>{ (e.currentTarget as HTMLImageElement).src = FALLBACK_IMG; }} />
+              <div className="absolute inset-x-0 top-0 p-4">
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-black/60 text-white text-sm font-semibold opacity-0 -translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition">{c.category} <span className="text-white/80 text-xs">({c.count})</span></div>
+              </div>
             </Link>
           );
         })}
+        </div>
       </div>
-
-      {!canFav && <div className="mt-4 text-sm text-gray-600">* Please sign in to use Favorites.</div>}
-    </div>
+    </section>
   );
 }

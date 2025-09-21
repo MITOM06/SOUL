@@ -7,6 +7,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Hash;
 use App\Models\User;
+use App\Models\UserSubscription;
+use Carbon\Carbon;
 
 class RegisterController extends Controller
 {
@@ -37,6 +39,22 @@ class RegisterController extends Controller
         $user->is_active    = true;
         $user->save();
 
+        // Khởi tạo gói mặc định: basic (active)
+        try {
+            $now = Carbon::now();
+            UserSubscription::create([
+                'user_id'     => $user->id,
+                'plan_key'    => 'basic',
+                'status'      => 'active',
+                'start_date'  => $now,
+                'end_date'    => (clone $now)->addMonth(),
+                'price_cents' => 0,
+                'payment_id'  => null,
+            ]);
+        } catch (\Throwable $e) {
+            // tránh làm hỏng flow đăng ký nếu lỗi seed subscription
+        }
+
         // Tạo Sanctum token để frontend dùng Bearer
         // (User model của bạn đã use HasApiTokens)
         $token = $user->createToken('auth')->plainTextToken;
@@ -49,6 +67,7 @@ class RegisterController extends Controller
                 'name'       => $user->name,
                 'role'       => $user->role,
                 'is_active'  => $user->is_active,
+                'subscription_level' => 'basic',
                 'token'      => $token, // 👈 QUAN TRỌNG: gửi token cho FE
             ],
             'message' => 'User registered successfully.',

@@ -102,6 +102,12 @@ export const transactionsAPI = {
   getById: (id: number) => api.get(`/v1/transactions/${id}`),
 };
 
+/* ======================= LIBRARY ======================= */
+export const libraryAPI = {
+  getAll: (params?: { type?: 'ebook'|'podcast'; search?: string; category?: string }) =>
+    api.get('/v1/library', { params }),
+};
+
 export const paymentsAPI = {
   initCheckout: (orderId: number, provider = 'fake') =>
     api.post('/v1/payment/checkout', { order_id: orderId, provider }),
@@ -160,7 +166,7 @@ export const adminUsersAPI = {
  * =======================================================================
  *  - User: tự tạo / xem / xoá subscription của chính mình
  *  - Admin: CRUD trên bảng user_subscriptions
- *  Lưu ý: backend dùng cột DB là `plan_key` (basic|standard|premium).
+ *  Lưu ý: backend dùng cột DB là `plan_key` (basic|premium|vip).
  *  Controller chấp nhận cả `plan` lẫn `plan_key`; FE nên gửi `plan_key`.
  */
 
@@ -172,8 +178,8 @@ export const userSubscriptionsAPI = {
   // Tạo subscription mới theo 1 trong 3 gói
   create: (
     payload:
-      | { plan_key: 'basic' | 'standard' | 'premium' | 'vip' }
-      | { plan: 'basic' | 'standard' | 'premium' | 'vip' }
+      | { plan_key: 'basic' | 'premium' | 'vip' }
+      | { plan: 'basic' | 'premium' | 'vip' }
   ) => api.post('/v1/subscriptions', payload),
 
   // Huỷ subscription của chính mình
@@ -188,7 +194,7 @@ export const adminUserSubscriptionsAPI = {
   // Tạo: bắt buộc user_id + plan_key + status
   create: (payload: {
     user_id: number;
-    plan_key: 'basic' | 'standard' | 'premium'; // hoặc gửi 'plan'
+    plan_key: 'basic' | 'premium' | 'vip'; // hoặc gửi 'plan'
     status: 'active' | 'canceled' | 'expired';
     start_date?: string | null;
     end_date?: string | null;
@@ -200,7 +206,7 @@ export const adminUserSubscriptionsAPI = {
   update: (
     id: number,
     payload: Partial<{
-      plan_key: 'basic' | 'standard' | 'premium'; // hoặc 'plan'
+      plan_key: 'basic' | 'premium' | 'vip'; // hoặc 'plan'
       status: 'active' | 'canceled' | 'expired';
       start_date: string | null;
       end_date: string | null;

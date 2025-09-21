@@ -20,6 +20,7 @@ export default function UserManage({ roleFilter }: UserManageProps) {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [selectedRowId, setSelectedRowId] = useState<number | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<Partial<User & { password: string }>>({});
   const [meta, setMeta] = useState<any>(null);
@@ -155,7 +156,11 @@ export default function UserManage({ roleFilter }: UserManageProps) {
                 );
               })
               .map((user, index) => (
-              <tr key={user.id} className="text-center hover:bg-gray-50 transition">
+              <tr
+                key={user.id}
+                className={`text-center transition cursor-pointer ${selectedRowId===user.id ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
+                onClick={() => setSelectedRowId(prev => prev===user.id ? null : user.id)}
+              >
                 <td className="border p-2">{(meta?.from ?? 0) + index}</td>
                 <td className="border p-2">{user.name || "(No name)"}</td>
                 <td className="border p-2">{user.email}</td>
@@ -164,22 +169,24 @@ export default function UserManage({ roleFilter }: UserManageProps) {
                   {new Date(user.created_at).toLocaleString()}
                 </td>
                 <td className="border p-2 space-x-2">
-                  <button
-                    onClick={() => {
-                      setSelectedUser(user);
-                      setForm(user);
-                      setShowForm(true);
-                    }}
-                    className="px-3 py-1 bg-yellow-500 text-white rounded hover:brightness-105"
-                  >
-                    Edit
-                  </button>
-                  <button
-                    onClick={() => deleteUser(user.id)}
-                    className="px-3 py-1 bg-red-500 text-white rounded hover:brightness-105"
-                  >
-                    Delete
-                  </button>
+                  {selectedRowId===user.id ? (
+                    <>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setSelectedUser(user); setForm(user); setShowForm(true); }}
+                        className="px-3 py-1 bg-yellow-500 text-white rounded hover:brightness-105"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); deleteUser(user.id); }}
+                        className="px-3 py-1 bg-red-500 text-white rounded hover:brightness-105"
+                      >
+                        Delete
+                      </button>
+                    </>
+                  ) : (
+                    <span className="text-xs text-zinc-500">Click row to select</span>
+                  )}
                 </td>
               </tr>
             ))}

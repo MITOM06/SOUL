@@ -34,6 +34,7 @@ export default function UserPanelLayout({
 
   const userOnlyLinks = [
     { href: '/favourites', label: 'Favourites' },
+    { href: '/library', label: 'Library' },
     { href: '/continues', label: 'Continues' },
     { href: '/orders', label: 'My Orders' },
     { href: '/payment-history', label: 'My Payment' },

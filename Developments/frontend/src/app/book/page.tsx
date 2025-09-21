@@ -232,13 +232,26 @@ export default function BooksListPage() {
   const [items, setItems] = useState<ProductApi[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [minVND, setMinVND] = useState<string>('');
+  const [maxVND, setMaxVND] = useState<string>('');
 
   useEffect(() => {
     const ac = new AbortController();
     (async () => {
       try {
         setLoading(true); setError(null);
-        const res = await fetch(`${API_BASE}/v1/catalog/products?type=ebook&per_page=200`, { signal: ac.signal });
+        const params = new URLSearchParams({ type: 'ebook', per_page: '200' });
+        const min = Number(minVND);
+        const max = Number(maxVND);
+        if (!Number.isNaN(min) && min > 0) params.set('min_price', String(min*100));
+        if (!Number.isNaN(max) && max > 0) params.set('max_price', String(max*100));
+        if (!Number.isNaN(min) && !Number.isNaN(max) && min && max && max < min) {
+          setError('Max price must be ≥ Min price');
+          setItems([]);
+          setLoading(false);
+          return;
+        }
+        const res = await fetch(`${API_BASE}/v1/catalog/products?${params.toString()}`, { signal: ac.signal });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const j = await res.json();
         setItems(j?.data?.items || []);
@@ -249,7 +262,7 @@ export default function BooksListPage() {
       }
     })();
     return () => ac.abort();
-  }, []);
+  }, [minVND, maxVND]);
 
   // Normalize
   const books = useMemo(() => {
@@ -269,6 +282,14 @@ export default function BooksListPage() {
     <section className="space-y-10">
       <BooksHero items={books.slice(0, 12)} loading={loading} />
       <SectionHeader title="Books" />
+      <div className="px-4 md:px-8">
+        <div className="flex items-center gap-2">
+          <input type="number" value={minVND} onChange={e=>setMinVND(e.target.value)} placeholder="Min ₫" className="w-28 border rounded px-2 py-1" />
+          <span>–</span>
+          <input type="number" value={maxVND} onChange={e=>setMaxVND(e.target.value)} placeholder="Max ₫" className="w-28 border rounded px-2 py-1" />
+          <span className="text-xs text-gray-500">(Filters apply instantly)</span>
+        </div>
+      </div>
 
       {/* Category sections (each category is a row like on Home) */}
       {categories.map((cat) => {

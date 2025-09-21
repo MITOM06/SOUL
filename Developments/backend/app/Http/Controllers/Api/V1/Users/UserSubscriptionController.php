@@ -34,18 +34,22 @@ class UserSubscriptionController extends Controller
         $request->merge(['plan_key' => $planKey]);
 
         $request->validate([
-            'plan_key' => ['required', Rule::in(['basic', 'premium', 'vip', 'standard'])],
+            'plan_key' => ['required', Rule::in(['basic', 'premium', 'vip'])],
         ]);
 
         $pricing = [
-            'basic'    => 0,
-            'standard' => 9900,
-            'premium'  => 19900,
-            'vip'      => 29900,
+            'basic'   => 0,
+            'premium' => 19900,
+            'vip'     => 29900,
         ];
 
         $now = Carbon::now();
         $end = (clone $now)->addMonth();
+
+        // Ensure only one active subscription: cancel others before creating
+        UserSubscription::where('user_id', $user->id)
+            ->where('status', 'active')
+            ->update(['status' => 'canceled']);
 
         $sub = UserSubscription::create([
             'user_id'     => $user->id,

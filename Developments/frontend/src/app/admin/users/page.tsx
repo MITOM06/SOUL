@@ -11,6 +11,7 @@ import { demoUsers, DemoUser } from '@/data/demoUsers';
 export default function AdminUserManagementPage() {
   // Make a copy of the demo users so we can update state locally.
   const [users, setUsers] = useState<DemoUser[]>(demoUsers.map((u) => ({ ...u })));
+  const [selectedId, setSelectedId] = useState<number | null>(null);
 
   const toggleBlock = (id: number) => {
     setUsers((prev) =>
@@ -45,25 +46,35 @@ export default function AdminUserManagementPage() {
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
             {users.map((u, idx) => (
-              <tr key={u.id} className="hover:bg-gray-50">
+              <tr
+                key={u.id}
+                className={`hover:bg-gray-50 cursor-pointer ${selectedId===u.id ? 'bg-blue-50' : ''}`}
+                onClick={() => setSelectedId(prev => prev===u.id ? null : u.id)}
+              >
                 <td className="px-4 py-2 text-sm text-gray-500">{idx + 1}</td>
                 <td className="px-4 py-2 text-sm font-medium text-gray-900">{u.name}</td>
                 <td className="px-4 py-2 text-sm text-gray-900">{u.email}</td>
                 <td className="px-4 py-2 text-sm text-gray-900 capitalize">{u.role}</td>
                 <td className="px-4 py-2 text-sm text-gray-900 capitalize">{u.status}</td>
                 <td className="px-4 py-2 text-sm">
-                  <button
-                    onClick={() => toggleRole(u.id)}
-                    className="mr-2 px-2 py-1 bg-blue-500 text-white rounded"
-                  >
-                    {u.role === 'user' ? 'Promote' : 'Demote'}
-                  </button>
-                  <button
-                    onClick={() => toggleBlock(u.id)}
-                    className="px-2 py-1 bg-red-500 text-white rounded"
-                  >
-                    {u.status === 'active' ? 'Block' : 'Unblock'}
-                  </button>
+                  {selectedId===u.id ? (
+                    <>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); toggleRole(u.id); }}
+                        className="mr-2 px-2 py-1 bg-blue-500 text-white rounded"
+                      >
+                        {u.role === 'user' ? 'Promote' : 'Demote'}
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); toggleBlock(u.id); }}
+                        className="px-2 py-1 bg-red-500 text-white rounded"
+                      >
+                        {u.status === 'active' ? 'Block' : 'Unblock'}
+                      </button>
+                    </>
+                  ) : (
+                    <span className="text-xs text-zinc-500">Click row to select</span>
+                  )}
                 </td>
               </tr>
             ))}

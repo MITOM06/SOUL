@@ -7,7 +7,7 @@ import { adminUserSubscriptionsAPI } from "@/lib/api";
 type Sub = {
   id: number;
   user_id: number;
-  plan: "basic" | "standard" | "premium";
+  plan: "basic" | "premium" | "vip";
   status: "active" | "canceled" | "expired";
   start_date?: string | null;
   end_date?: string | null;
@@ -23,6 +23,9 @@ export default function AdminUserSubsPage() {
   const [showForm, setShowForm] = useState(false);
   const [page, setPage] = useState(1);
   const perPage = 15;
+  const [planFilter, setPlanFilter] = useState<"all"|"basic"|"premium"|"vip">('all');
+  const [statusFilter, setStatusFilter] = useState<"all"|"active"|"canceled"|"expired"|"pending">('all');
+  const [selectedId, setSelectedId] = useState<number | null>(null);
 
   // form nhỏ để thêm/sửa
   const emptyForm: Partial<Sub> = {
@@ -143,6 +146,27 @@ export default function AdminUserSubsPage() {
             />
             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">🔎</span>
           </div>
+          <select
+            value={statusFilter}
+            onChange={(e)=>{ setStatusFilter(e.target.value as any); setPage(1); }}
+            className="px-3 py-2 border rounded-lg"
+          >
+            <option value="all">All status</option>
+            <option value="active">Active</option>
+            <option value="canceled">Canceled</option>
+            <option value="expired">Expired</option>
+            <option value="pending">Pending</option>
+          </select>
+          <select
+            value={planFilter}
+            onChange={(e)=>{ setPlanFilter(e.target.value as any); setPage(1); }}
+            className="px-3 py-2 border rounded-lg"
+          >
+            <option value="all">All plans</option>
+            <option value="basic">Basic</option>
+            <option value="premium">Premium</option>
+            <option value="vip">VIP</option>
+          </select>
           <button
             onClick={() => { setEditingId(null); setForm(emptyForm); setShowForm(true); }}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:brightness-110"
@@ -179,9 +203,15 @@ export default function AdminUserSubsPage() {
                 const name = (s.user?.name || '').toLowerCase();
                 return email.includes(q) || name.includes(q);
               })
+              .filter(s => statusFilter==='all' ? true : s.status === statusFilter)
+              .filter(s => planFilter==='all' ? true : s.plan === planFilter)
               .slice((page-1)*perPage, page*perPage)
               .map((s, idx) => (
-                <tr key={s.id} className="text-left hover:bg-gray-50 transition">
+                <tr
+                  key={s.id}
+                  className={`text-left transition cursor-pointer ${selectedId===s.id ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
+                  onClick={() => setSelectedId(prev => prev === s.id ? null : s.id)}
+                >
                   <td className="px-4 py-2 border">{(page-1)*perPage + idx + 1}</td>
                   <td className="px-4 py-2 border">{s.user?.name || s.user?.email || s.user_id}</td>
                   <td className="px-4 py-2 border">{s.plan}</td>
@@ -190,10 +220,14 @@ export default function AdminUserSubsPage() {
                   <td className="px-4 py-2 border">{s.end_date?.slice(0,10) ?? '-'}</td>
                   <td className="px-4 py-2 border">{((s.price_cents ?? 0)/100).toFixed(2)}</td>
                   <td className="px-4 py-2 border">
-                    <div className="flex gap-2">
-                      <button className="px-3 py-1 bg-yellow-500 text-white rounded" onClick={() => startEdit(s)}>Edit</button>
-                      <button className="px-3 py-1 bg-red-600 text-white rounded" onClick={() => onDelete(s.id)}>Delete</button>
-                    </div>
+                    {selectedId === s.id ? (
+                      <div className="flex gap-2">
+                        <button className="px-3 py-1 bg-yellow-500 text-white rounded" onClick={(e) => { e.stopPropagation(); startEdit(s); }}>Edit</button>
+                        <button className="px-3 py-1 bg-red-600 text-white rounded" onClick={(e) => { e.stopPropagation(); onDelete(s.id); }}>Delete</button>
+                      </div>
+                    ) : (
+                      <span className="text-xs text-zinc-500">Click row to select</span>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -213,13 +247,17 @@ export default function AdminUserSubsPage() {
         <span className="text-sm text-zinc-600">Page {page}</span>
         <button
           className="px-3 py-1 border rounded disabled:opacity-50"
-          disabled={items.filter((s) => {
+          disabled={items
+          .filter((s) => {
             if (!query.trim()) return true;
             const q = query.toLowerCase();
             const email = s.user?.email?.toLowerCase() || '';
             const name = (s.user?.name || '').toLowerCase();
             return email.includes(q) || name.includes(q);
-          }).length <= page*perPage}
+          })
+          .filter(s => statusFilter==='all' ? true : s.status === statusFilter)
+          .filter(s => planFilter==='all' ? true : s.plan === planFilter)
+          .length <= page*perPage}
           onClick={() => setPage(p => p+1)}
         >Next</button>
       </div>
@@ -257,8 +295,8 @@ export default function AdminUserSubsPage() {
                     className="mt-1 w-full border px-3 py-2 rounded"
                   >
                     <option value="basic">basic</option>
-                    <option value="standard">standard</option>
                     <option value="premium">premium</option>
+                    <option value="vip">vip</option>
                   </select>
                 </div>
               </div>
