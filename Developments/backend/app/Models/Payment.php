@@ -13,10 +13,10 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 class Payment extends Model
 {
     use HasFactory;
-     
+
     // 🔹 Định nghĩa các trạng thái
     public const STATUS_INITIATED = 'initiated'; // mới khởi tạo
-    public const STATUS_SUCCESS   = 'success';  
+    public const STATUS_SUCCESS   = 'success';
     public const STATUS_FAILED    = 'failed';    // thất bại
     public const STATUS_PENDING   = 'pending';   // đang chờ (nếu cần)
 
@@ -31,11 +31,14 @@ class Payment extends Model
         'status',
         'provider_payment_id',
         'raw_response',
+        'order_snapshot',
     ];
-
+    
+    
     protected $casts = [
         'amount_cents' => 'integer',
         'raw_response' => 'array',
+        'order_snapshot' => 'array',
     ];
 
     public function order()

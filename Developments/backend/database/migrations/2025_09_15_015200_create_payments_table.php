@@ -22,10 +22,12 @@ class CreatePaymentsTable extends Migration
 
             $table->index('provider_payment_id', 'idx_pay_provider_payment_id');
             $table->index('order_id', 'idx_pay_order_id');
-
+           
             // FK: đảm bảo migrations tạo orders & users đã chạy hoặc tồn tại
             $table->foreign('order_id')->references('id')->on('orders')->onDelete('set null');
             $table->foreign('user_id')->references('id')->on('users')->onDelete('set null');
+
+            
         });
     }
 

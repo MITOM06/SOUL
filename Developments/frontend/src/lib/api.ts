@@ -117,6 +117,13 @@ export const paymentsAPI = {
 
   getById: (paymentId: number) =>  // 👈 thêm hàm này
     api.get(`/v1/payments/${paymentId}`),
+    // Lấy toàn bộ lịch sử payment (hoặc theo order_id nếu cần)
+  getAll: (orderId?: number) => {
+    if (orderId) {
+      return api.get(`/v1/payment-history?order_id=${orderId}`);
+    }
+    return api.get('/v1/payment-history');
+  },
 };
 /* ======================= ORDERS ======================= */
 export const ordersAPI = {

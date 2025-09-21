@@ -44,12 +44,6 @@ Route::prefix('v1')->group(function () {
     Route::get('products',           [ProductController::class, 'index']);
     Route::get('products/{product}', [ProductController::class, 'show']);
 
-    // ---------------- Payment public ----------------
-    Route::post('payment/checkout', [PaymentController::class, 'checkout']);
-    Route::post('payment/webhook',  [PaymentController::class, 'webhook']);
-    Route::get('payments/{id}', [PaymentController::class, 'showTransaction']);
-    Route::post('payments/{id}/confirm-otp', [PaymentController::class, 'confirmOtp'])
-        ->name('payments.confirm-otp');
 
     // =====================================================
     // 🔹 Routes cần login
@@ -101,8 +95,18 @@ Route::prefix('v1')->group(function () {
         Route::post('subscriptions',          [UserSubController::class, 'store']);
         Route::delete('subscriptions/{id}',   [UserSubController::class, 'destroy']);
 
-            // Subscription checkout
-    Route::post('subscriptions/checkout', [PaymentController::class, 'checkoutSubscription']);
+
+        // ---------------- Payment public ----------------
+        Route::post('payment/checkout', [PaymentController::class, 'checkout']);
+        Route::post('payment/webhook',  [PaymentController::class, 'webhook']);
+        Route::get('payments/{id}', [PaymentController::class, 'showTransaction']);
+        Route::post('payments/{id}/confirm-otp', [PaymentController::class, 'confirmOtp'])
+            ->name('payments.confirm-otp');
+        Route::get('/payment-history', [PaymentController::class, 'history']);
+
+
+        // Subscription checkout
+        Route::post('subscriptions/checkout', [PaymentController::class, 'checkoutSubscription']);
     });
 
     // =====================================================
