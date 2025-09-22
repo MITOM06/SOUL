@@ -1,7 +1,7 @@
-// Favourites page – load user's favourites (product_ids) then fetch product details.
+// Favourites page – load user's favourites and render books/podcasts with nice UX.
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import UserPanelLayout from '@/components/UserPanelLayout';
 import BookCard from '@/components/BookCard';
 import PodcastCard from '@/components/PodcastCard';
@@ -11,10 +11,10 @@ import toast from 'react-hot-toast';
 type ProductType = 'ebook' | 'podcast';
 interface Product {
   id: number;
-  type: ProductType;
+  type: ProductType | string;
   title: string;
   thumbnail_url?: string | null;
-  // optional fields from BE
+  // optional
   category?: string | null;
   metadata?: any;
 }
@@ -27,56 +27,70 @@ export default function FavouritesPage() {
 
   useEffect(() => {
     const ac = new AbortController();
-    (async () => {
-      setLoading(true); setErr(null);
+
+    async function fetchData() {
+      setLoading(true);
+      setErr(null);
       try {
-        // 1) Lấy danh sách ID sp yêu thích
+        // 1) Thử gọi endpoint favourites (dùng wrapper để chấp nhận nhiều shape)
         const favRes = await favouritesAPI.getAll(); // GET /v1/favourites
-        const data = favRes?.data?.data || favRes?.data || {};
-        const ids: number[] = Array.isArray(data.product_ids) ? data.product_ids : [];
+        const raw = favRes?.data?.data ?? favRes?.data ?? {};
 
-        if (!ids.length) { setBooks([]); setPodcasts([]); return; }
+        // CASE A: BE trả sẵn 2 danh sách books/podcasts
+        if (Array.isArray(raw.books) || Array.isArray(raw.podcasts)) {
+          const bs = (raw.books ?? []) as Product[];
+          const ps = (raw.podcasts ?? []) as Product[];
+          setBooks(bs);
+          setPodcasts(ps);
+          return;
+        }
 
-        // 2) Lấy chi tiết từng product (dùng catalog/public)
+        // CASE B: BE trả product_ids => ta fetch chi tiết từng product
+        const ids: number[] = Array.isArray(raw.product_ids) ? raw.product_ids : [];
+        if (!ids.length) {
+          setBooks([]);
+          setPodcasts([]);
+          return;
+        }
+
         const fetchOne = (id: number) =>
-          api.get(`/v1/catalog/products/${id}`, { signal: ac.signal as any })
-             .then(r => (r?.data?.data?.product || r?.data?.data || r?.data) as Product)
-             .catch(() => null);
+          api
+            .get(`/v1/catalog/products/${id}`, { signal: ac.signal as any })
+            .then((r) => (r?.data?.data?.product ?? r?.data?.data ?? r?.data) as Product)
+            .catch(() => null);
 
         const results = await Promise.all(ids.map(fetchOne));
-        const products = results.filter(Boolean) as Product[];
+        const products = (results.filter(Boolean) as Product[]).map((p) => ({
+          ...p,
+          // Chuẩn hoá type
+          type: String(p.type) === 'podcast' ? 'podcast' : 'ebook',
+        }));
 
-        const bs: Product[] = [];
-        const ps: Product[] = [];
-        products.forEach(p => {
-          if (String(p.type) === 'podcast') ps.push(p);
-          else bs.push(p); // mặc định ebook
-        });
-
-        setBooks(bs);
-        setPodcasts(ps);
+        setBooks(products.filter((p) => p.type === 'ebook'));
+        setPodcasts(products.filter((p) => p.type === 'podcast'));
       } catch (e: any) {
         setErr(e?.response?.data?.message || 'Không tải được danh sách yêu thích.');
-        setBooks([]); setPodcasts([]);
+        setBooks([]);
+        setPodcasts([]);
       } finally {
         setLoading(false);
       }
-    })();
+    }
 
+    fetchData();
     return () => ac.abort();
   }, []);
 
   const onRemove = async (productId: number) => {
-    // optimistic
-    setBooks(prev => prev.filter(b => b.id !== productId));
-    setPodcasts(prev => prev.filter(p => p.id !== productId));
+    // Optimistic update
+    setBooks((prev) => prev.filter((b) => b.id !== productId));
+    setPodcasts((prev) => prev.filter((p) => p.id !== productId));
     try {
       await favouritesAPI.remove(productId); // DELETE /v1/favourites/{productId}
       toast.success('Đã xoá khỏi Yêu thích');
     } catch (e: any) {
       toast.error(e?.response?.data?.message || 'Xoá thất bại');
-      // rollback nếu cần: không biết thuộc nhóm nào nên không khôi phục chính xác — reload toàn trang
-      // hoặc gọi lại fetch; đơn giản: reload:
+      // rollback đơn giản: reload
       setTimeout(() => location.reload(), 600);
     }
   };
@@ -109,8 +123,9 @@ export default function FavouritesPage() {
             <Empty text="Bạn chưa lưu sách nào." />
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {books.map(b => (
+              {books.map((b) => (
                 <div key={b.id} className="relative group">
+                  {/* BookCard của bạn có thể dùng prop khác; mình map cover <- thumbnail_url */}
                   <BookCard book={{ ...b, cover: b.thumbnail_url } as any} />
                   <button
                     onClick={() => onRemove(b.id)}
@@ -137,8 +152,9 @@ export default function FavouritesPage() {
             <Empty text="Bạn chưa lưu podcast nào." />
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {podcasts.map(p => (
+              {podcasts.map((p) => (
                 <div key={p.id} className="relative group">
+                  {/* PodcastCard của bạn có thể dùng prop khác; map image <- thumbnail_url */}
                   <PodcastCard podcast={{ ...p, image: p.thumbnail_url } as any} />
                   <button
                     onClick={() => onRemove(p.id)}

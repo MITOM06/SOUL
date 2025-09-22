@@ -6,252 +6,246 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\Order;
 use App\Models\Payment;
-use App\Models\UserSubscription;
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Validation\Rule;
-use Carbon\Carbon;
 
 class PaymentController extends Controller
 {
     /**
-     * Bước 1: User checkout
+     * Checkout – tạo payment (không OTP trong DB, chỉ giả lập).
      */
-  public function checkout(Request $request)
-{
-    $request->validate([
-        'order_id' => 'required|exists:orders,id',
-        'provider' => 'required|string',
-    ]);
-
-    $order = Order::findOrFail($request->order_id);
-
-    $payment = Payment::create([
-        'order_id' => $order->id,
-        'user_id' => $request->user()->id ?? null,
-        'provider' => $request->provider,
-        'amount_cents' => $order->total_cents,
-        'currency' => 'VND',
-        'status' => Payment::STATUS_INITIATED, // 🔥 chưa thành công
-    ]);
-
-    // Fake QR
-    $qrData = "Thanh toán cho đơn #{$order->id}";
-    $qrUrl = "https://api.qrserver.com/v1/create-qr-code/?data=" . urlencode($qrData) . "&size=200x200";
-
-    return response()->json([
-        'success' => true,
-        'payment_id' => $payment->id,
-        'order_id' => $order->id,
-        'provider' => $request->provider,
-        'amount' => $order->total_cents,
-        'currency' => 'VND',
-        'qr_url' => $qrUrl,
-    ]);
-}
-    /**
-     * Bước 2: Gateway gọi webhook báo kết quả
-     */
-    public function webhook(Request $request)
+    public function checkout(Request $request)
     {
-        $payment = Payment::where('provider_payment_id', $request->input('transaction_id'))->first();
-
-        if (!$payment) {
-            return response()->json(['error' => 'Payment not found'], 404);
-        }
-
-        $status = $request->input('status'); // success | failed | refunded
-
-        $payment->update([
-            'status' => $status,
-            'raw_response' => $request->all(),
+        $request->validate([
+            'order_id' => 'required|exists:orders,id',
+            'provider' => 'required|string',
         ]);
 
-        // Nếu thành công → update order thành "paid"
-        if ($status === Payment::STATUS_SUCCESS) {
-            if ($payment->order) {
-                $payment->order->update(['status' => 'paid']);
-            }
-            if ($payment->subscription) {
-                // activate linked subscription and ensure only one active per user
-                $now = Carbon::now();
-                $sub = $payment->subscription;
-                UserSubscription::where('user_id', $sub->user_id)
-                    ->where('id', '!=', $sub->id)
-                    ->where('status', 'active')
-                    ->update(['status' => 'canceled']);
+        $order = Order::findOrFail($request->order_id);
 
-                $sub->update([
-                    'status' => 'active',
-                    'start_date' => $now,
-                    'end_date' => (clone $now)->addMonth(),
-                ]);
-            }
-        }
+        $payment = Payment::create([
+            'order_id'     => $order->id,
+            'user_id'      => $request->user()->id ?? null,
+            'provider'     => $request->provider,
+            'amount_cents' => $order->total_cents,
+            'currency'     => 'VND',
+            'status'       => Payment::STATUS_INITIATED,
+        ]);
 
-        return response()->json(['success' => true]);
+        // Fake QR
+        $qrData = url("/checkout/otp?payment_id={$payment->id}");
+        $qrUrl  = "https://api.qrserver.com/v1/create-qr-code/?data=" . urlencode($qrData) . "&size=200x200";
+
+        return response()->json([
+            'success'    => true,
+            'status'     => 'initiated',
+            'payment_id' => $payment->id,
+            'order_id'   => $order->id,
+            'provider'   => $request->provider,
+            'amount'     => $order->total_cents,
+            'currency'   => 'VND',
+            'qr_url'     => $qrUrl,
+            'otp_demo'   => '123456', // demo OTP
+            'message'    => 'Quét QR và nhập OTP để hoàn tất thanh toán',
+        ]);
     }
 
-    public function confirm(Request $request, $id)
+    /**
+     * Confirm OTP – xác nhận thanh toán, lưu snapshot order.
+     */
+    public function confirmOtp(Request $request, $id)
     {
+        $request->validate([
+            'otp' => 'required|string'
+        ]);
+
         $payment = Payment::findOrFail($id);
 
-        $status = $request->input('status'); // 'success' hoặc 'failed'
-
-        if ($status === 'success') {
-            $payment->status = Payment::STATUS_SUCCESS;  
-            $payment->save();
-
-            // Mirror webhook success side-effects
-            if ($payment->order) {
-                $payment->order->update(['status' => 'paid']);
-            }
-            if ($payment->subscription) {
-                $now = Carbon::now();
-                $sub = $payment->subscription;
-                UserSubscription::where('user_id', $sub->user_id)
-                    ->where('id', '!=', $sub->id)
-                    ->where('status', 'active')
-                    ->update(['status' => 'canceled']);
-
-                $sub->update([
-                    'status' => 'active',
-                    'start_date' => $now,
-                    'end_date' => (clone $now)->addMonth(),
-                ]);
-            }
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Thanh toán thành công'
-            ]);
-        } else {
-            $payment->status = Payment::STATUS_FAILED;   
-            $payment->save();
-
+        if ($payment->status !== Payment::STATUS_INITIATED) {
             return response()->json([
                 'success' => false,
-                'message' => 'Thanh toán thất bại'
+                'message' => 'Giao dịch đã xử lý'
+            ], 400);
+        }
+
+        $otp = $request->input('otp');
+
+        // ❌ Sai OTP
+        if ($otp !== '123456') {
+            return response()->json([
+                'success' => false,
+                'status'  => 'failed',
+                'message' => 'OTP không đúng',
             ]);
         }
-    }
 
-    public function autoSuccess($id)
-{
-    $payment = Payment::findOrFail($id);
-    $payment->status = Payment::STATUS_SUCCESS;
-    $payment->save();
+        // ✅ Đúng OTP → success
+        // ✅ Đúng OTP → success
+        $order = $payment->order;
 
-    // Mirror webhook success side-effects
-    if ($payment->order) {
-        $payment->order->update(['status' => 'paid']);
-    }
-    if ($payment->subscription) {
-        $now = Carbon::now();
-        $sub = $payment->subscription;
-        UserSubscription::where('user_id', $sub->user_id)
-            ->where('id', '!=', $sub->id)
-            ->where('status', 'active')
-            ->update(['status' => 'canceled']);
-
-        $sub->update([
-            'status' => 'active',
-            'start_date' => $now,
-            'end_date' => (clone $now)->addMonth(),
-        ]);
-    }
-
-    return response()->json([
-        'success' => true,
-        'message' => 'Thanh toán thành công (tự động)',
-    ]);
-}
-
-public function listTransactions(Request $request)
-{
-    $user = $request->user();
-    $transactions = Payment::where('user_id', $user->id)
-        ->orderByDesc('created_at')
-        ->get();
-
-    return response()->json(['success' => true, 'data' => $transactions]);
-}
-
-public function showTransaction($id, Request $request)
-{
-    $user = $request->user();
-    $transaction = Payment::where('user_id', $user->id)->findOrFail($id);
-
-    return response()->json(['success' => true, 'data' => $transaction]);
-}
-
-    /**
-     * Checkout for subscriptions: create a Payment + pending subscription with QR info.
-     */
-    public function checkoutSubscription(Request $request)
-    {
-        $user = $request->user() ?? Auth::user();
-
-        $request->validate([
-            'plan_key' => ['required', Rule::in(['basic','premium','vip'])],
-            'provider' => ['nullable','string'],
-        ]);
-
-        $planKey = $request->input('plan_key');
-        $provider = $request->input('provider', 'fake');
-
-        $pricing = [
-            'basic'   => 0,
-            'premium' => 19900,
-            'vip'     => 29900,
-        ];
-        $amount = $pricing[$planKey] ?? 0;
-
-        // Create a payment record (no order)
-        $payment = Payment::create([
-            'order_id' => null,
-            'user_id' => $user?->id,
-            'provider' => $provider,
-            'amount_cents' => $amount,
-            'currency' => 'VND',
-            'status' => Payment::STATUS_INITIATED,
-        ]);
-
-        // Create (or upsert) a subscription linked to this payment
-        $now = Carbon::now();
-        // If free (basic), immediately cancel other actives and set active
-        if ($amount == 0) {
-            UserSubscription::where('user_id', $user->id)
-                ->where('status', 'active')
-                ->update(['status' => 'canceled']);
+        $snapshot = null;
+        if ($order) {
+            $snapshot = [
+                'order_id'    => $order->id,
+                'total_cents' => $order->total_cents,
+                'status'      => $order->status,
+                'items'       => $order->items->map(function ($item) {
+                    return [
+                        'product_id'       => $item->product_id,
+                        'title'            => $item->product->title,
+                        'quantity'         => $item->quantity,
+                        'unit_price_cents' => $item->unit_price_cents,
+                    ];
+                })->toArray(),
+            ];
         }
 
-        $sub = UserSubscription::create([
-            'user_id'     => $user->id,
-            'plan_key'    => $planKey,
-            'status'      => $amount > 0 ? 'pending' : 'active',
-            'start_date'  => $now,
-            'end_date'    => (clone $now)->addMonth(),
-            'price_cents' => $amount,
-            'payment_id'  => $payment->id,
+        $payment->update([
+            'status'         => Payment::STATUS_SUCCESS,
+            'order_snapshot' => $snapshot,
         ]);
 
-        // Generate simple QR code
-        $qrData = "Thanh toán gói {$planKey} cho user #{$user->id} (payment #{$payment->id})";
-        $qrUrl = "https://api.qrserver.com/v1/create-qr-code/?data=" . urlencode($qrData) . "&size=200x200";
+        // 👉 Xoá order gốc (tuỳ chọn)
+        if ($order) {
+            $order->delete();
+        }
 
         return response()->json([
             'success' => true,
-            'payment_id' => $payment->id,
-            'plan_key' => $planKey,
-            'amount' => $amount,
-            'currency' => 'VND',
-            'provider' => $provider,
-            'qr_url' => $qrUrl,
-            'subscription_id' => $sub->id,
-            'status' => $sub->status,
+            'status'  => 'success',
+            'message' => 'Thanh toán thành công bằng OTP',
         ]);
     }
 
+    /**
+     * Lịch sử thanh toán của user.
+     */
+    public function history(Request $request)
+    {
+        $user = $request->user();
 
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized'
+            ], 401);
+        }
 
+        $payments = Payment::where('user_id', $user->id)
+            ->orderBy('created_at', 'desc')
+            ->get()
+            ->map(function ($payment) {
+                return [
+                    'id'            => $payment->id,
+                    'order_id'      => $payment->order_id,
+                    'provider'      => $payment->provider,
+                    'amount_cents'  => $payment->amount_cents,
+                    'currency'      => $payment->currency,
+                    'status'        => $payment->status,
+                    'created_at'    => $payment->created_at,
+                    'order_snapshot' => $payment->order_snapshot, // 👈 đảm bảo xuất ra
+                ];
+            });
+
+        return response()->json([
+            'success' => true,
+            'history' => $payments
+        ]);
+    }
+
+   public function adminHistory(Request $request)
+{
+    $query = Payment::with(['user'])
+        ->orderBy('created_at', 'desc');
+
+    // lọc theo status
+    if ($request->filled('status')) {
+        $query->where('status', $request->status);
+    }
+
+    // lọc theo provider
+    if ($request->filled('provider')) {
+        $query->where('provider', $request->provider);
+    }
+
+    // lọc theo user_id
+    if ($request->filled('user_id')) {
+        $query->where('user_id', $request->user_id);
+    }
+
+    // lọc theo date range
+    if ($request->filled('from') && $request->filled('to')) {
+        $query->whereBetween('created_at', [$request->from, $request->to]);
+    }
+
+    // 🔥 Thêm lọc theo query (tên/email user)
+    if ($request->filled('query')) {
+        $q = $request->query('query');
+        $query->whereHas('user', function ($sub) use ($q) {
+            $sub->where('name', 'like', "%{$q}%")
+                ->orWhere('email', 'like', "%{$q}%");
+        });
+    }
+
+    $payments = $query->paginate($request->get('per_page', 20));
+
+    return response()->json([
+        'success' => true,
+        'data'    => $payments,
+    ]);
+}
+
+    /**
+     * Admin: Danh sách tất cả payment.
+     */
+
+public function adminIndex(Request $request)
+{
+    $query = Payment::with('user')->orderByDesc('created_at');
+
+    if ($request->filled('status')) {
+        $query->where('status', $request->string('status'));
+    }
+    if ($request->filled('provider')) {
+        $query->where('provider', $request->string('provider'));
+    }
+    if ($request->filled('user_id')) {
+        $query->where('user_id', (int) $request->input('user_id'));
+    }
+    // tìm theo tên/email user
+    if ($request->filled('query')) {
+        $q = $request->query('query');
+        $query->whereHas('user', function ($sub) use ($q) {
+            $sub->where('name', 'like', "%{$q}%")
+                ->orWhere('email', 'like', "%{$q}%");
+        });
+    }
+    // from/to (optional)
+    if ($request->filled('from') || $request->filled('to')) {
+        $from = $request->input('from'); // 'YYYY-MM-DD' hoặc datetime
+        $to   = $request->input('to');
+        if ($from && $to) {
+            $query->whereBetween('created_at', [$from, $to]);
+        } elseif ($from) {
+            $query->where('created_at', '>=', $from);
+        } elseif ($to) {
+            $query->where('created_at', '<=', $to);
+        }
+    }
+
+    $perPage  = (int) $request->get('per_page', 20);
+    $payments = $query->paginate($perPage)->withQueryString();
+
+    // trả paginate RAW: { current_page, data: [...], last_page, ... }
+    return response()->json($payments);
+}
+
+public function adminDelete($id)
+{
+    $payment = Payment::findOrFail($id);
+    $payment->delete();
+
+    return response()->json([
+        'success' => true,
+        'message' => 'Payment deleted successfully',
+    ]);
+}
 }

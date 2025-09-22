@@ -1,13 +1,17 @@
 // Layout component for all admin pages. Provides a sidebar with links and protects routes.
-'use client';
+"use client";
 
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { useAuth } from '@/contexts/AuthContext';
-import { normalizeRole } from '@/lib/role';
-import React, { useState, useRef } from 'react';
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { useAuth } from "@/contexts/AuthContext";
+import { normalizeRole } from "@/lib/role";
+import React, { useState, useRef } from "react";
 
-export default function AdminLayout({ children }: { children: React.ReactNode }) {
+export default function AdminLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const { user, isLoading } = useAuth();
   const pathname = usePathname();
   const role = normalizeRole(user);
@@ -23,13 +27,18 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }
 
   // Guard non-admin
-  if (!user || role !== 'admin') {
+  if (!user || role !== "admin") {
     return (
       <div className="min-h-screen grid place-items-center p-8 text-center">
         <div>
           <h1 className="text-2xl font-bold mb-2">Unauthorized</h1>
-        <p className="text-gray-600">You must be an admin to access this page.</p>
-          <Link href="/" className="inline-block mt-4 px-4 py-2 bg-blue-600 text-white rounded">
+          <p className="text-gray-600">
+            You must be an admin to access this page.
+          </p>
+          <Link
+            href="/"
+            className="inline-block mt-4 px-4 py-2 bg-blue-600 text-white rounded"
+          >
             Back to Home
           </Link>
         </div>
@@ -38,13 +47,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }
 
   const links = [
-    { href: '/admin/dashboard', label: 'Dashboard' },
-    { href: '/admin/books', label: 'Book Management' },
-    { href: '/admin/podcasts', label: 'Podcast Management' },
-    { href: '/admin/orders', label: 'Orders' },
+    { href: "/admin/dashboard", label: "Dashboard" },
+    { href: "/admin/books", label: "Book Management" },
+    { href: "/admin/podcasts", label: "Podcast Management" },
+    { href: "/admin/orders", label: "Orders" },
+    { href: "/admin/payments", label: "Payment History" },
     // Users Sub (quản lý user_subscriptions)
-    { href: '/admin/users-sub', label: 'Users Sub' },
-    { href: '/admin/notifications', label: 'Notifications' },
+    { href: "/admin/users-sub", label: "Users Sub" },
+    { href: "/admin/notifications", label: "Notifications" },
   ];
 
   return (
@@ -55,22 +65,29 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <div className="font-extrabold text-xl">Admin</div>
           <button
             className="lg:hidden px-3 py-2 rounded bg-gray-100"
-            onClick={() => setOpen(v => !v)}
+            onClick={() => setOpen((v) => !v)}
             aria-label="Toggle menu"
           >
             Menu
           </button>
         </div>
 
-        <nav className={`px-2 py-3 ${open ? 'block' : 'hidden lg:block'} flex-1`}> {/* grow */}
-          {links.map(link => {
-            const active = pathname === link.href || pathname.startsWith(link.href + '/');
+        <nav
+          className={`px-2 py-3 ${open ? "block" : "hidden lg:block"} flex-1`}
+        >
+          {" "}
+          {/* grow */}
+          {links.map((link) => {
+            const active =
+              pathname === link.href || pathname.startsWith(link.href + "/");
             return (
               <Link
                 key={link.href}
                 href={link.href}
                 className={`block px-3 py-2 rounded mb-1 transition ${
-                  active ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-gray-700 hover:bg-gray-50'
+                  active
+                    ? "bg-blue-50 text-blue-700 font-semibold"
+                    : "text-gray-700 hover:bg-gray-50"
                 }`}
                 onClick={() => setOpen(false)}
               >
@@ -78,22 +95,19 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               </Link>
             );
           })}
-
           {/* Roles dropdown with stable hover/click behavior */}
           <StableDropdown pathname={pathname} />
-
           {/* Back to Home just below Roles */}
           <Link
             href="/"
             className={`mt-1 block px-3 py-2 rounded text-gray-700 hover:bg-gray-50 transition ${
-              pathname === '/' ? 'bg-blue-50 text-blue-700 font-semibold' : ''
+              pathname === "/" ? "bg-blue-50 text-blue-700 font-semibold" : ""
             }`}
             onClick={() => setOpen(false)}
           >
             Back to Home
           </Link>
         </nav>
-        
       </aside>
 
       {/* Content */}
@@ -120,10 +134,9 @@ function StableDropdown({ pathname }: { pathname: string }) {
     closeTimer.current = window.setTimeout(() => setOpen(false), 120);
   };
 
-  const itemBase =
-    'block px-3 py-2 hover:bg-gray-50';
+  const itemBase = "block px-3 py-2 hover:bg-gray-50";
   const isActive = (href: string) =>
-    pathname === href || pathname.startsWith(href + '/');
+    pathname === href || pathname.startsWith(href + "/");
 
   return (
     <div
@@ -133,9 +146,9 @@ function StableDropdown({ pathname }: { pathname: string }) {
     >
       <button
         type="button"
-        onClick={() => setOpen(v => !v)}
+        onClick={() => setOpen((v) => !v)}
         className={`w-full text-left px-3 py-2 rounded-md font-medium transition ${
-          open ? 'bg-gray-100 text-blue-600' : 'text-gray-700 hover:bg-gray-100'
+          open ? "bg-gray-100 text-blue-600" : "text-gray-700 hover:bg-gray-100"
         }`}
       >
         Roles
@@ -145,14 +158,22 @@ function StableDropdown({ pathname }: { pathname: string }) {
         <div className="absolute left-2 top-full w-56 bg-white border rounded-md shadow z-20 overflow-hidden animate-fade-in">
           <Link
             href="/admin/role/admin"
-            className={`${itemBase} ${isActive('/admin/role/admin') ? 'font-semibold text-blue-600' : 'text-gray-700'}`}
+            className={`${itemBase} ${
+              isActive("/admin/role/admin")
+                ? "font-semibold text-blue-600"
+                : "text-gray-700"
+            }`}
             onClick={() => setOpen(false)}
           >
             Admins
           </Link>
           <Link
             href="/admin/role/users"
-            className={`${itemBase} ${isActive('/admin/role/users') ? 'font-semibold text-blue-600' : 'text-gray-700'}`}
+            className={`${itemBase} ${
+              isActive("/admin/role/users")
+                ? "font-semibold text-blue-600"
+                : "text-gray-700"
+            }`}
             onClick={() => setOpen(false)}
           >
             Users

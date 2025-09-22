@@ -9,17 +9,22 @@ use App\Models\UserSubscription;
 
 class UserSubscriptionController extends Controller
 {
+    /**
+     * Lấy danh sách tất cả subscriptions
+     * Có thể filter theo status (?status=active)
+     */
     public function index(Request $request)
     {
         $query = UserSubscription::with('user')->orderByDesc('id');
+
         if ($request->filled('status')) {
             $st = $request->query('status');
-            if (in_array($st, ['active','canceled','expired','pending'])) {
+            if (in_array($st, ['active', 'canceled', 'expired', 'pending'])) {
                 $query->where('status', $st);
             }
         }
-        // Trả về mảng thuần (FE tự phân trang client-side 15 dòng)
-        $subs = $query->get();
+
+        $subs = $query->get(); // FE tự phân trang client-side
 
         return response()->json([
             'success' => true,
@@ -27,18 +32,25 @@ class UserSubscriptionController extends Controller
         ]);
     }
 
+    /**
+     * Xem chi tiết 1 subscription
+     */
     public function show($id)
     {
         $sub = UserSubscription::with('user')->findOrFail($id);
+
         return response()->json([
             'success' => true,
             'data'    => $sub,
         ]);
     }
 
+    /**
+     * Tạo mới subscription
+     */
     public function store(Request $request)
     {
-        // chấp nhận cả plan_key và plan
+        // Chấp nhận cả plan_key và plan
         $planKey = $request->input('plan_key', $request->input('plan'));
         $request->merge(['plan_key' => $planKey]);
 
@@ -52,8 +64,8 @@ class UserSubscriptionController extends Controller
             'payment_id'  => ['nullable', 'exists:payments,id'],
         ]);
 
-        // If creating an active sub, cancel other active subs of this user first
-        if (($data['status'] ?? null) === 'active') {
+        // Nếu tạo active → hủy các subscription active khác
+        if ($data['status'] === 'active') {
             UserSubscription::where('user_id', $data['user_id'])
                 ->where('status', 'active')
                 ->update(['status' => 'canceled']);
@@ -63,16 +75,19 @@ class UserSubscriptionController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Created.',
+            'message' => 'Subscription created',
             'data'    => $sub,
         ], 201);
     }
 
+    /**
+     * Cập nhật subscription
+     */
     public function update(Request $request, $id)
     {
         $sub = UserSubscription::findOrFail($id);
 
-        // chấp nhận cả plan_key và plan
+        // Chấp nhận cả plan_key và plan
         $planKey = $request->has('plan_key') ? $request->input('plan_key')
                   : ($request->has('plan') ? $request->input('plan') : null);
 
@@ -89,7 +104,7 @@ class UserSubscriptionController extends Controller
             'payment_id'  => ['nullable', 'exists:payments,id'],
         ]);
 
-        // If setting to active, cancel other actives for the same user
+        // Nếu set thành active → hủy active khác
         if (($data['status'] ?? null) === 'active') {
             UserSubscription::where('user_id', $sub->user_id)
                 ->where('id', '!=', $sub->id)
@@ -101,11 +116,14 @@ class UserSubscriptionController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Updated.',
+            'message' => 'Subscription updated',
             'data'    => $sub,
         ]);
     }
 
+    /**
+     * Xóa subscription
+     */
     public function destroy($id)
     {
         $sub = UserSubscription::findOrFail($id);
@@ -113,7 +131,7 @@ class UserSubscriptionController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Deleted.',
+            'message' => 'Subscription deleted',
         ]);
     }
 }

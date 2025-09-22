@@ -1,36 +1,52 @@
-// Payment History page.  Displays a user's transaction or subscription history.
-'use client';
+// Payment History page.  Displays a user's payment history.
+"use client";
 
-import React, { useEffect, useState } from 'react';
-import UserPanelLayout from '@/components/UserPanelLayout';
-import { transactionsAPI } from '@/lib/api';
+import React, { useEffect, useState } from "react";
+import UserPanelLayout from "@/components/UserPanelLayout";
+import { paymentsAPI } from "@/lib/api";
 
-interface Transaction {
+interface Payment {
   id: number;
+  order_id: number | null;
+  provider: string;
   amount_cents: number;
+  currency: string;
   status: string;
   created_at: string;
+  order_snapshot?: {
+    order_id: number;
+    total_cents: number;
+    status: string;
+    items: {
+      product_id: number;
+      title: string;
+      quantity: number;
+      unit_price_cents: number;
+    }[];
+  };
 }
 
 export default function PaymentHistoryPage() {
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    async function fetchData() {
-      setLoading(true);
-      try {
-        const res = await transactionsAPI.getAll();
-        const data = res.data?.data || [];
-        setTransactions(data);
-      } catch (err) {
-        setTransactions([]);
-      } finally {
-        setLoading(false);
-      }
+  async function fetchData() {
+    setLoading(true);
+    try {
+      // 👇 truyền order_id cụ thể, ví dụ 101
+      const res = await paymentsAPI.getAll(101); 
+      const data = res.data?.history || [];
+      setPayments(data);
+    } catch (err) {
+      console.error("Failed to fetch payments", err);
+      setPayments([]);
+    } finally {
+      setLoading(false);
     }
-    fetchData();
-  }, []);
+  }
+  fetchData();
+}, []);
 
   return (
     <UserPanelLayout>
@@ -38,17 +54,20 @@ export default function PaymentHistoryPage() {
         <h1 className="text-2xl font-bold mb-4">Payment History</h1>
         {loading ? (
           <p>Loading...</p>
-        ) : transactions.length === 0 ? (
+        ) : payments.length === 0 ? (
           <p>
-            You currently have no transactions. Once payments are implemented,
-            they will appear here.
+            You currently have no payments. Once transactions are made, they
+            will appear here.
           </p>
         ) : (
-          <table className="min-w-full divide-y divide-gray-200">
+          <table className="min-w-full divide-y divide-gray-200 border">
             <thead className="bg-gray-100">
               <tr>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   #
+                </th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Provider
                 </th>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Amount
@@ -62,15 +81,18 @@ export default function PaymentHistoryPage() {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {transactions.map((t, idx) => (
-                <tr key={t.id} className="hover:bg-gray-50">
+              {payments.map((p, idx) => (
+                <tr key={p.id} className="hover:bg-gray-50">
                   <td className="px-4 py-2 text-sm text-gray-500">{idx + 1}</td>
-                  <td className="px-4 py-2 text-sm text-gray-900">{(t.amount_cents/100).toLocaleString()} ₫</td>
-                  <td className="px-4 py-2 text-sm text-gray-900 capitalize">
-                    {t.status}
+                  <td className="px-4 py-2 text-sm text-gray-900">
+                    {p.provider}
                   </td>
                   <td className="px-4 py-2 text-sm text-gray-900">
-                    {new Date(t.created_at).toLocaleDateString()}
+                    {(p.amount_cents / 100).toLocaleString()} {p.currency}
+                  </td>
+                  <td className="px-4 py-2 text-sm capitalize">{p.status}</td>
+                  <td className="px-4 py-2 text-sm text-gray-900">
+                    {new Date(p.created_at).toLocaleDateString()}
                   </td>
                 </tr>
               ))}

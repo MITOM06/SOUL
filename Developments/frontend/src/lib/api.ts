@@ -107,15 +107,24 @@ export const libraryAPI = {
   getAll: (params?: { type?: 'ebook'|'podcast'; search?: string; category?: string }) =>
     api.get('/v1/library', { params }),
 };
-
+//======================== PAYMENTS =======================
 export const paymentsAPI = {
-  initCheckout: (orderId: number, provider = 'fake') =>
-    api.post('/v1/payment/checkout', { order_id: orderId, provider }),
-  autoSuccess: (paymentId: number) => api.get(`/v1/payments/${paymentId}/auto-success`),
-  initSubscriptionCheckout: (plan_key: 'basic' | 'premium' | 'vip', provider = 'fake') =>
-    api.post('/v1/subscriptions/checkout', { plan_key, provider }),
-};
+  initCheckout: (orderId: number, provider: string) =>
+    api.post(`/v1/payment/checkout`, { order_id: orderId, provider }),
 
+  confirmOtp: (paymentId: number, otp: string) =>
+  api.post(`/v1/payments/${paymentId}/confirm-otp`, { otp }),
+
+  getById: (paymentId: number) =>  // 👈 thêm hàm này
+    api.get(`/v1/payments/${paymentId}`),
+    // Lấy toàn bộ lịch sử payment (hoặc theo order_id nếu cần)
+  getAll: (orderId?: number) => {
+    if (orderId) {
+      return api.get(`/v1/payment-history?order_id=${orderId}`);
+    }
+    return api.get('/v1/payment-history');
+  },
+};
 /* ======================= ORDERS ======================= */
 export const ordersAPI = {
   getAll: () => api.get('/v1/orders'),
@@ -235,4 +244,12 @@ export const favouritesAPI = {
   /** Xóa favourite theo productId (idempotent). */
   remove: (productId: number) =>
     api.delete(`/v1/favourites/${productId}`),
+};
+
+// ======================= ADMIN PAYMENTS =======================
+export const adminPaymentsAPI = {
+   getAll: (params?: any) =>
+  api.get("/v1/admin/payments", { params }),
+  getById: (id: number) => api.get(`/v1/admin/payments/${id}`),
+  delete: (id: number) => api.delete(`/v1/admin/payments/${id}`),
 };
