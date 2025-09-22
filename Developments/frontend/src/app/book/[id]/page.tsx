@@ -7,6 +7,7 @@ import api from '@/lib/api';
 import BookCard from '@/components/BookCard';
 import { useCart } from '@/contexts/CartContext';
 
+/* ======== Types ======== */
 interface Product {
   id: number;
   title: string;
@@ -138,7 +139,6 @@ function Toast({ open, msg, onClose }: { open: boolean; msg: string; onClose: ()
   );
 }
 
-
 /** Reading progress via lightweight endpoints */
 function useContinue(productId: number | null) {
   const [progress, setProgress] = useState<any>(null);
@@ -149,7 +149,7 @@ function useContinue(productId: number | null) {
     setLoading(true);
     try {
       const r = await fetch(`${API_BASE}/v1/continues/${productId}`, { credentials: 'include' });
-      if (r.status === 401) { setProgress(null); return; }
+      if (r.status === 401 || r.status === 403) { setProgress(null); return; }
       const j = await r.json();
       setProgress(j?.data || null);
     } finally {
@@ -171,6 +171,7 @@ function useContinue(productId: number | null) {
   return { progress, loading, load, save };
 }
 
+/* ================================== Page ================================== */
 export default function BookDetail() {
   const params = useParams();
   const { add } = useCart();
@@ -197,7 +198,7 @@ export default function BookDetail() {
     (async () => {
       try {
         setErr(null);
-        // Lấy product (public) và cố enrich bằng call có Bearer token
+        // Lấy product (public) và enrich bằng call có Bearer token (để lấy access.can_view)
         const r = await fetch(`${API_BASE}/v1/catalog/products/${id}`, { signal: ac.signal });
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         const j = await r.json();
@@ -210,7 +211,7 @@ export default function BookDetail() {
 
         await load();
 
-        // ===== FAVOURITE (dùng axios api với Bearer token) =====
+        // FAV
         try {
           const rf = await api.get('/v1/favourites', { signal: ac.signal as any });
           const d = rf.data?.data || rf.data || {};
@@ -221,7 +222,7 @@ export default function BookDetail() {
           if (e?.response?.status === 401) { setCanFav(false); setFavOn(false); }
         }
 
-        // Related items
+        // Related
         try {
           const cat = (j?.data?.product?.category || '').trim();
           const qs = cat ? `type=ebook&per_page=12&category=${encodeURIComponent(cat)}` : `type=ebook&per_page=12`;
@@ -270,7 +271,7 @@ export default function BookDetail() {
     if (url) window.open(url, '_blank');
   };
   const onReadFull = () => {
-    if (!fullPdf) return;
+    if (!fullPdf || !canView) return;
     (async () => {
       try {
         const res = await api.get(`/v1/catalog/products/${p.id}/files/${fullPdf.id}/download`, { responseType: 'blob' });
@@ -300,7 +301,6 @@ export default function BookDetail() {
     }
   };
 
-  // ====== FAVOURITE TOGGLE (axios api) ======
   const toggleFav = async () => {
     if (!canFav) { alert('Please sign in to use Favorites'); return; }
     const next = !favOn;
@@ -311,7 +311,6 @@ export default function BookDetail() {
     } catch (e: any) {
       setFavOn(!next); // revert
       if (e?.response?.status === 401) {
-        setCanFav(false);
         alert('Session expired. Please sign in again.');
       } else {
         alert('Failed to update Favorites.');
@@ -336,16 +335,20 @@ export default function BookDetail() {
           <span className="opacity-90 line-clamp-1 align-middle">{p.title}</span>
         </div>
 
+        {/* Main two columns */}
         <section className="relative w-screen left-[50%] right-[50%] -ml-[50vw] -mr-[50vw]">
           <div className="grid md:grid-cols-[380px_1fr] gap-8 md:gap-12 p-6 md:p-12 min-h-[70vh]">
-            {/* Cover + badge */}
+            {/* Left: Cover + price badge */}
             <div className="relative mx-auto md:mx-0 w-[300px] md:w-[360px]">
-              <div className="absolute -top-3 -left-3 h-8 w-8 rounded-full bg-white/20 blur" />
               <article className="rounded-2xl overflow-hidden shadow-2xl ring-1 ring-black/10 bg-white transition hover:-translate-y-1">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={coverSrc} alt={p.title} className="w-full h-[480px] object-cover" onError={(e)=>{(e.currentTarget as HTMLImageElement).src = FALLBACK_IMG;}} />
+                <img
+                  src={coverSrc}
+                  alt={p.title}
+                  className="w-full h-[480px] object-cover"
+                  onError={(e)=>{(e.currentTarget as HTMLImageElement).src = FALLBACK_IMG;}}
+                />
               </article>
-              {/* price badge */}
               <div className="absolute top-3 right-3">
                 <div className="px-3 py-1 rounded-full text-sm font-bold text-white shadow bg-[color:var(--brand-500)]">
                   {priceCents > 0 ? formatVND(priceCents) : 'Free'}
@@ -353,16 +356,20 @@ export default function BookDetail() {
               </div>
             </div>
 
-            {/* Right: info */}
+            {/* Right: detail (Description/Attachments/Progress at left, CTAs/Price at right) */}
             <div className="text-zinc-900 bg-white/80 backdrop-blur rounded-2xl p-6 ring-1 ring-black/5 shadow-sm">
+              {/* Title + rating */}
               <h1 className="text-3xl md:text-5xl font-extrabold leading-tight">{p.title}</h1>
               <div className="mt-2 flex items-center gap-2 text-sm text-zinc-600">
                 <span className="font-semibold">{rating.toFixed(1)}</span>
-                <span className="text-yellow-300">{'★★★★★'.slice(0, Math.max(0, Math.min(5, Math.round(rating))))}{'☆☆☆☆☆'.slice(Math.max(0, Math.min(5, Math.round(rating))))}</span>
+                <span className="text-yellow-300">
+                  {'★★★★★'.slice(0, Math.max(0, Math.min(5, Math.round(rating))))}
+                  {'☆☆☆☆☆'.slice(Math.max(0, Math.min(5, Math.round(rating))))}
+                </span>
                 <span>· {reviews} reviews</span>
               </div>
 
-              {/* Meta grid */}
+              {/* Meta */}
               <div className="mt-6 grid grid-cols-2 lg:grid-cols-4 gap-y-4 text-sm text-zinc-800">
                 <div>
                   <div className="text-zinc-500">Author</div>
@@ -382,8 +389,8 @@ export default function BookDetail() {
                 </div>
               </div>
 
-              {/* Options (visual only) */}
-              <div className="mt-6 space-y-3 border-t border-zinc-200 pt-6">
+              {/* Options */}
+              <div className="mt-6 space-y-3 border-t border-zinc-2 00 pt-6">
                 <div className="text-zinc-600 text-sm">Choose type</div>
                 <div className="flex gap-2 flex-wrap">
                   <button className="px-3 py-1.5 rounded-full bg-zinc-900 text-white font-medium text-sm">Ebook</button>
@@ -398,79 +405,135 @@ export default function BookDetail() {
                 </div>
               </div>
 
-              {/* CTAs */}
-              <div className="mt-6 flex items-center gap-3 flex-wrap">
-                <button onClick={onRead} disabled={!preview} className="inline-flex items-center gap-2 bg-[color:var(--brand-500)] hover:bg-[color:var(--brand-600)] disabled:opacity-50 text-white font-semibold px-5 py-2.5 rounded-xl shadow transition">
-                  Read Preview
-                </button>
-                {canView && fullPdf && (
-                  <button onClick={onReadFull} className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold px-5 py-2.5 rounded-xl shadow transition">
-                    Read Full
-                  </button>
-                )}
-                <button onClick={toggleFav} className={`h-10 px-4 inline-flex items-center gap-2 rounded-full border transition ${favOn ? 'bg-rose-50 text-rose-600 border-rose-200' : 'border-zinc-300 text-zinc-700 hover:bg-zinc-50'}`} aria-pressed={favOn}>
-                  <span className="text-lg">{favOn ? '♥' : '♡'}</span>
-                  <span className="text-sm hidden sm:inline">{favOn ? 'Unfavorite' : 'Favorite'}</span>
-                </button>
-                <button onClick={onShare} className="h-10 w-10 grid place-items-center rounded-full border border-zinc-300 hover:bg-zinc-50" aria-label="Share">
-                  <span className="text-lg">⇪</span>
-                </button>
-              </div>
+              {/* === HAI CỘT: (Trái) Description/Attachments/Progress  |  (Phải) Price/Buy/CTAs === */}
+              <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_320px] items-start">
+                {/* Cột Trái: Description + Attachments + Progress */}
+                <div className="space-y-6">
+                  {/* Description: luôn mở, không khoá */}
+                  {p.description && (
+                    <section className="rounded-2xl border border-zinc-200 bg-white p-5">
+                      <h2 className="text-lg font-semibold mb-2">Description</h2>
+                      <p className="text-zinc-700 whitespace-pre-wrap">{p.description}</p>
+                    </section>
+                  )}
 
-              {/* Price card */}
-              <div className="mt-6 max-w-md">
-                <div className="relative rounded-2xl border border-zinc-200 bg-white p-4 shadow-lg">
-                  <div className="absolute -top-3 left-4 text-xs font-bold text-white px-2 py-0.5 rounded-full bg-[color:var(--brand-500)]">One-off</div>
-                  <div className="flex items-end gap-3">
-                    {compareAt > 0 && (
-                      <div className="text-zinc-500 line-through text-lg">{formatVND(compareAt)}</div>
-                    )}
-                    <div className="text-3xl font-extrabold text-zinc-900">{priceCents > 0 ? formatVND(priceCents) : 'Free'}</div>
-                  </div>
-                  <div className="mt-2 text-emerald-600 text-sm font-semibold">Own this ebook forever</div>
-                  {canView ? (
-                    <button onClick={onReadFull} className="mt-4 w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2.5">Read Full</button>
-                  ) : (
-                    <button onClick={onBuy} className="mt-4 w-full rounded-xl bg-[color:var(--brand-500)] hover:bg-[color:var(--brand-600)] text-white font-semibold py-2.5">Buy now</button>
+                  {/* Attachments: mờ + chặn click khi chưa mua */}
+                  {files.length > 0 && (
+                    <section
+                      className={`rounded-2xl border border-zinc-200 bg-white p-5 ${!canView ? 'opacity-60 pointer-events-none select-none' : ''}`}
+                    >
+                      <h2 className="text-lg font-semibold mb-2">Attachments</h2>
+                      <ul className="list-disc pl-6 space-y-1">
+                        {files.map(f => (
+                          <li key={f.id}>
+                            <a
+                              href={downloadUrl(p.id, f.id)}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-[color:var(--brand-600)] hover:underline"
+                            >
+                              Download: {f.file_type.toUpperCase()}
+                            </a>
+                            {f.is_preview ? (
+                              <span className="ml-2 text-xs px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-600">preview</span>
+                            ) : null}
+                          </li>
+                        ))}
+                      </ul>
+                      {!canView && (
+                        <p className="mt-2 text-xs text-zinc-500">
+                          Mua sách để tải toàn bộ tệp đính kèm.
+                        </p>
+                      )}
+                    </section>
+                  )}
+
+                  {/* Reading Progress: ẩn hẳn khi chưa mua */}
+                  {canView && (
+                    <section className="rounded-2xl border border-zinc-200 bg-white p-5">
+                      <h2 className="text-lg font-semibold mb-2">Reading Progress</h2>
+                      <div className="text-sm text-gray-600 mb-2">Current page: {progress?.current_page ?? 0}</div>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          min={0}
+                          value={page}
+                          onChange={(e)=>setPage(Number(e.target.value))}
+                          className="border rounded px-2 py-1 w-24"
+                        />
+                        <button
+                          onClick={()=>save({ current_page: page })}
+                          className="px-3 py-1 rounded bg-green-600 text-white"
+                        >
+                          Save progress
+                        </button>
+                      </div>
+                    </section>
                   )}
                 </div>
+
+                {/* Cột Phải: CTAs + Price card */}
+                <aside className="space-y-4">
+                  {/* CTA hàng đầu (Preview / Read Full / Fav / Share) */}
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <button
+                      onClick={onRead}
+                      disabled={!preview}
+                      className="inline-flex items-center gap-2 bg-[color:var(--brand-500)] hover:bg-[color:var(--brand-600)] disabled:opacity-50 text-white font-semibold px-5 py-2.5 rounded-xl shadow transition"
+                    >
+                      Read Preview
+                    </button>
+                    <button
+                      onClick={onReadFull}
+                      disabled={!canView || !fullPdf}
+                      title={!canView ? 'Mua sách để đọc toàn bộ' : (!fullPdf ? 'Chưa có file PDF đầy đủ' : '')}
+                      className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 disabled:hover:bg-emerald-600/90 disabled:cursor-not-allowed disabled:opacity-50 text-white font-semibold px-5 py-2.5 rounded-xl shadow transition"
+                    >
+                      Read Full
+                    </button>
+                    <button
+                      onClick={toggleFav}
+                      className={`h-10 px-4 inline-flex items-center gap-2 rounded-full border transition ${favOn ? 'bg-rose-50 text-rose-600 border-rose-200' : 'border-zinc-300 text-zinc-700 hover:bg-zinc-50'}`}
+                      aria-pressed={favOn}
+                    >
+                      <span className="text-lg">{favOn ? '♥' : '♡'}</span>
+                      <span className="text-sm hidden sm:inline">{favOn ? 'Unfavorite' : 'Favorite'}</span>
+                    </button>
+                    <button onClick={onShare} className="h-10 w-10 grid place-items-center rounded-full border border-zinc-300 hover:bg-zinc-50" aria-label="Share">
+                      <span className="text-lg">⇪</span>
+                    </button>
+                  </div>
+
+                  {/* Price card */}
+                  <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-lg">
+                    <div className="relative">
+                      <div className="absolute -top-3 left-0 text-xs font-bold text-white px-2 py-0.5 rounded-full bg-[color:var(--brand-500)]">One-off</div>
+                    </div>
+                    <div className="flex items-end gap-3 mt-1">
+                      {compareAt > 0 && <div className="text-zinc-500 line-through text-lg">{formatVND(compareAt)}</div>}
+                      <div className="text-3xl font-extrabold text-zinc-900">{priceCents > 0 ? formatVND(priceCents) : 'Free'}</div>
+                    </div>
+                    <div className="mt-2 text-emerald-600 text-sm font-semibold">Own this ebook forever</div>
+
+                    {canView ? (
+                      <button
+                        onClick={onReadFull}
+                        disabled={!fullPdf}
+                        className="mt-4 w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:hover:bg-emerald-600/90 disabled:cursor-not-allowed disabled:opacity-50 text-white font-semibold py-2.5"
+                      >
+                        Read Full
+                      </button>
+                    ) : (
+                      <button
+                        onClick={onBuy}
+                        className="mt-4 w-full rounded-xl bg-[color:var(--brand-500)] hover:bg-[color:var(--brand-600)] text-white font-semibold py-2.5"
+                      >
+                        Buy now
+                      </button>
+                    )}
+                  </div>
+                </aside>
               </div>
-            </div>
-          </div>
-        </section>
-
-        {/* Description */}
-        {p.description && (
-          <section className="px-6 md:px-12 max-w-4xl mx-auto mt-10">
-            <h2 className="text-xl font-semibold mb-2">Description</h2>
-            <p className="text-zinc-700 whitespace-pre-wrap">{p.description}</p>
-          </section>
-        )}
-
-        {/* Attachments (optional) */}
-        {files.length > 0 && (
-          <section className="px-6 md:px-12 max-w-4xl mx-auto mt-8">
-            <h2 className="font-semibold mb-2">Attachments</h2>
-            <ul className="list-disc pl-6 space-y-1">
-              {files.map(f => (
-                <li key={f.id}>
-                  <a href={downloadUrl(p.id, f.id)} target="_blank" rel="noreferrer" className="text-[color:var(--brand-600)] hover:underline">
-                    Download: {f.file_type.toUpperCase()}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
-
-        {/* Reading progress */}
-        <section className="px-6 md:px-12 max-w-4xl mx-auto mt-10 mb-16">
-          <div className="border-t pt-4">
-            <h2 className="font-semibold mb-2">Reading Progress</h2>
-            <div className="text-sm text-gray-600 mb-2">Current page: {progress?.current_page ?? 0}</div>
-            <div className="flex items-center gap-2">
-              <input type="number" min={0} value={page} onChange={(e)=>setPage(Number(e.target.value))} className="border rounded px-2 py-1 w-24" />
-              <button onClick={()=>save({ current_page: page })} className="px-3 py-1 rounded bg-green-600 text-white">Save progress</button>
             </div>
           </div>
         </section>

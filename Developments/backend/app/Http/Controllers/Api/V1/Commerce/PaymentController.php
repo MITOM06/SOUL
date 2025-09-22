@@ -6,11 +6,14 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\Order;
 use App\Models\Payment;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 
 class PaymentController extends Controller
 {
     /**
      * Checkout – tạo payment (không OTP trong DB, chỉ giả lập).
+     * Ràng buộc: order phải thuộc về user hiện tại và còn hiệu lực.
      */
     public function checkout(Request $request)
     {
@@ -19,11 +22,22 @@ class PaymentController extends Controller
             'provider' => 'required|string',
         ]);
 
-        $order = Order::findOrFail($request->order_id);
+        $user = $request->user();
+        $order = Order::with(['items.product'])->findOrFail($request->order_id);
+
+        // Chỉ owner được checkout
+        if (!$user || (int) $order->user_id !== (int) $user->id) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized order'], 403);
+        }
+
+        // Tuỳ mô hình của bạn có status/order_state... ở đây chỉ kiểm tra đơn giản
+        if (method_exists($order, 'isPayable') && !$order->isPayable()) {
+            return response()->json(['success' => false, 'message' => 'Order not payable'], 400);
+        }
 
         $payment = Payment::create([
             'order_id'     => $order->id,
-            'user_id'      => $request->user()->id ?? null,
+            'user_id'      => $user->id,
             'provider'     => $request->provider,
             'amount_cents' => $order->total_cents,
             'currency'     => 'VND',
@@ -49,7 +63,8 @@ class PaymentController extends Controller
     }
 
     /**
-     * Confirm OTP – xác nhận thanh toán, lưu snapshot order.
+     * Confirm OTP – xác nhận thanh toán, lưu snapshot order và CẤP QUYỀN SẢN PHẨM.
+     * Sau khi success, FE gọi lại /v1/catalog/products/{id} sẽ thấy access.can_view = true.
      */
     public function confirmOtp(Request $request, $id)
     {
@@ -57,7 +72,13 @@ class PaymentController extends Controller
             'otp' => 'required|string'
         ]);
 
-        $payment = Payment::findOrFail($id);
+        $user = $request->user();
+        $payment = Payment::with(['order.items.product'])->findOrFail($id);
+
+        // Bảo vệ: payment phải thuộc chính user hiện tại
+        if (!$user || (int) $payment->user_id !== (int) $user->id) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized payment'], 403);
+        }
 
         if ($payment->status !== Payment::STATUS_INITIATED) {
             return response()->json([
@@ -66,7 +87,7 @@ class PaymentController extends Controller
             ], 400);
         }
 
-        $otp = $request->input('otp');
+        $otp = $request->string('otp');
 
         // ❌ Sai OTP
         if ($otp !== '123456') {
@@ -78,19 +99,19 @@ class PaymentController extends Controller
         }
 
         // ✅ Đúng OTP → success
-        // ✅ Đúng OTP → success
-        $order = $payment->order;
+        $order = $payment->order; // đã eager load
 
+        // Snapshot order (giữ lại lịch sử)
         $snapshot = null;
         if ($order) {
             $snapshot = [
                 'order_id'    => $order->id,
                 'total_cents' => $order->total_cents,
-                'status'      => $order->status,
+                'status'      => $order->status ?? 'paid',
                 'items'       => $order->items->map(function ($item) {
                     return [
                         'product_id'       => $item->product_id,
-                        'title'            => $item->product->title,
+                        'title'            => optional($item->product)->title,
                         'quantity'         => $item->quantity,
                         'unit_price_cents' => $item->unit_price_cents,
                     ];
@@ -98,20 +119,55 @@ class PaymentController extends Controller
             ];
         }
 
-        $payment->update([
-            'status'         => Payment::STATUS_SUCCESS,
-            'order_snapshot' => $snapshot,
-        ]);
+        DB::transaction(function () use ($payment, $order, $user, $snapshot) {
+            // 1) Cập nhật payment
+            $payment->update([
+                'status'         => Payment::STATUS_SUCCESS,
+                'order_snapshot' => $snapshot,
+            ]);
 
-        // 👉 Xoá order gốc (tuỳ chọn)
-        if ($order) {
-            $order->delete();
-        }
+            // 2) Cập nhật trạng thái order (nếu có trường status)
+            if ($order) {
+                if (property_exists($order, 'status') || $order->getAttribute('status') !== null) {
+                    $order->status = 'paid';
+                    $order->save();
+                }
+
+                // 3) CẤP QUYỀN: gắn toàn bộ product trong order cho user
+                // Ưu tiên qua quan hệ many-to-many nếu đã định nghĩa: $user->products()
+                $productIds = $order->items->pluck('product_id')->filter()->unique()->all();
+
+                if (method_exists($user, 'products')) {
+                    // Không ghi đè, chỉ gắn thêm (idempotent)
+                    $user->products()->syncWithoutDetaching($productIds);
+                } else {
+                    // Fallback: ghi trực tiếp vào pivot product_user (chuẩn Laravel)
+                    // Cần có bảng product_user với cột user_id, product_id (unique composite)
+                    $rows = [];
+                    $now  = now();
+                    foreach ($productIds as $pid) {
+                        $rows[] = [
+                            'user_id'    => $user->id,
+                            'product_id' => $pid,
+                            'created_at' => $now,
+                            'updated_at' => $now,
+                        ];
+                    }
+                    if (!empty($rows)) {
+                        DB::table('product_user')->insertOrIgnore($rows);
+                    }
+                }
+
+                // 4) (Tuỳ chọn) Xoá order gốc sau khi cấp quyền
+                // Nếu bạn muốn giữ lại record order thì comment dòng dưới.
+                $order->delete();
+            }
+        });
 
         return response()->json([
             'success' => true,
             'status'  => 'success',
-            'message' => 'Thanh toán thành công bằng OTP',
+            'message' => 'Thanh toán thành công bằng OTP. Quyền đọc đã được mở.',
         ]);
     }
 
@@ -121,7 +177,6 @@ class PaymentController extends Controller
     public function history(Request $request)
     {
         $user = $request->user();
-
         if (!$user) {
             return response()->json([
                 'success' => false,
@@ -134,14 +189,14 @@ class PaymentController extends Controller
             ->get()
             ->map(function ($payment) {
                 return [
-                    'id'            => $payment->id,
-                    'order_id'      => $payment->order_id,
-                    'provider'      => $payment->provider,
-                    'amount_cents'  => $payment->amount_cents,
-                    'currency'      => $payment->currency,
-                    'status'        => $payment->status,
-                    'created_at'    => $payment->created_at,
-                    'order_snapshot' => $payment->order_snapshot, // 👈 đảm bảo xuất ra
+                    'id'             => $payment->id,
+                    'order_id'       => $payment->order_id,
+                    'provider'       => $payment->provider,
+                    'amount_cents'   => $payment->amount_cents,
+                    'currency'       => $payment->currency,
+                    'status'         => $payment->status,
+                    'created_at'     => $payment->created_at,
+                    'order_snapshot' => $payment->order_snapshot,
                 ];
             });
 
@@ -151,101 +206,91 @@ class PaymentController extends Controller
         ]);
     }
 
-   public function adminHistory(Request $request)
-{
-    $query = Payment::with(['user'])
-        ->orderBy('created_at', 'desc');
+    /**
+     * Admin: lịch sử có filter nâng cao (paginate).
+     */
+    public function adminHistory(Request $request)
+    {
+        $query = Payment::with(['user'])
+            ->orderBy('created_at', 'desc');
 
-    // lọc theo status
-    if ($request->filled('status')) {
-        $query->where('status', $request->status);
+        if ($request->filled('status')) {
+            $query->where('status', $request->status);
+        }
+        if ($request->filled('provider')) {
+            $query->where('provider', $request->provider);
+        }
+        if ($request->filled('user_id')) {
+            $query->where('user_id', $request->user_id);
+        }
+        if ($request->filled('from') && $request->filled('to')) {
+            $query->whereBetween('created_at', [$request->from, $request->to]);
+        }
+        if ($request->filled('query')) {
+            $q = $request->query('query');
+            $query->whereHas('user', function ($sub) use ($q) {
+                $sub->where('name', 'like', "%{$q}%")
+                    ->orWhere('email', 'like', "%{$q}%");
+            });
+        }
+
+        $payments = $query->paginate($request->get('per_page', 20));
+
+        return response()->json([
+            'success' => true,
+            'data'    => $payments,
+        ]);
     }
-
-    // lọc theo provider
-    if ($request->filled('provider')) {
-        $query->where('provider', $request->provider);
-    }
-
-    // lọc theo user_id
-    if ($request->filled('user_id')) {
-        $query->where('user_id', $request->user_id);
-    }
-
-    // lọc theo date range
-    if ($request->filled('from') && $request->filled('to')) {
-        $query->whereBetween('created_at', [$request->from, $request->to]);
-    }
-
-    // 🔥 Thêm lọc theo query (tên/email user)
-    if ($request->filled('query')) {
-        $q = $request->query('query');
-        $query->whereHas('user', function ($sub) use ($q) {
-            $sub->where('name', 'like', "%{$q}%")
-                ->orWhere('email', 'like', "%{$q}%");
-        });
-    }
-
-    $payments = $query->paginate($request->get('per_page', 20));
-
-    return response()->json([
-        'success' => true,
-        'data'    => $payments,
-    ]);
-}
 
     /**
-     * Admin: Danh sách tất cả payment.
+     * Admin: danh sách payment (paginate RAW trả trực tiếp).
      */
+    public function adminIndex(Request $request)
+    {
+        $query = Payment::with('user')->orderByDesc('created_at');
 
-public function adminIndex(Request $request)
-{
-    $query = Payment::with('user')->orderByDesc('created_at');
-
-    if ($request->filled('status')) {
-        $query->where('status', $request->string('status'));
-    }
-    if ($request->filled('provider')) {
-        $query->where('provider', $request->string('provider'));
-    }
-    if ($request->filled('user_id')) {
-        $query->where('user_id', (int) $request->input('user_id'));
-    }
-    // tìm theo tên/email user
-    if ($request->filled('query')) {
-        $q = $request->query('query');
-        $query->whereHas('user', function ($sub) use ($q) {
-            $sub->where('name', 'like', "%{$q}%")
-                ->orWhere('email', 'like', "%{$q}%");
-        });
-    }
-    // from/to (optional)
-    if ($request->filled('from') || $request->filled('to')) {
-        $from = $request->input('from'); // 'YYYY-MM-DD' hoặc datetime
-        $to   = $request->input('to');
-        if ($from && $to) {
-            $query->whereBetween('created_at', [$from, $to]);
-        } elseif ($from) {
-            $query->where('created_at', '>=', $from);
-        } elseif ($to) {
-            $query->where('created_at', '<=', $to);
+        if ($request->filled('status')) {
+            $query->where('status', $request->string('status'));
         }
+        if ($request->filled('provider')) {
+            $query->where('provider', $request->string('provider'));
+        }
+        if ($request->filled('user_id')) {
+            $query->where('user_id', (int) $request->input('user_id'));
+        }
+        if ($request->filled('query')) {
+            $q = $request->query('query');
+            $query->whereHas('user', function ($sub) use ($q) {
+                $sub->where('name', 'like', "%{$q}%")
+                    ->orWhere('email', 'like', "%{$q}%");
+            });
+        }
+        if ($request->filled('from') || $request->filled('to')) {
+            $from = $request->input('from');
+            $to   = $request->input('to');
+            if ($from && $to) {
+                $query->whereBetween('created_at', [$from, $to]);
+            } elseif ($from) {
+                $query->where('created_at', '>=', $from);
+            } elseif ($to) {
+                $query->where('created_at', '<=', $to);
+            }
+        }
+
+        $perPage  = (int) $request->get('per_page', 20);
+        $payments = $query->paginate($perPage)->withQueryString();
+
+        return response()->json($payments);
     }
 
-    $perPage  = (int) $request->get('per_page', 20);
-    $payments = $query->paginate($perPage)->withQueryString();
+    public function adminDelete($id)
+    {
+        $payment = Payment::findOrFail($id);
+        $payment->delete();
 
-    // trả paginate RAW: { current_page, data: [...], last_page, ... }
-    return response()->json($payments);
-}
-
-public function adminDelete($id)
-{
-    $payment = Payment::findOrFail($id);
-    $payment->delete();
-
-    return response()->json([
-        'success' => true,
-        'message' => 'Payment deleted successfully',
-    ]);
-}
+        return response()->json([
+            'success' => true,
+            'message' => 'Payment deleted successfully',
+        ]);
+    }
 }
