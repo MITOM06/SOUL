@@ -521,7 +521,7 @@ export default function BookDetail() {
                         disabled={!fullPdf}
                         className="mt-4 w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:hover:bg-emerald-600/90 disabled:cursor-not-allowed disabled:opacity-50 text-white font-semibold py-2.5"
                       >
-                        Read Full
+                        Read Fulls
                       </button>
                     ) : (
                       <button
