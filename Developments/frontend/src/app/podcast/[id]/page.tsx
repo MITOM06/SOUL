@@ -226,8 +226,28 @@ export default function PodcastDetailPage() {
         const r = await fetch(`${API_BASE}/v1/catalog/products/${id}`, { signal: ac.signal });
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         const j = await r.json();
-        setData(j?.data || null);
+       let payload: any = j?.data || null;
 
+        try {
+          const authRes = await api.get(`/v1/catalog/products/${id}`, { signal: ac.signal as any });
+          const authData = authRes?.data?.data || authRes?.data || null;
+          if (authData) {
+            payload = {
+              ...(payload || {}),
+              ...authData,
+              product: { ...(payload?.product || {}), ...(authData.product || {}) },
+              files: authData.files ?? payload?.files ?? [],
+              access: authData.access ?? payload?.access,
+            };
+          }
+        } catch (e: any) {
+          if (e?.name === 'CanceledError' || e?.code === 'ERR_CANCELED') throw e;
+          if (e?.response?.status !== 401) {
+            console.warn('Failed to load authenticated podcast payload', e);
+          }
+        }
+
+        setData(payload);
         // Favourites
         try {
           const rf = await api.get('/v1/favourites', { signal: ac.signal as any });
@@ -254,7 +274,10 @@ export default function PodcastDetailPage() {
           }
         } catch {}
       } catch (e: any) {
-        if (e?.name !== 'AbortError') setErr(e?.message || 'Failed to load data');
+        if (e?.name === 'AbortError' || e?.name === 'CanceledError' || e?.code === 'ERR_CANCELED') {
+          return;
+        }
+        setErr(e?.message || 'Failed to load data');
       } finally {
         setLoading(false);
       }
