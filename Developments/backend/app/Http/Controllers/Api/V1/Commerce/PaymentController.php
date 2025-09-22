@@ -68,7 +68,7 @@ class PaymentController extends Controller
      */
     public function confirmOtp(Request $request, $id)
     {
-        $request->validate([
+        $data =$request->validate([
             'otp' => 'required|string'
         ]);
 
@@ -87,15 +87,16 @@ class PaymentController extends Controller
             ], 400);
         }
 
-        $otp = $request->string('otp');
+        $otp = $data['otp'];
 
         // ❌ Sai OTP
         if ($otp !== '123456') {
             return response()->json([
                 'success' => false,
                 'status'  => 'failed',
-                'message' => 'OTP không đúng',
+                'message' => 'OTP invalid ',
             ]);
+            return;
         }
 
         // ✅ Đúng OTP → success
@@ -141,20 +142,22 @@ class PaymentController extends Controller
                     // Không ghi đè, chỉ gắn thêm (idempotent)
                     $user->products()->syncWithoutDetaching($productIds);
                 } else {
-                    // Fallback: ghi trực tiếp vào pivot product_user (chuẩn Laravel)
-                    // Cần có bảng product_user với cột user_id, product_id (unique composite)
+                    // Fallback: ghi trực tiếp vào pivot payments (chuẩn Laravel)
+                    // Cần có bảng payments với cột user_id, product_id (unique composite)
                     $rows = [];
                     $now  = now();
                     foreach ($productIds as $pid) {
                         $rows[] = [
                             'user_id'    => $user->id,
-                            'product_id' => $pid,
                             'created_at' => $now,
+                            'provider'=> $payment->provider,
                             'updated_at' => $now,
+                            'amount_cents'=>$order->total_cents,
+
                         ];
                     }
                     if (!empty($rows)) {
-                        DB::table('product_user')->insertOrIgnore($rows);
+                        DB::table('payments')->insertOrIgnore($rows);
                     }
                 }
 
