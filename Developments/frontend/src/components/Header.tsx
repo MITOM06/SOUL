@@ -82,7 +82,7 @@ export function HeaderAuthArea() {
   // Build menu items per role
   const userMenu = [
     { href: "/profile", label: "Profile" },
-    { href: "/favorites", label: "Favourite" },
+    { href: "/favourites", label: "Favourite" },
     { href: "/library", label: "Library" },
     { href: "/orders", label: "Orders" },
     { href: "/continues", label: "Continues" },     // e.g. continue reading/listening
