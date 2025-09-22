@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { userSubscriptionsAPI } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
+import { normalizeRole } from "@/lib/role";
 
 type PlanKey = 'basic'|'premium'|'vip';
 
@@ -11,7 +12,22 @@ export default function SubscriptionCheckoutPage() {
   const sp = useSearchParams();
   const router = useRouter();
   const [provider, setProvider] = useState('bank');
-  const { refreshUser } = useAuth();
+  const { refreshUser, user, isLoading } = useAuth();
+  const role = normalizeRole(user);
+  const isLoggedIn = Boolean(user);
+  const isAdmin = role === 'admin';
+
+  useEffect(() => {
+    if (isLoading) return;
+    if (!isLoggedIn) {
+      alert('Vui lòng đăng nhập để tiếp tục thanh toán gói.');
+      const next = encodeURIComponent(window.location.pathname + window.location.search);
+      router.replace(`/auth/login?next=${next}`);
+    } else if (isAdmin) {
+      alert('Tài khoản admin không thể mua gói dịch vụ.');
+      router.replace('/upgrade');
+    }
+  }, [isLoading, isLoggedIn, isAdmin, router]);
 
   const plan: PlanKey = (sp.get('plan') as PlanKey) || 'premium';
   const amount: number = Number(sp.get('amount') || (plan === 'vip' ? 29900 : plan === 'premium' ? 19900 : 0));
@@ -22,6 +38,7 @@ export default function SubscriptionCheckoutPage() {
   }, [plan, provider]);
 
   const confirm = async () => {
+    if (!isLoggedIn || isAdmin) return;
     const res = await userSubscriptionsAPI.create({ plan });
     if (res.data?.success) {
       try { await refreshUser(); } catch {}
@@ -32,6 +49,18 @@ export default function SubscriptionCheckoutPage() {
   const badge = plan === 'vip' ? 'bg-amber-500' : plan === 'premium' ? 'bg-indigo-500' : 'bg-zinc-500';
   const gradient = plan === 'vip' ? 'from-amber-100 to-yellow-50' : plan === 'premium' ? 'from-indigo-100 to-indigo-50' : 'from-zinc-100 to-zinc-50';
   const emoji = plan === 'vip' ? '🏆' : plan === 'premium' ? '💎' : '🎫';
+
+  if (!isLoggedIn && !isLoading) {
+    return <div className="max-w-3xl mx-auto p-6">Đang chuyển đến trang đăng nhập...</div>;
+  }
+  if (isAdmin) {
+    return (
+      <div className="max-w-3xl mx-auto p-6 text-center">
+        <h1 className="text-2xl font-bold mb-3">Quản trị viên</h1>
+        <p className="text-zinc-600">Tài khoản admin không thể thanh toán gói dịch vụ.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-4xl mx-auto p-6">

@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import { userSubscriptionsAPI } from '@/lib/api';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
+import { normalizeRole } from '@/lib/role';
 
 interface Plan {
   key: 'vip' | 'basic' | 'premium';
@@ -22,7 +23,10 @@ const plans: Plan[] = [
 
 export default function UpgradePage() {
   const router = useRouter();
-  const { subscriptionLevel } = useAuth();
+  const { subscriptionLevel, user } = useAuth();
+  const role = normalizeRole(user);
+  const isLoggedIn = Boolean(user);
+  const isAdmin = role === 'admin';
 
   const visiblePlans = useMemo(() => {
     if (subscriptionLevel === 'vip') return [];
@@ -31,6 +35,16 @@ export default function UpgradePage() {
   }, [subscriptionLevel]);
 
   const choosePlan = async (plan: Plan) => {
+    if (!isLoggedIn) {
+      toast.error('Vui lòng đăng nhập để mua gói.');
+      const next = encodeURIComponent('/upgrade');
+      router.push(`/auth/login?next=${next}`);
+      return;
+    }
+    if (isAdmin) {
+      toast.error('Tài khoản admin không thể mua gói dịch vụ.');
+      return;
+    }
     try {
       // Free plan: subscribe immediately; paid: go to lightweight subscription checkout (no backend payment record)
       if (plan.key === 'basic') {
@@ -85,6 +99,15 @@ export default function UpgradePage() {
           <p className="mt-2 text-lg font-semibold">Thank you for supporting us!</p>
         </div>
         <button className="btn" onClick={() => router.replace('/my-package')}>Go to My Package</button>
+      </section>
+    );
+  }
+
+  if (isAdmin) {
+    return (
+      <section className="space-y-6 text-center">
+        <h1 className="text-3xl font-bold">Quản trị viên</h1>
+        <p className="text-zinc-600">Tài khoản admin không thể đăng ký các gói dịch vụ người dùng.</p>
       </section>
     );
   }

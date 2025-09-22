@@ -29,11 +29,14 @@ api.interceptors.response.use(
   (resp) => resp,
   (error) => {
     if (error.response?.status === 401 && error.config.url !== '/v1/user') {
-      Cookies.remove('auth_token');
-      const path = window.location.pathname;
-      if (!path.startsWith('/auth')) {
-        const next = encodeURIComponent(path + window.location.search);
-        window.location.replace(`/auth/login?next=${next}`);
+      const hadToken = Boolean(Cookies.get('auth_token') || error.config?.headers?.Authorization);
+      if (hadToken) {
+        Cookies.remove('auth_token');
+        const path = window.location.pathname;
+        if (!path.startsWith('/auth')) {
+          const next = encodeURIComponent(path + window.location.search);
+          window.location.replace(`/auth/login?next=${next}`);
+        }
       }
     }
     return Promise.reject(error);

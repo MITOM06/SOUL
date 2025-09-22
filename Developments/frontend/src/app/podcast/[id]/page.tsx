@@ -5,6 +5,9 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import api from '@/lib/api';
 import { useCart } from '@/contexts/CartContext';
+import { useAuth } from '@/contexts/AuthContext';
+import { normalizeRole } from '@/lib/role';
+import { cn } from '@/lib/utils';
 
 type ProductType = 'ebook' | 'podcast';
 interface Product {
@@ -200,6 +203,11 @@ export default function PodcastDetailPage() {
   const params = useParams();
   const { add } = useCart();
   const toast = useToast();
+  const { user } = useAuth();
+  const role = normalizeRole(user);
+  const isLoggedIn = Boolean(user);
+  const isAdmin = role === 'admin';
+  const isCustomer = isLoggedIn && !isAdmin;
 
   const id = useMemo(() => {
     const raw = (params as any)?.id;
@@ -214,6 +222,8 @@ export default function PodcastDetailPage() {
   const [favOn, setFavOn] = useState(false);
   const [canFav, setCanFav] = useState(true);
   const [related, setRelated] = useState<Array<{ id: number; title: string; thumb: string }>>([]);
+  const relatedRailRef = useRef<HTMLDivElement>(null);
+  const scrollRelated = (delta: number) => relatedRailRef.current?.scrollBy({ left: delta, behavior: 'smooth' });
 
   useEffect(() => {
     if (!id) return;
@@ -222,26 +232,40 @@ export default function PodcastDetailPage() {
       try {
         setLoading(true); setErr(null);
 
-        // Lấy dữ liệu podcast
         const r = await fetch(`${API_BASE}/v1/catalog/products/${id}`, { signal: ac.signal });
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         const j = await r.json();
-        setData(j?.data || null);
+        let payload = j?.data || null;
 
-        // Favourites
-        try {
-          const rf = await api.get('/v1/favourites', { signal: ac.signal as any });
-          const d  = rf.data?.data || rf.data || {};
-          const ids: number[] = d.product_ids || [];
-          setFavOn(ids.includes(id!));
-          setCanFav(true);
-        } catch (e: any) {
-          if (e?.response?.status === 401) { setCanFav(false); setFavOn(false); }
+        if (isLoggedIn) {
+          try {
+            const pr = await api.get(`/v1/catalog/products/${id}`, { signal: ac.signal as any });
+            if (pr.data?.data) payload = pr.data.data;
+          } catch (e: any) {
+            if (e?.code === 'ERR_CANCELED' || e?.name === 'CanceledError') return;
+          }
         }
 
-        // Related podcasts
+        setData(payload);
+
+        if (isLoggedIn && !isAdmin) {
+          try {
+            const rf = await api.get('/v1/favourites', { signal: ac.signal as any });
+            const d  = rf.data?.data || rf.data || {};
+            const ids: number[] = d.product_ids || [];
+            setFavOn(ids.includes(id!));
+            setCanFav(true);
+          } catch (e: any) {
+            if (e?.response?.status === 401) { setCanFav(false); setFavOn(false); }
+          }
+        } else {
+          setFavOn(false);
+          setCanFav(false);
+        }
+
         try {
-          const cat = (j?.data?.product?.category || '').trim();
+          const base = payload || j?.data || {};
+          const cat = (base?.product?.category || '').trim();
           const qs = cat ? `type=podcast&per_page=12&category=${encodeURIComponent(cat)}` : `type=podcast&per_page=12`;
           const rr = await fetch(`${API_BASE}/v1/catalog/products?${qs}`, { signal: ac.signal });
           if (rr.ok) {
@@ -250,7 +274,7 @@ export default function PodcastDetailPage() {
             const mapped = items
               .filter((it) => Number(it?.id) !== id)
               .map((it) => ({ id: it.id, title: it.title, thumb: toAbs(it.thumbnail_url) || FALLBACK_IMG }));
-            setRelated(mapped.slice(0, 6));
+            setRelated(mapped.slice(0, 9));
           }
         } catch {}
       } catch (e: any) {
@@ -260,7 +284,7 @@ export default function PodcastDetailPage() {
       }
     })();
     return () => ac.abort();
-  }, [id]);
+  }, [id, isLoggedIn, isAdmin]);
 
   if (!id)     return <div className="p-6 text-red-600">Invalid URL.</div>;
   if (loading) return <div className="p-6">Loading…</div>;
@@ -286,6 +310,14 @@ export default function PodcastDetailPage() {
 
   // Add to cart + toast (xanh, drop từ trên)
   const onBuy = async () => {
+    if (!isLoggedIn) {
+      alert('Vui lòng đăng nhập để mua sản phẩm.');
+      return;
+    }
+    if (isAdmin) {
+      alert('Tài khoản admin không thể mua sản phẩm.');
+      return;
+    }
     try {
       await add(p.id, 1);
       toast.show('Đã thêm sản phẩm vào giỏ hàng');
@@ -296,7 +328,9 @@ export default function PodcastDetailPage() {
 
   // Toggle favourite
   const toggleFav = async () => {
-    if (!canFav) { alert('Please sign in to use Favorites'); return; }
+    if (!isLoggedIn) { alert('Vui lòng đăng nhập để sử dụng tính năng yêu thích.'); return; }
+    if (isAdmin) { alert('Tài khoản admin không thể sử dụng tính năng yêu thích.'); return; }
+    if (!canFav) { alert('Không thể sử dụng tính năng yêu thích vào lúc này.'); return; }
     const next = !favOn;
     setFavOn(next); // optimistic
     try {
@@ -346,10 +380,26 @@ export default function PodcastDetailPage() {
 
               {/* CTAs */}
               <div className="mt-5 flex items-center gap-3">
-                <button onClick={onBuy} className="inline-flex items-center gap-2 bg-[color:var(--brand-500)] hover:bg-[color:var(--brand-600)] text-white font-semibold px-5 py-2.5 rounded-xl shadow transition">
+                <button
+                  onClick={onBuy}
+                  aria-disabled={!isCustomer}
+                  className={cn(
+                    'inline-flex items-center gap-2 bg-[color:var(--brand-500)] hover:bg-[color:var(--brand-600)] text-white font-semibold px-5 py-2.5 rounded-xl shadow transition',
+                    !isCustomer && 'opacity-70'
+                  )}
+                >
                   Buy {priceCents>0 ? `(${formatVND(priceCents)})` : '(Free)'}
                 </button>
-                <button onClick={toggleFav} className={`h-10 px-4 inline-flex items-center gap-2 rounded-full border transition ${favOn ? 'bg-rose-50 text-rose-600 border-rose-200' : 'border-zinc-300 text-zinc-700 hover:bg-zinc-50'}`} aria-pressed={favOn}>
+                <button
+                  onClick={toggleFav}
+                  aria-pressed={favOn}
+                  aria-disabled={!isCustomer}
+                  className={cn(
+                    'h-10 px-4 inline-flex items-center gap-2 rounded-full border transition',
+                    favOn ? 'bg-rose-50 text-rose-600 border-rose-200' : 'border-zinc-300 text-zinc-700 hover:bg-zinc-50',
+                    !isCustomer && 'opacity-70'
+                  )}
+                >
                   <span className="text-lg">{favOn ? '♥' : '♡'}</span>
                   <span className="text-sm hidden sm:inline">{favOn ? 'Unfavorite' : 'Favorite'}</span>
                 </button>
@@ -361,7 +411,16 @@ export default function PodcastDetailPage() {
                   <div className="absolute -top-3 left-4 text-xs font-bold text-white px-2 py-0.5 rounded-full bg-[color:var(--brand-500)]">One-off</div>
                   <div className="text-3xl font-extrabold text-zinc-900">{priceCents>0?formatVND(priceCents):'Free'}</div>
                   <div className="mt-2 text-sm text-zinc-600">Own this podcast forever</div>
-                  <button onClick={onBuy} className="mt-4 w-full rounded-xl bg-[color:var(--brand-500)] hover:bg-[color:var(--brand-600)] text-white font-semibold py-2.5">Buy now</button>
+                  <button
+                    onClick={onBuy}
+                    aria-disabled={!isCustomer}
+                    className={cn(
+                      'mt-4 w-full rounded-xl bg-[color:var(--brand-500)] hover:bg-[color:var(--brand-600)] text-white font-semibold py-2.5',
+                      !isCustomer && 'opacity-70'
+                    )}
+                  >
+                    Buy now
+                  </button>
                 </div>
               </div>
             </div>
@@ -418,18 +477,47 @@ export default function PodcastDetailPage() {
 
         {/* You may also like */}
         {related.length>0 && (
-          <section className="px-6 md:px-12 mt-10 mb-16">
-            <h2 className="text-xl font-semibold mb-3">You may also like</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-              {related.map(r => (
-                <Link key={r.id} href={`/podcast/${r.id}`} className="group rounded-xl border overflow-hidden bg-white shadow-sm hover:shadow-md transition">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={r.thumb} alt={r.title} className="w-full aspect-video object-cover group-hover:scale-[1.02] transition-transform duration-300" />
-                  <div className="p-3">
-                    <div className="font-medium line-clamp-2 group-hover:text-blue-600 transition-colors">{r.title}</div>
-                  </div>
-                </Link>
-              ))}
+          <section className="mt-10 mb-16">
+            <h2 className="text-xl font-semibold mb-3 px-6 md:px-12">You may also like</h2>
+            <div className="relative w-screen left-[50%] right-[50%] -ml-[50vw] -mr-[50vw]">
+              <div
+                ref={relatedRailRef}
+                className="flex gap-4 overflow-x-auto scroll-smooth pb-4 px-6 md:px-12 snap-x snap-mandatory [scrollbar-width:thin]"
+              >
+                {related.map(r => (
+                  <Link
+                    key={r.id}
+                    href={`/podcast/${r.id}`}
+                    className="snap-start shrink-0 basis-[calc((100vw-6rem)/1.2)] sm:basis-[calc((100vw-9rem)/2.2)] lg:basis-[calc((100vw-18rem)/3)] xl:basis-[360px] group rounded-xl border overflow-hidden bg-white shadow-sm hover:shadow-md transition"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={r.thumb}
+                      alt={r.title}
+                      className="w-full aspect-video object-cover group-hover:scale-[1.02] transition-transform duration-300"
+                    />
+                    <div className="p-3">
+                      <div className="font-medium line-clamp-2 group-hover:text-blue-600 transition-colors">{r.title}</div>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+              <button
+                type="button"
+                aria-label="Scroll left"
+                onClick={() => scrollRelated(-600)}
+                className="hidden md:grid place-items-center absolute left-2 md:left-4 top-1/2 -translate-y-1/2 h-10 w-10 rounded-full bg-white/90 shadow hover:bg-white"
+              >
+                ‹
+              </button>
+              <button
+                type="button"
+                aria-label="Scroll right"
+                onClick={() => scrollRelated(600)}
+                className="hidden md:grid place-items-center absolute right-2 md:right-4 top-1/2 -translate-y-1/2 h-10 w-10 rounded-full bg-white/90 shadow hover:bg-white"
+              >
+                ›
+              </button>
             </div>
           </section>
         )}

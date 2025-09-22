@@ -6,6 +6,9 @@ import Link from 'next/link';
 import api from '@/lib/api';
 import BookCard from '@/components/BookCard';
 import { useCart } from '@/contexts/CartContext';
+import { useAuth } from '@/contexts/AuthContext';
+import { normalizeRole } from '@/lib/role';
+import { cn } from '@/lib/utils';
 
 /* ======== Types ======== */
 interface Product {
@@ -176,6 +179,11 @@ export default function BookDetail() {
   const params = useParams();
   const { add } = useCart();
   const toast = useToast();
+  const { user } = useAuth();
+  const role = normalizeRole(user);
+  const isLoggedIn = Boolean(user);
+  const isAdmin = role === 'admin';
+  const isCustomer = isLoggedIn && !isAdmin;
 
   const id = useMemo(() => {
     const raw = (params as any)?.id;
@@ -198,31 +206,41 @@ export default function BookDetail() {
     (async () => {
       try {
         setErr(null);
-        // Lấy product (public) và enrich bằng call có Bearer token (để lấy access.can_view)
         const r = await fetch(`${API_BASE}/v1/catalog/products/${id}`, { signal: ac.signal });
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         const j = await r.json();
         let payload = j?.data || null;
-        try {
-          const ar = await api.get(`/v1/catalog/products/${id}`);
-          if (ar.data?.data) payload = ar.data.data;
-        } catch {}
-        setData(payload);
 
-        await load();
-
-        // FAV
-        try {
-          const rf = await api.get('/v1/favourites', { signal: ac.signal as any });
-          const d = rf.data?.data || rf.data || {};
-          const ids: number[] = d.product_ids || [];
-          setFavOn(ids.includes(id!));
-          setCanFav(true);
-        } catch (e: any) {
-          if (e?.response?.status === 401) { setCanFav(false); setFavOn(false); }
+        if (isLoggedIn) {
+          try {
+            const ar = await api.get(`/v1/catalog/products/${id}`, { signal: ac.signal as any });
+            if (ar.data?.data) payload = ar.data.data;
+          } catch (e: any) {
+            if (e?.code === 'ERR_CANCELED' || e?.name === 'CanceledError') return;
+          }
         }
 
-        // Related
+        setData(payload);
+
+        if (isLoggedIn) {
+          await load();
+        }
+
+        if (isLoggedIn && !isAdmin) {
+          try {
+            const rf = await api.get('/v1/favourites', { signal: ac.signal as any });
+            const d = rf.data?.data || rf.data || {};
+            const ids: number[] = d.product_ids || [];
+            setFavOn(ids.includes(id!));
+            setCanFav(true);
+          } catch (e: any) {
+            if (e?.response?.status === 401) { setCanFav(false); setFavOn(false); }
+          }
+        } else {
+          setFavOn(false);
+          setCanFav(false);
+        }
+
         try {
           const cat = (j?.data?.product?.category || '').trim();
           const qs = cat ? `type=ebook&per_page=12&category=${encodeURIComponent(cat)}` : `type=ebook&per_page=12`;
@@ -241,7 +259,7 @@ export default function BookDetail() {
       }
     })();
     return () => ac.abort();
-  }, [id]);
+  }, [id, isLoggedIn, isAdmin]);
 
   if (!id) return <div className="p-6 text-red-600">Invalid URL (missing id).</div>;
   if (err) return <div className="p-6 text-red-600">Error: {err}</div>;
@@ -293,6 +311,14 @@ export default function BookDetail() {
     } catch {}
   };
   const onBuy = async () => {
+    if (!isLoggedIn) {
+      alert('Vui lòng đăng nhập để mua sản phẩm.');
+      return;
+    }
+    if (isAdmin) {
+      alert('Tài khoản admin không thể mua sản phẩm.');
+      return;
+    }
     try {
       await add(p.id, 1);
       toast.show('Đã thêm sản phẩm vào giỏ hàng');
@@ -302,7 +328,9 @@ export default function BookDetail() {
   };
 
   const toggleFav = async () => {
-    if (!canFav) { alert('Please sign in to use Favorites'); return; }
+    if (!isLoggedIn) { alert('Vui lòng đăng nhập để sử dụng tính năng yêu thích.'); return; }
+    if (isAdmin) { alert('Tài khoản admin không thể sử dụng tính năng yêu thích.'); return; }
+    if (!canFav) { alert('Không thể sử dụng tính năng yêu thích vào lúc này.'); return; }
     const next = !favOn;
     setFavOn(next); // optimistic
     try {
@@ -405,135 +433,135 @@ export default function BookDetail() {
                 </div>
               </div>
 
-              {/* === HAI CỘT: (Trái) Description/Attachments/Progress  |  (Phải) Price/Buy/CTAs === */}
-              <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_320px] items-start">
-                {/* Cột Trái: Description + Attachments + Progress */}
-                <div className="space-y-6">
-                  {/* Description: luôn mở, không khoá */}
-                  {p.description && (
-                    <section className="rounded-2xl border border-zinc-200 bg-white p-5">
-                      <h2 className="text-lg font-semibold mb-2">Description</h2>
-                      <p className="text-zinc-700 whitespace-pre-wrap">{p.description}</p>
-                    </section>
-                  )}
-
-                  {/* Attachments: mờ + chặn click khi chưa mua */}
-                  {files.length > 0 && (
-                    <section
-                      className={`rounded-2xl border border-zinc-200 bg-white p-5 ${!canView ? 'opacity-60 pointer-events-none select-none' : ''}`}
-                    >
-                      <h2 className="text-lg font-semibold mb-2">Attachments</h2>
-                      <ul className="list-disc pl-6 space-y-1">
-                        {files.map(f => (
-                          <li key={f.id}>
-                            <a
-                              href={downloadUrl(p.id, f.id)}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="text-[color:var(--brand-600)] hover:underline"
-                            >
-                              Download: {f.file_type.toUpperCase()}
-                            </a>
-                            {f.is_preview ? (
-                              <span className="ml-2 text-xs px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-600">preview</span>
-                            ) : null}
-                          </li>
-                        ))}
-                      </ul>
-                      {!canView && (
-                        <p className="mt-2 text-xs text-zinc-500">
-                          Mua sách để tải toàn bộ tệp đính kèm.
-                        </p>
-                      )}
-                    </section>
-                  )}
-
-                  {/* Reading Progress: ẩn hẳn khi chưa mua */}
+              {/* Rail: hành động mua + nội dung chi tiết */}
+              <aside className="mt-6 w-full lg:max-w-sm xl:max-w-md space-y-4 lg:ml-auto">
+                <div className="flex items-center gap-3 flex-wrap">
+                  <button
+                    onClick={onRead}
+                    disabled={!preview}
+                    className="inline-flex items-center gap-2 bg-[color:var(--brand-500)] hover:bg-[color:var(--brand-600)] disabled:opacity-50 text-white font-semibold px-5 py-2.5 rounded-xl shadow transition"
+                  >
+                    Read Preview
+                  </button>
                   {canView && (
-                    <section className="rounded-2xl border border-zinc-200 bg-white p-5">
+                    <button
+                      onClick={onReadFull}
+                      disabled={!fullPdf}
+                      title={!fullPdf ? 'Chưa có file PDF đầy đủ' : ''}
+                      className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 disabled:hover:bg-emerald-600/90 disabled:cursor-not-allowed disabled:opacity-50 text-white font-semibold px-5 py-2.5 rounded-xl shadow transition"
+                    >
+                      Read Full
+                    </button>
+                  )}
+                  <button
+                    onClick={toggleFav}
+                    aria-pressed={favOn}
+                    aria-disabled={!isCustomer}
+                    className={cn(
+                      'h-10 px-4 inline-flex items-center gap-2 rounded-full border transition',
+                      favOn ? 'bg-rose-50 text-rose-600 border-rose-200' : 'border-zinc-300 text-zinc-700 hover:bg-zinc-50',
+                      !isCustomer && 'opacity-70'
+                    )}
+                  >
+                    <span className="text-lg">{favOn ? '♥' : '♡'}</span>
+                    <span className="text-sm hidden sm:inline">{favOn ? 'Unfavorite' : 'Favorite'}</span>
+                  </button>
+                  <button onClick={onShare} className="h-10 w-10 grid place-items-center rounded-full border border-zinc-300 hover:bg-zinc-50" aria-label="Share">
+                    <span className="text-lg">⇪</span>
+                  </button>
+                </div>
+
+                <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-lg">
+                  <div className="relative">
+                    <div className="absolute -top-3 left-0 text-xs font-bold text-white px-2 py-0.5 rounded-full bg-[color:var(--brand-500)]">One-off</div>
+                  </div>
+                  <div className="flex items-end gap-3 mt-1">
+                    {compareAt > 0 && <div className="text-zinc-500 line-through text-lg">{formatVND(compareAt)}</div>}
+                    <div className="text-3xl font-extrabold text-zinc-900">{priceCents > 0 ? formatVND(priceCents) : 'Free'}</div>
+                  </div>
+                  <div className="mt-2 text-emerald-600 text-sm font-semibold">Own this ebook forever</div>
+
+                  {canView ? (
+                    <button
+                      onClick={onReadFull}
+                      disabled={!fullPdf}
+                      className="mt-4 w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:hover:bg-emerald-600/90 disabled:cursor-not-allowed disabled:opacity-50 text-white font-semibold py-2.5"
+                    >
+                      Read Full
+                    </button>
+                  ) : (
+                    <button
+                      onClick={onBuy}
+                      className="mt-4 w-full rounded-xl bg-[color:var(--brand-500)] hover:bg-[color:var(--brand-600)] text-white font-semibold py-2.5"
+                    >
+                      Buy now
+                    </button>
+                  )}
+                </div>
+
+                <section className="relative rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
+                  {!canView && (
+                    <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-white/80 text-center text-sm text-zinc-600 px-6">
+                      <p>Mua sách để xem mô tả chi tiết, tải tệp đính kèm và theo dõi tiến độ đọc.</p>
+                    </div>
+                  )}
+                  <div className={cn('space-y-5', !canView && 'pointer-events-none select-none opacity-60')}>
+                    {p.description && (
+                      <div>
+                        <h2 className="text-lg font-semibold mb-2">Description</h2>
+                        <p className="text-sm text-zinc-700 whitespace-pre-wrap leading-relaxed">{p.description}</p>
+                      </div>
+                    )}
+                    {files.length > 0 && (
+                      <div>
+                        <h2 className="text-lg font-semibold mb-2">Attachments</h2>
+                        <ul className="list-disc pl-5 space-y-1 text-sm">
+                          {files.map(f => (
+                            <li key={f.id}>
+                              {canView ? (
+                                <a
+                                  href={downloadUrl(p.id, f.id)}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-[color:var(--brand-600)] hover:underline"
+                                >
+                                  Download {f.file_type.toUpperCase()}
+                                </a>
+                              ) : (
+                                <span className="text-zinc-500">Tệp {f.file_type.toUpperCase()}</span>
+                              )}
+                              {f.is_preview ? (
+                                <span className="ml-2 text-xs px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-600">preview</span>
+                              ) : null}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    <div>
                       <h2 className="text-lg font-semibold mb-2">Reading Progress</h2>
-                      <div className="text-sm text-gray-600 mb-2">Current page: {progress?.current_page ?? 0}</div>
-                      <div className="flex items-center gap-2">
+                      <div className="text-sm text-gray-600">Current page: {progress?.current_page ?? 0}</div>
+                      <div className="mt-3 flex items-center gap-2">
                         <input
                           type="number"
                           min={0}
                           value={page}
                           onChange={(e)=>setPage(Number(e.target.value))}
-                          className="border rounded px-2 py-1 w-24"
+                          disabled={!canView || !isCustomer}
+                          className="border rounded px-2 py-1 w-24 disabled:bg-zinc-100 disabled:cursor-not-allowed"
                         />
                         <button
                           onClick={()=>save({ current_page: page })}
-                          className="px-3 py-1 rounded bg-green-600 text-white"
+                          disabled={!canView || !isCustomer}
+                          className="px-3 py-1 rounded bg-green-600 text-white disabled:opacity-60 disabled:cursor-not-allowed"
                         >
                           Save progress
                         </button>
                       </div>
-                    </section>
-                  )}
-                </div>
-
-                {/* Cột Phải: CTAs + Price card */}
-                <aside className="space-y-4">
-                  {/* CTA hàng đầu (Preview / Read Full / Fav / Share) */}
-                  <div className="flex items-center gap-3 flex-wrap">
-                    <button
-                      onClick={onRead}
-                      disabled={!preview}
-                      className="inline-flex items-center gap-2 bg-[color:var(--brand-500)] hover:bg-[color:var(--brand-600)] disabled:opacity-50 text-white font-semibold px-5 py-2.5 rounded-xl shadow transition"
-                    >
-                      Read Preview
-                    </button>
-                    <button
-                      onClick={onReadFull}
-                      disabled={!canView || !fullPdf}
-                      title={!canView ? 'Mua sách để đọc toàn bộ' : (!fullPdf ? 'Chưa có file PDF đầy đủ' : '')}
-                      className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 disabled:hover:bg-emerald-600/90 disabled:cursor-not-allowed disabled:opacity-50 text-white font-semibold px-5 py-2.5 rounded-xl shadow transition"
-                    >
-                      Read Full
-                    </button>
-                    <button
-                      onClick={toggleFav}
-                      className={`h-10 px-4 inline-flex items-center gap-2 rounded-full border transition ${favOn ? 'bg-rose-50 text-rose-600 border-rose-200' : 'border-zinc-300 text-zinc-700 hover:bg-zinc-50'}`}
-                      aria-pressed={favOn}
-                    >
-                      <span className="text-lg">{favOn ? '♥' : '♡'}</span>
-                      <span className="text-sm hidden sm:inline">{favOn ? 'Unfavorite' : 'Favorite'}</span>
-                    </button>
-                    <button onClick={onShare} className="h-10 w-10 grid place-items-center rounded-full border border-zinc-300 hover:bg-zinc-50" aria-label="Share">
-                      <span className="text-lg">⇪</span>
-                    </button>
-                  </div>
-
-                  {/* Price card */}
-                  <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-lg">
-                    <div className="relative">
-                      <div className="absolute -top-3 left-0 text-xs font-bold text-white px-2 py-0.5 rounded-full bg-[color:var(--brand-500)]">One-off</div>
                     </div>
-                    <div className="flex items-end gap-3 mt-1">
-                      {compareAt > 0 && <div className="text-zinc-500 line-through text-lg">{formatVND(compareAt)}</div>}
-                      <div className="text-3xl font-extrabold text-zinc-900">{priceCents > 0 ? formatVND(priceCents) : 'Free'}</div>
-                    </div>
-                    <div className="mt-2 text-emerald-600 text-sm font-semibold">Own this ebook forever</div>
-
-                    {canView ? (
-                      <button
-                        onClick={onReadFull}
-                        disabled={!fullPdf}
-                        className="mt-4 w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:hover:bg-emerald-600/90 disabled:cursor-not-allowed disabled:opacity-50 text-white font-semibold py-2.5"
-                      >
-                        Read Full
-                      </button>
-                    ) : (
-                      <button
-                        onClick={onBuy}
-                        className="mt-4 w-full rounded-xl bg-[color:var(--brand-500)] hover:bg-[color:var(--brand-600)] text-white font-semibold py-2.5"
-                      >
-                        Buy now
-                      </button>
-                    )}
                   </div>
-                </aside>
-              </div>
+                </section>
+              </aside>
             </div>
           </div>
         </section>
