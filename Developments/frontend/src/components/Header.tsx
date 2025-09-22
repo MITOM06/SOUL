@@ -153,7 +153,7 @@ export default function Header() {
               {/* Upgrade plan: users can click; admin view-only */}
               {role === "user" && !isPremium && (
                 <Link
-                  href="/pricing"
+                href="/upgrade"
                   className="relative px-3 py-2 rounded-xl text-white bg-gradient-to-r from-fuchsia-500 to-indigo-500 shadow hover:shadow-md transition hover:-translate-y-0.5"
                   title="Upgrade plan"
                 >
@@ -182,7 +182,7 @@ export default function Header() {
 
               {/* Cart (guests can view) */}
               <Link
-                href="/cart"
+                href="/orders"
                 className={cn(
                   "relative p-2 rounded-lg hover:bg-gray-100 transition",
                   bump && "animate-[cartbump_.3s_ease-out]"

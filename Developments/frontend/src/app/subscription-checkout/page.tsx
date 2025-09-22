@@ -65,6 +65,7 @@ export default function SubscriptionCheckoutPage() {
             <img src={qrUrl} alt="QR Code" className="mx-auto border rounded-lg" />
             <p className="mt-2 text-gray-600">Scan the QR to pay</p>
             <div className="mt-3 text-sm text-gray-700">Provider: <strong>{provider}</strong></div>
+           
           </div>
         </div>
 
