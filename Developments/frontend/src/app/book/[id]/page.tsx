@@ -559,6 +559,28 @@ export default function BookDetail() {
                         </button>
                       </div>
                     </div>
+                    <div className="flex items-end gap-3 mt-1">
+                      {compareAt > 0 && <div className="text-zinc-500 line-through text-lg">{formatVND(compareAt)}</div>}
+                      <div className="text-3xl font-extrabold text-zinc-900">{priceCents > 0 ? formatVND(priceCents) : 'Free'}</div>
+                    </div>
+                    <div className="mt-2 text-emerald-600 text-sm font-semibold">Own this ebook forever</div>
+
+                    {canView ? (
+                      <button
+                        onClick={onReadFull}
+                        disabled={!fullPdf}
+                        className="mt-4 w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:hover:bg-emerald-600/90 disabled:cursor-not-allowed disabled:opacity-50 text-white font-semibold py-2.5"
+                      >
+                        Read Fulls
+                      </button>
+                    ) : (
+                      <button
+                        onClick={onBuy}
+                        className="mt-4 w-full rounded-xl bg-[color:var(--brand-500)] hover:bg-[color:var(--brand-600)] text-white font-semibold py-2.5"
+                      >
+                        Buy now
+                      </button>
+                    )}
                   </div>
                 </section>
               </aside>

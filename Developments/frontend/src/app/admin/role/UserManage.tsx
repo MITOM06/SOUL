@@ -7,13 +7,27 @@ interface User {
   id: number;
   name: string | null;
   email: string;
-  role: "user" | "admin";
+  role: "user" | "admin" | string;
   is_active: boolean;
   created_at: string;
 }
 
 interface UserManageProps {
   roleFilter: "user" | "admin"; // 👈 bắt buộc truyền vào
+}
+
+// Meta theo paginator Laravel (được BE bọc trong key "data")
+interface LaravelPaginator<T> {
+  current_page: number;
+  data: T[];
+  from: number | null;
+  last_page: number;
+  next_page_url: string | null;
+  prev_page_url: string | null;
+  per_page: number;
+  to: number | null;
+  total: number;
+  // có thể còn nhiều field khác nhưng không bắt buộc
 }
 
 export default function UserManage({ roleFilter }: UserManageProps) {
@@ -23,29 +37,40 @@ export default function UserManage({ roleFilter }: UserManageProps) {
   const [selectedRowId, setSelectedRowId] = useState<number | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<Partial<User & { password: string }>>({});
-  const [meta, setMeta] = useState<any>(null);
+  const [meta, setMeta] = useState<LaravelPaginator<User> | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [query, setQuery] = useState("");
 
-  // load khi mount hoặc page thay đổi
+  // load khi mount hoặc page/role thay đổi
   useEffect(() => {
     fetchUsers(currentPage, roleFilter);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPage, roleFilter]);
 
-  // 👉 fetch và sort latest
+  // 👉 fetch và sort latest (mới nhất trước)
   const fetchUsers = async (page = 1, role: "user" | "admin") => {
     setLoading(true);
     try {
       const res = await adminUsersAPI.getAll({ page, role, per_page: 15 });
 
-      // sort latest (mới nhất trước)
-      const sortedUsers = (res.data.data ?? []).sort(
-        (a: User, b: User) =>
-          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      // BE của bạn: { success: true, data: { current_page, data: [...], ... } }
+      const payload = res?.data ?? {};
+      const paginator: LaravelPaginator<User> | null =
+        payload?.data && Array.isArray(payload.data?.data)
+          ? (payload.data as LaravelPaginator<User>)
+          : null;
+
+      const list: User[] = paginator?.data ?? [];
+
+      // clone trước khi sort để không mutate
+      const sortedUsers = [...list].sort(
+        (a, b) =>
+          new Date(b?.created_at ?? 0).getTime() -
+          new Date(a?.created_at ?? 0).getTime()
       );
 
       setUsers(sortedUsers);
-      setMeta(res.data);
+      setMeta(paginator);
     } catch (err) {
       console.error("Fetch Users Error:", err);
       setUsers([]);
@@ -121,13 +146,19 @@ export default function UserManage({ roleFilter }: UserManageProps) {
               placeholder="Search by name or email..."
               className="w-full border rounded-lg pl-9 pr-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">🔎</span>
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+              🔎
+            </span>
           </div>
           <button
-            onClick={() => { setSelectedUser(null); setForm({ is_active: true }); setShowForm(true); }}
+            onClick={() => {
+              setSelectedUser(null);
+              setForm({ is_active: true });
+              setShowForm(true);
+            }}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:brightness-110"
           >
-            Add {roleFilter === 'admin' ? 'Admin' : 'User'}
+            Add {roleFilter === "admin" ? "Admin" : "User"}
           </button>
         </div>
       </div>
@@ -156,40 +187,62 @@ export default function UserManage({ roleFilter }: UserManageProps) {
                 );
               })
               .map((user, index) => (
-              <tr
-                key={user.id}
-                className={`text-center transition cursor-pointer ${selectedRowId===user.id ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
-                onClick={() => setSelectedRowId(prev => prev===user.id ? null : user.id)}
-              >
-                <td className="border p-2">{(meta?.from ?? 0) + index}</td>
-                <td className="border p-2">{user.name || "(No name)"}</td>
-                <td className="border p-2">{user.email}</td>
-                <td className="border p-2">{user.is_active ? "✅" : "❌"}</td>
-                <td className="border p-2">
-                  {new Date(user.created_at).toLocaleString()}
-                </td>
-                <td className="border p-2 space-x-2">
-                  {selectedRowId===user.id ? (
-                    <>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); setSelectedUser(user); setForm(user); setShowForm(true); }}
-                        className="px-3 py-1 bg-yellow-500 text-white rounded hover:brightness-105"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); deleteUser(user.id); }}
-                        className="px-3 py-1 bg-red-500 text-white rounded hover:brightness-105"
-                      >
-                        Delete
-                      </button>
-                    </>
-                  ) : (
-                    <span className="text-xs text-zinc-500">Click row to select</span>
-                  )}
-                </td>
-              </tr>
-            ))}
+                <tr
+                  key={user.id}
+                  className={`text-center transition cursor-pointer ${
+                    selectedRowId === user.id
+                      ? "bg-blue-50"
+                      : "hover:bg-gray-50"
+                  }`}
+                  onClick={() =>
+                    setSelectedRowId((prev) => (prev === user.id ? null : user.id))
+                  }
+                >
+                  <td className="border p-2">
+                    {((meta?.from ?? 0) as number) + index}
+                  </td>
+                  <td className="border p-2">{user.name || "(No name)"}</td>
+                  <td className="border p-2">{user.email}</td>
+                  <td className="border p-2">{user.is_active ? "✅" : "❌"}</td>
+                  <td className="border p-2">
+                    {new Date(user.created_at).toLocaleString()}
+                  </td>
+                  <td className="border p-2 space-x-2">
+                    {selectedRowId === user.id ? (
+                      <>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedUser(user);
+                            setForm({
+                              email: user.email,
+                              name: user.name,
+                              is_active: user.is_active,
+                            });
+                            setShowForm(true);
+                          }}
+                          className="px-3 py-1 bg-yellow-500 text-white rounded hover:brightness-105"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deleteUser(user.id);
+                          }}
+                          className="px-3 py-1 bg-red-500 text-white rounded hover:brightness-105"
+                        >
+                          Delete
+                        </button>
+                      </>
+                    ) : (
+                      <span className="text-xs text-zinc-500">
+                        Click row to select
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              ))}
           </tbody>
         </table>
 
@@ -224,19 +277,29 @@ export default function UserManage({ roleFilter }: UserManageProps) {
             {/* Header */}
             <div className="px-6 py-5 border-b bg-gray-50 flex items-center gap-4">
               <div className="h-12 w-12 rounded-full bg-blue-600 text-white grid place-items-center text-lg font-bold">
-                {(form.name ?? selectedUser?.name ?? selectedUser?.email ?? 'U').toString().charAt(0).toUpperCase()}
+                {(form.name ??
+                  selectedUser?.name ??
+                  selectedUser?.email ??
+                  "U")
+                  .toString()
+                  .charAt(0)
+                  .toUpperCase()}
               </div>
               <div className="flex-1 min-w-0">
                 <h2 className="text-lg font-semibold truncate">
-                  {selectedUser ? 'Edit Profile' : 'Add Profile'}
+                  {selectedUser ? "Edit Profile" : "Add Profile"}
                 </h2>
-                <p className="text-sm text-gray-500">Role: {roleFilter === 'admin' ? 'Admin' : 'User'}</p>
+                <p className="text-sm text-gray-500">
+                  Role: {roleFilter === "admin" ? "Admin" : "User"}
+                </p>
               </div>
               <button
                 onClick={() => setShowForm(false)}
                 className="px-3 py-2 text-gray-600 hover:bg-gray-200 rounded"
                 aria-label="Close"
-              >✕</button>
+              >
+                ✕
+              </button>
             </div>
 
             {/* Body */}
@@ -278,9 +341,13 @@ export default function UserManage({ roleFilter }: UserManageProps) {
                     type="checkbox"
                     className="h-4 w-4"
                     checked={form.is_active ?? true}
-                    onChange={(e) => setForm({ ...form, is_active: e.target.checked })}
+                    onChange={(e) =>
+                      setForm({ ...form, is_active: e.target.checked })
+                    }
                   />
-                  <label htmlFor="active" className="text-sm">Active account</label>
+                  <label htmlFor="active" className="text-sm">
+                    Active account
+                  </label>
                 </div>
               </div>
             </div>

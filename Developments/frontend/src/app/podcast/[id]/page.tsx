@@ -243,10 +243,12 @@ export default function PodcastDetailPage() {
             if (pr.data?.data) payload = pr.data.data;
           } catch (e: any) {
             if (e?.code === 'ERR_CANCELED' || e?.name === 'CanceledError') return;
+
           }
         }
 
         setData(payload);
+
 
         if (isLoggedIn && !isAdmin) {
           try {
@@ -261,6 +263,7 @@ export default function PodcastDetailPage() {
         } else {
           setFavOn(false);
           setCanFav(false);
+
         }
 
         try {
@@ -278,7 +281,10 @@ export default function PodcastDetailPage() {
           }
         } catch {}
       } catch (e: any) {
-        if (e?.name !== 'AbortError') setErr(e?.message || 'Failed to load data');
+        if (e?.name === 'AbortError' || e?.name === 'CanceledError' || e?.code === 'ERR_CANCELED') {
+          return;
+        }
+        setErr(e?.message || 'Failed to load data');
       } finally {
         setLoading(false);
       }

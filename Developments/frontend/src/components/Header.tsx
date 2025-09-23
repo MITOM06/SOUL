@@ -42,157 +42,6 @@ function useScrolled(threshold = 8) {
   return scrolled;
 }
 
-/* ========= Auth Dropdown ========= */
-export function HeaderAuthArea() {
-  const { user, isLoading, logout, subscriptionLevel } = useAuth();
-  const [open, setOpen] = useState(false);
-  const pathname = usePathname();
-  const router = useRouter();
-  const panelRef = useClickOutside<HTMLDivElement>(open, () => setOpen(false));
-
-  if (isLoading) {
-    return <div className="h-8 w-28 bg-gray-200 animate-pulse rounded" />;
-  }
-
-// Not logged in
-  if (!user) {
-    const next = encodeURIComponent(pathname || "/");
-    return (
-      <div className="flex items-center gap-2">
-        <Link
-          href={`/auth/register?next=${next}`}
-          className="px-3 py-2 rounded-lg border border-[color:var(--brand-500)] text-[color:var(--brand-600)] hover:bg-[color:var(--brand-50)] transition"
-        >
-          Sign up
-        </Link>
-        <Link
-          href={`/auth/login?next=${next}`}
-          className="px-3 py-2 rounded-lg text-white transition bg-[color:var(--brand-500)] hover:bg-[color:var(--brand-600)]"
-        >
-          Sign in
-        </Link>
-      </div>
-    );
-  }
-
-  const role = normalizeRole(user); // 'admin' | 'user'
-  const isPremium = subscriptionLevel === "premium";
-  const planLabel = subscriptionLevel ? subscriptionLevel.toUpperCase() : "FREE";
-
-  // Build menu items per role
-  const userMenu = [
-    { href: "/profile", label: "Profile" },
-    { href: "/favourites", label: "Favourite" },
-    { href: "/library", label: "Library" },
-    { href: "/orders", label: "Orders" },
-    { href: "/continues", label: "Continues" },     // e.g. continue reading/listening
-    { href: "/payment-history", label: "My Payment" },
-    { href: "/my-package", label: "My Package" },
-  ];
-
-  const adminMenu = [
-    { href: "/profile", label: "Profile" },
-    { href: "/admin/dashboard", label: "Admin Panel" },
-  ];
-
-  return (
-    <div className="relative">
-      <button
-        aria-haspopup="menu"
-        aria-expanded={open}
-        className={cn(
-          "group flex items-center gap-2 px-3 py-2 rounded-lg",
-          "bg-gray-100 hover:bg-gray-200 transition",
-          "focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-        )}
-        onClick={() => setOpen((v) => !v)}
-      >
-        {/* Upgrade chip: only for normal user & not premium */}
-        {/* Upgrade chip removed here; a standalone Upgrade button exists on header right */}
-
-        <div
-          className={cn(
-            "h-8 w-8 rounded-full grid place-items-center text-white font-semibold",
-            "bg-blue-500",
-            isPremium && "ring-2 ring-amber-400 relative"
-          )}
-        >
-          {user.name?.[0]?.toUpperCase() || user.email[0].toUpperCase()}
-          {isPremium && (
-            <span className="pointer-events-none absolute inset-0 rounded-full ring-2 ring-amber-400/40 animate-[pulse_2s_ease-out_infinite] [@media(prefers-reduced-motion:reduce)]:hidden" />
-          )}
-        </div>
-
-        <span className="hidden sm:block text-sm">{user.name || user.email}</span>
-
-        <svg
-          className={cn(
-            "h-4 w-4 opacity-70 transition-transform",
-            open ? "rotate-180" : "rotate-0"
-          )}
-          viewBox="0 0 20 20"
-          fill="currentColor"
-        >
-          <path d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 011.08 1.04l-4.25 4.25a.75.75 0 01-1.06 0L5.21 8.27a.75.75 0 01.02-1.06z" />
-        </svg>
-      </button>
-
-      {/* Dropdown */}
-      <div
-        ref={panelRef}
-        className={cn(
-          "absolute right-0 mt-2 w-64 rounded-xl border bg-white shadow-lg z-50 origin-top-right",
-          "transition",
-          open ? "opacity-100 scale-100" : "pointer-events-none opacity-0 scale-95",
-          "[&]:[@media(prefers-reduced-motion:reduce)]:scale-100"
-        )}
-        role="menu"
-        tabIndex={-1}
-      >
-        <div className="absolute -top-2 right-6 h-4 w-4 rotate-45 bg-white border-l border-t" />
-        <div className="p-2">
-          {/* Plan label only for user; hide for admin */}
-          {role === "user" && (
-            <>
-              <div className="px-3 py-2 text-xs text-gray-600">
-                Current plan: <span className="font-semibold">{planLabel}</span>
-              </div>
-              <div className="h-px bg-gray-100 my-2" />
-            </>
-          )}
-
-          {/* Menu items */}
-          {(role === "admin" ? adminMenu : userMenu).map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className="block px-3 py-2 rounded-md hover:bg-gray-50 text-sm focus:bg-gray-50 focus:outline-none"
-              onClick={() => setOpen(false)}
-              role="menuitem"
-            >
-              {item.label}
-            </Link>
-          ))}
-
-          {/* Sign out (common) */}
-          <button
-            className="w-full text-left px-3 py-2 rounded-md hover:bg-gray-50 text-sm text-red-600 focus:bg-gray-50 focus:outline-none"
-            onClick={async () => {
-              setOpen(false);
-              await logout();
-              const next = encodeURIComponent(pathname || "/");
-              window.location.href = `/?next=${next}`;
-            }}
-            role="menuitem"
-          >
-            Sign out
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 /* ========= Logo ========= */
 function SoulLogo() {
   return (
@@ -205,7 +54,7 @@ function SoulLogo() {
   );
 }
 
-/* ========= Nav Item ========= */
+/* ========= Nav Item (underline grow) ========= */
 function NavItem({
   href,
   label,
@@ -226,7 +75,6 @@ function NavItem({
     >
       <span className="relative inline-block">
         {label}
-        {/* underline grow */}
         <span
           className={cn(
             "pointer-events-none absolute left-0 -bottom-1 h-0.5 rounded-full bg-zinc-900 origin-left transition-transform duration-300 ease-out",
@@ -240,13 +88,22 @@ function NavItem({
 
 /* ========= Header ========= */
 export default function Header() {
-  const { subscriptionLevel, user } = useAuth();
+  const { user, isLoading, logout, subscriptionLevel } = useAuth();
   const { count } = useCart();
   const pathname = usePathname();
+  const router = useRouter();
   const scrolled = useScrolled(8);
-  const role = normalizeRole(user);
 
-  // bump animation when count changes
+  const role = normalizeRole(user); // 'admin' | 'user' | 'guest'
+  const next = encodeURIComponent(pathname || "/");
+  const isPremium = subscriptionLevel === "premium" || subscriptionLevel === "vip";
+  const planLabel = subscriptionLevel ? subscriptionLevel.toUpperCase() : "FREE";
+
+  // Dropdown auth
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useClickOutside<HTMLDivElement>(menuOpen, () => setMenuOpen(false));
+
+  // bump animation when cart count changes
   const [bump, setBump] = useState(false);
   useEffect(() => {
     if (count <= 0) return;
@@ -261,6 +118,7 @@ export default function Header() {
     { href: "/book", label: "Books" },
     { href: "/podcast", label: "Podcasts" },
     { href: "/about", label: "About" },
+    { href: "/FAQ", label: "FAQ" },
   ];
 
   return (
@@ -272,7 +130,7 @@ export default function Header() {
         )}
       >
         <div className="px-4 full-bleed">
-          <div className="flex items-center justify-between h-16">
+          <div className="flex h-16 items-center justify-between">
             {/* Brand */}
             <Link href="/" className="flex items-center gap-3 group">
               <SoulLogo />
@@ -281,7 +139,7 @@ export default function Header() {
               </span>
             </Link>
 
-            {/* Nav */}
+            {/* Public nav – always visible for everyone */}
             <nav className="hidden md:flex items-center gap-1">
               {nav.map((n) => {
                 const active =
@@ -292,27 +150,37 @@ export default function Header() {
 
             {/* Right area */}
             <div className="flex items-center gap-3">
-              {/* Standalone Upgrade button */}
-              {(!user || (normalizeRole(user) === 'user' && subscriptionLevel !== 'premium' && subscriptionLevel !== 'vip')) && (
+              {/* Upgrade plan: users can click; admin view-only */}
+              {role === "user" && !isPremium && (
                 <Link
-                  href="/upgrade"
+                href="/upgrade"
                   className="relative px-3 py-2 rounded-xl text-white bg-gradient-to-r from-fuchsia-500 to-indigo-500 shadow hover:shadow-md transition hover:-translate-y-0.5"
+                  title="Upgrade plan"
                 >
                   <span className="relative z-10">Upgrade</span>
                   <span className="absolute inset-0 rounded-xl animate-pulse bg-white/10" />
                 </Link>
               )}
-              {/* Notifications – users to /notifications, admins to /admin/notifications */}
+              {role === "admin" && (
+                <span
+                  title="Admins cannot upgrade plans"
+                  className="hidden sm:inline-flex items-center rounded-xl border px-3 py-1.5 text-sm text-gray-400 cursor-not-allowed"
+                >
+                  Upgrade
+                </span>
+              )}
+
+              {/* Notifications – users -> /notifications, admins -> /admin/notifications */}
               <Link
-                href={role === 'admin' ? "/admin/notifications" : "/notifications"}
+                href={role === "admin" ? "/admin/notifications" : "/notifications"}
                 className="relative p-2 rounded-lg hover:bg-gray-100 transition"
                 aria-label="Notifications"
+                title="Notifications"
               >
                 <BellIcon className="h-6 w-6 text-zinc-700" />
               </Link>
 
-              {/* Cart (hide for admin); link to Orders detail */}
-              {role !== 'admin' && (
+              {/* Cart (guests can view) */}
               <Link
                 href="/orders"
                 className={cn(
@@ -320,24 +188,209 @@ export default function Header() {
                   bump && "animate-[cartbump_.3s_ease-out]"
                 )}
                 aria-label="Open cart"
+                title="Cart"
               >
                 <ShoppingCartIcon className="h-6 w-6 text-zinc-700" />
                 {count > 0 && (
-                  <span className="absolute -top-1 -right-1 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full grid place-items-center min-w-5 h-5 bg-[color:var(--brand-500)]">
+                  <span className="absolute -top-1 -right-1 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full grid place-items-center min-w-5 h-5 bg-[color:var(--brand-500,#111)]">
                     {count}
                   </span>
                 )}
               </Link>
+
+              {/* Auth area */}
+              {isLoading ? (
+                <div className="h-8 w-28 bg-gray-200 animate-pulse rounded" />
+              ) : user ? (
+                <div className="relative" ref={menuRef}>
+                  <button
+                    aria-haspopup="menu"
+                    aria-expanded={menuOpen}
+                    onClick={() => setMenuOpen((s) => !s)}
+                    className={cn(
+                      "group flex items-center gap-2 px-3 py-2 rounded-lg",
+                      "bg-gray-100 hover:bg-gray-200 transition",
+                      "focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                    )}
+                  >
+                    {/* Avatar + premium pulse ring */}
+                    <div
+                      className={cn(
+                        "h-8 w-8 rounded-full grid place-items-center text-white font-semibold",
+                        "bg-blue-500",
+                        isPremium && "ring-2 ring-amber-400 relative"
+                      )}
+                      title={isPremium ? `Plan: ${planLabel}` : `Plan: ${planLabel}`}
+                    >
+                      {user.name?.[0]?.toUpperCase() || user.email?.[0]?.toUpperCase()}
+                      {isPremium && (
+                        <span className="pointer-events-none absolute inset-0 rounded-full ring-2 ring-amber-400/40 animate-[pulse_2s_ease-out_infinite] [@media(prefers-reduced-motion:reduce)]:hidden" />
+                      )}
+                    </div>
+
+                    <span className="hidden sm:block text-sm">
+                      {user.name || user.email}
+                    </span>
+
+                    <span className="text-gray-400 text-xs">({role})</span>
+
+                    <svg
+                      className={cn(
+                        "h-4 w-4 opacity-70 transition-transform",
+                        menuOpen ? "rotate-180" : "rotate-0"
+                      )}
+                      viewBox="0 0 20 20"
+                      fill="currentColor"
+                    >
+                      <path d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 011.08 1.04l-4.25 4.25a.75.75 0 01-1.06 0L5.21 8.27a.75.75 0 01.02-1.06z" />
+                    </svg>
+                  </button>
+
+                  {/* Dropdown with scale/opacity animation */}
+                  <div
+                    className={cn(
+                      "absolute right-0 mt-2 w-64 rounded-xl border bg-white shadow-lg z-50 origin-top-right",
+                      "transition will-change-transform will-change-opacity",
+                      menuOpen
+                        ? "opacity-100 scale-100"
+                        : "pointer-events-none opacity-0 scale-95",
+                      "[&]:[@media(prefers-reduced-motion:reduce)]:scale-100"
+                    )}
+                    role="menu"
+                    tabIndex={-1}
+                  >
+                    <div className="absolute -top-2 right-6 h-4 w-4 rotate-45 bg-white border-l border-t" />
+                    <div className="p-2">
+                      {/* Plan label only for users (hidden for admins) */}
+                      {role === "user" && (
+                        <>
+                          <div className="px-3 py-2 text-xs text-gray-600">
+                            Current plan: <span className="font-semibold">{planLabel}</span>
+                          </div>
+                          <div className="h-px bg-gray-100 my-2" />
+                        </>
+                      )}
+
+                      {/* Menu items */}
+                      {role === "admin" ? (
+                        <>
+                          <Link
+                            href="/profile"
+                            className="block px-3 py-2 rounded-md hover:bg-gray-50 text-sm focus:bg-gray-50 focus:outline-none"
+                            onClick={() => setMenuOpen(false)}
+                            role="menuitem"
+                          >
+                            Profile
+                          </Link>
+                          <Link
+                            href="/admin/dashboard"
+                            className="block px-3 py-2 rounded-md hover:bg-gray-50 text-sm focus:bg-gray-50 focus:outline-none"
+                            onClick={() => setMenuOpen(false)}
+                            role="menuitem"
+                          >
+                            Admin Panel
+                          </Link>
+                        </>
+                      ) : (
+                        <>
+                          <Link
+                            href="/profile"
+                            className="block px-3 py-2 rounded-md hover:bg-gray-50 text-sm focus:bg-gray-50 focus:outline-none"
+                            onClick={() => setMenuOpen(false)}
+                            role="menuitem"
+                          >
+                            Profile
+                          </Link>
+                          <Link
+                            href="/favourites"
+                            className="block px-3 py-2 rounded-md hover:bg-gray-50 text-sm focus:bg-gray-50 focus:outline-none"
+                            onClick={() => setMenuOpen(false)}
+                            role="menuitem"
+                          >
+                            Favorites
+                          </Link>
+                          <Link
+                            href="/library"
+                            className="block px-3 py-2 rounded-md hover:bg-gray-50 text-sm focus:bg-gray-50 focus:outline-none"
+                            onClick={() => setMenuOpen(false)}
+                            role="menuitem"
+                          >
+                            Library
+                          </Link>
+                          <Link
+                            href="/orders"
+                            className="block px-3 py-2 rounded-md hover:bg-gray-50 text-sm focus:bg-gray-50 focus:outline-none"
+                            onClick={() => setMenuOpen(false)}
+                            role="menuitem"
+                          >
+                            Orders
+                          </Link>
+                          <Link
+                            href="/continues"
+                            className="block px-3 py-2 rounded-md hover:bg-gray-50 text-sm focus:bg-gray-50 focus:outline-none"
+                            onClick={() => setMenuOpen(false)}
+                            role="menuitem"
+                          >
+                            Continue
+                          </Link>
+                          <Link
+                            href="/payment-history"
+                            className="block px-3 py-2 rounded-md hover:bg-gray-50 text-sm focus:bg-gray-50 focus:outline-none"
+                            onClick={() => setMenuOpen(false)}
+                            role="menuitem"
+                          >
+                            Payment History
+                          </Link>
+                          <Link
+                            href="/my-package"
+                            className="block px-3 py-2 rounded-md hover:bg-gray-50 text-sm focus:bg-gray-50 focus:outline-none"
+                            onClick={() => setMenuOpen(false)}
+                            role="menuitem"
+                          >
+                            My Plan
+                          </Link>
+                        </>
+                      )}
+
+                      <button
+                        className="w-full text-left px-3 py-2 rounded-md hover:bg-gray-50 text-sm text-red-600 focus:bg-gray-50 focus:outline-none"
+                        onClick={async () => {
+                          setMenuOpen(false);
+                          await logout();
+                          router.push(`/?next=${next}`);
+                        }}
+                        role="menuitem"
+                      >
+                        Log out
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="hidden sm:flex items-center gap-2">
+                  <Link
+                    href={`/auth/register?next=${next}`}
+                    className="rounded-xl border px-3 py-1.5 text-sm hover:bg-gray-50"
+                  >
+                    Sign up
+                  </Link>
+                  <Link
+                    href={`/auth/login?next=${next}`}
+                    className="rounded-xl bg-black px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-900"
+                  >
+                    Log in
+                  </Link>
+                </div>
               )}
-              <HeaderAuthArea />
             </div>
           </div>
         </div>
 
+        {/* neon divider bar */}
         <div className="h-px bg-gradient-to-r from-transparent via-zinc-300 to-transparent" />
       </div>
 
-      {/* keyframes (Tailwind arbitrary) */}
+      {/* keyframes & helpers */}
       <style jsx global>{`
         @keyframes cartbump {
           0% { transform: scale(1); }
