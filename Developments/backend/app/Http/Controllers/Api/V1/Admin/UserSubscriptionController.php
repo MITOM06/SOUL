@@ -17,14 +17,29 @@ class UserSubscriptionController extends Controller
     {
         $query = UserSubscription::with('user')->orderByDesc('id');
 
+        // Filters
         if ($request->filled('status')) {
             $st = $request->query('status');
             if (in_array($st, ['active', 'canceled', 'expired', 'pending'])) {
                 $query->where('status', $st);
             }
         }
+        if ($request->filled('plan') || $request->filled('plan_key')) {
+            $plan = $request->query('plan', $request->query('plan_key'));
+            $query->where('plan_key', $plan);
+        }
+        $search = trim((string) $request->query('search', ''));
+        if ($search !== '') {
+            $like = "%{$search}%";
+            $query->whereHas('user', function($q) use ($like) {
+                $q->where('email','like',$like)
+                  ->orWhere('name','like',$like);
+            });
+        }
 
-        $subs = $query->get(); // FE tự phân trang client-side
+        // Pagination
+        $per = max(1, (int) $request->query('per_page', 15));
+        $subs = $query->paginate($per)->withQueryString();
 
         return response()->json([
             'success' => true,

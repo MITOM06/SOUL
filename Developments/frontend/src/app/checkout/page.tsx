@@ -75,7 +75,7 @@ export default function CheckoutPage() {
   const handleConfirmOtp = async () => {
     try {
       if (!otp) {
-        alert("Vui lòng nhập OTP");
+        alert("Please enter OTP");
         return;
       }
 
@@ -89,11 +89,11 @@ export default function CheckoutPage() {
         setPaid(true);
         refresh();
       } else {
-        alert(res.data?.message || "OTP không đúng");
+        alert(res.data?.message || "Invalid OTP");
       }
     } catch (err: any) {
       console.error("Confirm OTP error:", err.response?.data || err);
-      alert(err?.response?.data?.message || "Lỗi xác thực OTP");
+      alert(err?.response?.data?.message || "OTP confirmation error");
     }
   };
 
@@ -101,18 +101,32 @@ export default function CheckoutPage() {
   if (!paymentData) return <p>Initializing payment...</p>;
 
   if (paid) {
+    // Sau khi thanh toán thành công: chuyển thẳng về Library
+    // để người dùng thấy ngay sản phẩm đã mua
+    if (typeof window !== 'undefined') {
+      // nhỏ delay để đảm bảo state đã cập nhật
+      setTimeout(() => router.replace('/library'), 500);
+    }
     return (
       <div className="max-w-lg mx-auto p-6 text-center">
         <h1 className="text-2xl font-bold text-green-600 mb-4">
           Payment successful 🎉
         </h1>
         <p className="mb-2">Order #{paymentData.order_id} has been paid.</p>
-        <button
-          onClick={() => router.push("/orders")}
-          className="mt-6 px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-        >
-          Back to Orders
-        </button>
+        <div className="mt-6 flex justify-center gap-2">
+          <button
+            onClick={() => router.replace("/library")}
+            className="px-5 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700"
+          >
+            Go to Library
+          </button>
+          <button
+            onClick={() => router.push("/orders")}
+            className="px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          >
+            Back to Orders
+          </button>
+        </div>
       </div>
     );
   }
@@ -178,13 +192,11 @@ export default function CheckoutPage() {
                 <div>
                   <div className="font-medium">{it.product?.title}</div>
                   <div className="text-gray-500">
-                    Qty: {it.quantity} ×{" "}
-                    {(it.unit_price_cents / 100).toLocaleString()} ₫
+                    Qty: {it.quantity} × {new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format((it.unit_price_cents||0)/100)}
                   </div>
                 </div>
                 <div className="font-semibold">
-                  {((it.unit_price_cents * it.quantity) / 100).toLocaleString()}{" "}
-                  ₫
+                  {new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(((it.unit_price_cents||0) * it.quantity)/100)}
                 </div>
               </div>
             ))}
@@ -195,9 +207,7 @@ export default function CheckoutPage() {
           </div>
           <div className="mt-1 flex justify-between">
             <div>Total</div>
-            <div className="text-lg font-bold">
-              {(paymentData.amount / 100).toLocaleString()} ₫
-            </div>
+            <div className="text-lg font-bold">{new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format((paymentData.amount||0)/100)}</div>
           </div>
         </div>
       </div>

@@ -24,6 +24,8 @@ export default function CreatePodcastPage() {
   const [price, setPrice] = useState<number>(0);
   const [cat, setCat] = useState('');
   const [thumb, setThumb] = useState('');
+  const [coverFile, setCoverFile] = useState<File | null>(null);
+  const [coverPreview, setCoverPreview] = useState<string | null>(null);
   const [active, setActive] = useState(true);
   const [ytUrl, setYtUrl] = useState('');
   const [loading, setLoading] = useState(false);
@@ -41,6 +43,16 @@ export default function CreatePodcastPage() {
       const j = await r.json();
       if (!j?.success) return alert(j?.message || 'Create failed');
       const newId = j?.data?.id;
+      if (coverFile) {
+        const fd = new FormData();
+        fd.append('image', coverFile);
+        const upThumb = await fetch(`${API}/v1/catalog/products/${newId}/thumbnail`, { method: 'POST', body: fd, credentials: 'include' });
+        if (!upThumb.ok) {
+          const t = await upThumb.text();
+          alert('Upload thumbnail failed: ' + t);
+          return;
+        }
+      }
       if (ytUrl.trim()) {
         await fetch(`${API}/v1/catalog/products/${newId}/youtube`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: ytUrl.trim() })
@@ -59,7 +71,7 @@ export default function CreatePodcastPage() {
         <h1 className="text-2xl font-bold">Create Podcast</h1>
       </div>
 
-      <div className="grid md:grid-cols-2 gap-6">
+      <div className="grid md:grid-cols-1 gap-6">
         <div className="border rounded-xl p-4">
           <label className="block text-sm mt-2">Title</label>
           <input value={title} onChange={e=>setTitle(e.target.value)} className="w-full border rounded px-3 py-2" />
@@ -69,7 +81,7 @@ export default function CreatePodcastPage() {
 
           <div className="grid grid-cols-2 gap-3 mt-3">
             <div>
-              <label className="block text-sm">Price (vnd)</label>
+              <label className="block text-sm">Price (cents, USD)</label>
               <input type="number" value={price} onChange={e=>setPrice(Number(e.target.value))} className="w-full border rounded px-3 py-2" />
             </div>
             <div>
@@ -77,9 +89,17 @@ export default function CreatePodcastPage() {
               <input value={cat} onChange={e=>setCat(e.target.value)} className="w-full border rounded px-3 py-2" />
             </div>
           </div>
-
-          <label className="block text-sm mt-3">Thumbnail URL</label>
-          <input value={thumb} onChange={e=>setThumb(e.target.value)} placeholder="http(s)://... or /storage/..." className="w-full border rounded px-3 py-2" />
+          <label className="block text-sm mt-3">Cover image</label>
+          <input type="file" accept="image/*" onChange={(e)=>{
+            const f = e.target.files?.[0] || null;
+            setCoverFile(f);
+            if (f) setCoverPreview(URL.createObjectURL(f)); else setCoverPreview(null);
+          }} className="w-full border rounded px-3 py-2" />
+          {coverPreview && (
+            <div className="mt-2">
+              <img src={coverPreview} alt="cover" className="w-40 h-40 object-cover rounded border" />
+            </div>
+          )}
 
           <label className="inline-flex items-center gap-2 mt-3">
             <input type="checkbox" checked={active} onChange={e=>setActive(e.target.checked)} />
@@ -97,11 +117,8 @@ export default function CreatePodcastPage() {
           </div>
         </div>
 
-        <div className="hidden md:block p-4 rounded-xl border text-sm text-gray-600">
-          <p>After creating, you can add YouTube audio via the URL field above.</p>
-        </div>
+        {/* removed right-side panel */}
       </div>
     </section>
   );
 }
-

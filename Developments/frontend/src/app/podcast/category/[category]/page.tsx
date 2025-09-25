@@ -104,8 +104,8 @@ export default function PodcastCategoryPage() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string|null>(null);
 
-  const [minVND, setMinVND] = useState<string>(sp.get('min') || '');
-  const [maxVND, setMaxVND] = useState<string>(sp.get('max') || '');
+  const [minUSD, setMinUSD] = useState<string>(sp.get('min') || '');
+  const [maxUSD, setMaxUSD] = useState<string>(sp.get('max') || '');
   const [q, setQ] = useState<string>(sp.get('q') || '');
 
   // favourites hook
@@ -117,8 +117,8 @@ export default function PodcastCategoryPage() {
       try {
         setLoading(true); setErr(null);
         const params = new URLSearchParams({ type: 'podcast', category, per_page: '99' });
-        const min = Number(minVND);
-        const max = Number(maxVND);
+        const min = Number(minUSD);
+        const max = Number(maxUSD);
         if (!Number.isNaN(min) && min > 0) params.set('min_price', String(min*100));
         if (!Number.isNaN(max) && max > 0) params.set('max_price', String(max*100));
         if (q.trim()) params.set('search', q.trim());
@@ -139,7 +139,7 @@ export default function PodcastCategoryPage() {
     })();
     return () => ac.abort();
     // theo yêu cầu, giữ nguyên deps gốc (không đổi logic filters khác)
-  }, [category, minVND, maxVND]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [category, minUSD, maxUSD]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const gridItems = useMemo(() => items, [items]);
 
@@ -155,9 +155,9 @@ export default function PodcastCategoryPage() {
           <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search podcasts by name..." className="w-64 border rounded-xl pl-9 pr-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">🔎</span>
         </div>
-        <input type="number" value={minVND} onChange={e=>setMinVND(e.target.value)} placeholder="Min ₫" className="w-28 border rounded px-2 py-1" />
+        <input type="number" value={minUSD} onChange={e=>setMinUSD(e.target.value)} placeholder="Min $" className="w-28 border rounded px-2 py-1" />
         <span>–</span>
-        <input type="number" value={maxVND} onChange={e=>setMaxVND(e.target.value)} placeholder="Max ₫" className="w-28 border rounded px-2 py-1" />
+        <input type="number" value={maxUSD} onChange={e=>setMaxUSD(e.target.value)} placeholder="Max $" className="w-28 border rounded px-2 py-1" />
         <span className="text-xs text-gray-500">(Applies instantly)</span>
       </div>
 
@@ -185,6 +185,11 @@ export default function PodcastCategoryPage() {
             const favOn = favIds.has(p.id);
             return (
               <Link key={p.id} href={`/podcast/${p.id}`} className="group relative rounded-xl border overflow-hidden bg-white shadow-sm hover:shadow-md transition">
+                <span className="absolute top-2 right-2 z-20 text-xs font-semibold px-2 py-0.5 rounded-full bg-black/70 text-white">
+                  {Number(p?.price_cents || 0) > 0
+                    ? new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format((p.price_cents||0)/100)
+                    : 'Free'}
+                </span>
                 {/* Favourite overlay button */}
                 <FavBtn on={favOn} onToggle={() => toggleFav(p.id)} />
                 {/* eslint-disable-next-line @next/next/no-img-element */}

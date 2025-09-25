@@ -313,12 +313,21 @@ class ProductWriteController extends Controller
             if (!$user) {
                 return response()->json(['success' => false, 'message' => 'Authentication required'], 401);
             }
-            $canView = DB::table('order_items')
-                ->join('orders', 'orders.id', '=', 'order_items.order_id')
-                ->where('orders.user_id', $user->id)
-                ->where('orders.status', 'paid')
-                ->where('order_items.product_id', $productId)
-                ->exists();
+            // Free product (price_cents = 0) is viewable for signed-in users
+            $isFree = (int) DB::table('products')->where('id', $productId)->value('price_cents') === 0;
+
+            $canView = false;
+            if ($isFree) {
+                $canView = true;
+            } else {
+                $canView = DB::table('order_items')
+                    ->join('orders', 'orders.id', '=', 'order_items.order_id')
+                    ->where('orders.user_id', $user->id)
+                    ->where('orders.status', 'paid')
+                    ->where('order_items.product_id', $productId)
+                    ->exists();
+            }
+
             if (!$canView) {
                 return response()->json(['success' => false, 'message' => 'Please purchase this product to access full content'], 403);
             }
@@ -344,7 +353,20 @@ class ProductWriteController extends Controller
         }
 
         if (preg_match('#^https?://#i', (string)$file->file_url)) {
-            return redirect()->away($file->file_url);
+            // Proxy remote file to avoid CORS issues on redirects
+            try {
+                $resp = Http::withHeaders([])->get((string)$file->file_url);
+                if (!$resp->successful()) {
+                    return response()->json(['success'=>false,'message'=>'Remote file not accessible'], 404);
+                }
+                $ct = $resp->header('Content-Type', 'application/octet-stream');
+                $name = basename(parse_url((string)$file->file_url, PHP_URL_PATH) ?: 'file');
+                return response($resp->body(), 200)
+                    ->header('Content-Type', $ct)
+                    ->header('Content-Disposition', 'inline; filename="'.$name.'"');
+            } catch (\Throwable $e) {
+                return response()->json(['success'=>false,'message'=>'Failed to fetch remote file'], 500);
+            }
         }
 
         return response()->json([

@@ -43,15 +43,15 @@ export default function UserManage({ roleFilter }: UserManageProps) {
 
   // load khi mount hoặc page/role thay đổi
   useEffect(() => {
-    fetchUsers(currentPage, roleFilter);
+    fetchUsers(currentPage, roleFilter, query);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentPage, roleFilter]);
+  }, [currentPage, roleFilter, query]);
 
   // 👉 fetch và sort latest (mới nhất trước)
-  const fetchUsers = async (page = 1, role: "user" | "admin") => {
+  const fetchUsers = async (page = 1, role: "user" | "admin", search = "") => {
     setLoading(true);
     try {
-      const res = await adminUsersAPI.getAll({ page, role, per_page: 15 });
+      const res = await adminUsersAPI.getAll({ page, role, per_page: 15, search });
 
       // BE của bạn: { success: true, data: { current_page, data: [...], ... } }
       const payload = res?.data ?? {};
@@ -129,7 +129,7 @@ export default function UserManage({ roleFilter }: UserManageProps) {
     }
   };
 
-  if (loading) return <p className="p-6">Loading...</p>;
+  // Keep the search input interactive while loading; don't replace the whole page
 
   return (
     <div className="space-y-4 animate-fade-in">
@@ -142,7 +142,7 @@ export default function UserManage({ roleFilter }: UserManageProps) {
           <div className="relative flex-1 md:w-80">
             <input
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              onChange={(e) => { setCurrentPage(1); setQuery(e.target.value); }}
               placeholder="Search by name or email..."
               className="w-full border rounded-lg pl-9 pr-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
@@ -178,14 +178,6 @@ export default function UserManage({ roleFilter }: UserManageProps) {
           </thead>
           <tbody className="bg-white">
             {users
-              .filter((u) => {
-                if (!query.trim()) return true;
-                const q = query.toLowerCase();
-                return (
-                  (u.name ?? "").toLowerCase().includes(q) ||
-                  u.email.toLowerCase().includes(q)
-                );
-              })
               .map((user, index) => (
                 <tr
                   key={user.id}

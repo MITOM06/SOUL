@@ -25,8 +25,10 @@ interface YoutubeMeta {
 const API = (process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api').replace(/\/$/, '');
 const ORIGIN = API.replace(/\/api$/, '');
 
-const formatVND = (n: number | null | undefined) =>
-  Number(n ?? 0).toLocaleString('vi-VN', { maximumFractionDigits: 0 }) + ' đ';
+
+const formatUSD = (n: number | null | undefined) =>
+new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format((n ?? 0) / 100);
+
 
 /** Ảnh dự phòng an toàn cho <img src> */
 const FALLBACK_IMG = (() => {
@@ -72,14 +74,19 @@ export default function AdminPodcasts() {
   const [previewVideo, setPreviewVideo] = useState(false);
 
   // load list
-  const [minPriceVND, setMinPriceVND] = useState<string>('');
-  const [maxPriceVND, setMaxPriceVND] = useState<string>('');
+  const [minPriceUSD, setMinPriceUSD] = useState<string>('');
+  const [maxPriceUSD, setMaxPriceUSD] = useState<string>('');
+
+  // toolbar states (declare BEFORE effects/load to avoid TDZ issues)
+  const [query, setQuery] = useState('');
+  const [catFilter, setCatFilter] = useState('all');
+  const [page, setPage] = useState(1);
 
   const load = async () => {
     setLoadingList(true);
     const params = new URLSearchParams({ type: 'podcast', per_page: '100' });
-    const min = Number(minPriceVND);
-    const max = Number(maxPriceVND);
+    const min = Number(minPriceUSD);
+    const max = Number(maxPriceUSD);
     if (!Number.isNaN(min) && min > 0) params.set('min_price', String(min * 100));
     if (!Number.isNaN(max) && max > 0) params.set('max_price', String(max * 100));
     const r = await fetch(`${API}/v1/catalog/products?${params.toString()}`);
@@ -89,6 +96,7 @@ export default function AdminPodcasts() {
   };
 
   useEffect(() => { load(); }, []);
+  useEffect(() => { setPage(1); load(); }, [query, catFilter]);
 
   const resetForm = () => {
     setEditingId(null);
@@ -121,7 +129,7 @@ export default function AdminPodcasts() {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
       });
       const j = await r.json();
-      if (!j?.success) return alert(j?.message || 'Tạo thất bại');
+      if (!j?.success) return alert(j?.message || 'Create failed');
       const newId = j?.data?.id;
 
       if (ytMeta) {
@@ -154,10 +162,10 @@ export default function AdminPodcasts() {
   };
 
   const remove = async (id: number) => {
-    if (!confirm('Xoá podcast này?')) return;
+    if (!confirm('Delete this podcast?')) return;
     const r = await fetch(`${API}/v1/catalog/products/${id}`, { method: 'DELETE' });
     const j = await r.json();
-    if (!j?.success) return alert(j?.message || 'Xoá thất bại');
+    if (!j?.success) return alert(j?.message || 'Delete failed');
     await load();
     if (editingId === id) resetForm();
   };
@@ -174,23 +182,22 @@ export default function AdminPodcasts() {
   };
 
   // New list toolbar
-  const [query, setQuery] = useState('');
-  const [catFilter, setCatFilter] = useState('all');
+  // moved above
   const categories = useMemo(() => {
     const set = new Set<string>();
     items.forEach(i => { if (i.category) set.add(i.category); });
     return ['all', ...Array.from(set.values())];
   }, [items]);
+
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return items.filter(it => {
-      const okCat = catFilter === 'all' || (it.category || '').toLowerCase() === catFilter.toLowerCase();
-      const okQ = !q || it.title.toLowerCase().includes(q);
-      return okCat && okQ;
+    return items.filter(item => {
+      const matchesQuery = !query || item.title.toLowerCase().includes(query.toLowerCase());
+      const matchesCategory = catFilter === 'all' || item.category === catFilter;
+      return matchesQuery && matchesCategory;
     });
   }, [items, query, catFilter]);
 
-  const [page, setPage] = useState(1);
+  // moved above
   const perPage = 15;
   const [selectedId, setSelectedId] = useState<number | null>(null);
 
@@ -210,23 +217,23 @@ export default function AdminPodcasts() {
           <div className="flex items-center gap-2">
             <input
               type="number"
-              value={minPriceVND}
-              onChange={(e)=>setMinPriceVND(e.target.value)}
-              placeholder="Min ₫"
+              value={minPriceUSD}
+              onChange={(e)=>setMinPriceUSD(e.target.value)}
+              placeholder="Min $"
               className="w-28 border rounded px-2 py-2"
             />
             <span>–</span>
             <input
               type="number"
-              value={maxPriceVND}
-              onChange={(e)=>setMaxPriceVND(e.target.value)}
-              placeholder="Max ₫"
+              value={maxPriceUSD}
+              onChange={(e)=>setMaxPriceUSD(e.target.value)}
+              placeholder="Max $"
               className="w-28 border rounded px-2 py-2"
             />
             <button
               onClick={() => {
-                const min = Number(minPriceVND || '0');
-                const max = Number(maxPriceVND || '0');
+                const min = Number(minPriceUSD || '0');
+                const max = Number(maxPriceUSD || '0');
                 if (min && max && max < min) { alert('Max price must be ≥ Min price'); return; }
                 setPage(1);
                 load();
@@ -260,7 +267,7 @@ export default function AdminPodcasts() {
                 <td className="p-2 border">{(page-1)*perPage + idx + 1}</td>
                 <td className="p-2 border">{it.title}</td>
                 <td className="p-2 border">{it.category || '-'}</td>
-                <td className="p-2 border">{it.price_cents ? formatVND(it.price_cents) : 'Free'}</td>
+                <td className="p-2 border">{it.price_cents ? new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format((it.price_cents||0)/100) : 'Free'}</td>
                 <td className="p-2 border">{(it.is_active ?? 1) ? '✅' : '❌'}</td>
                 <td className="p-2 border">
                   {selectedId===it.id ? (
@@ -286,8 +293,6 @@ export default function AdminPodcasts() {
     </section>
   );
 
-  return listUI;
-
   return (
     <div className="p-6 max-w-6xl mx-auto">
       <h1 className="text-2xl font-bold mb-6">Admin · Podcast Management (YouTube audio)</h1>
@@ -296,8 +301,8 @@ export default function AdminPodcasts() {
         {/* Form */}
         <div className="border rounded-xl p-4">
           <div className="flex items-center justify-between mb-2">
-            <div className="font-semibold">{editingId ? `Sửa podcast #${editingId}` : 'Tạo podcast mới'}</div>
-            <button className="text-sm px-3 py-1 border rounded" onClick={resetForm}>Tạo mới</button>
+            <div className="font-semibold">{editingId ? `Edit podcast #${editingId}` : 'Create podcast'}</div>
+            <button className="text-sm px-3 py-1 border rounded" onClick={resetForm}>New</button>
           </div>
 
           <label className="block text-sm mt-2">Tiêu đề</label>
@@ -308,16 +313,16 @@ export default function AdminPodcasts() {
 
           <div className="grid grid-cols-2 gap-3 mt-3">
             <div>
-              <label className="block text-sm">Giá (đồng)</label>
+              <label className="block text-sm">Price (cents)</label>
               <input type="number" value={price} onChange={e=>setPrice(Number(e.target.value))} className="w-full border rounded px-3 py-2" />
             </div>
             <div>
-              <label className="block text-sm">Thể loại</label>
+              <label className="block text-sm">Category</label>
               <input value={cat} onChange={e=>setCat(e.target.value)} className="w-full border rounded px-3 py-2" />
             </div>
           </div>
 
-          <label className="block text-sm mt-3">Ảnh bìa URL</label>
+          <label className="block text-sm mt-3">Cover URL</label>
           <input value={thumb} onChange={e=>setThumb(e.target.value)} placeholder="http(s)://... hoặc /storage/..." className="w-full border rounded px-3 py-2" />
 
           <label className="inline-flex items-center gap-2 mt-3">
@@ -337,7 +342,7 @@ export default function AdminPodcasts() {
               <button onClick={lookupYt} className="px-3 py-2 rounded bg-blue-600 text-white">Tra cứu</button>
             </div>
 
-            {ytMeta && (
+            {ytMeta ? (
               <div className="mt-3 p-3 border rounded">
                 <div className="font-medium">{ytMeta.title}</div>
                 <div className="text-sm text-gray-600 break-all">{ytMeta.watch_url}</div>
@@ -370,23 +375,23 @@ export default function AdminPodcasts() {
                   </div>
                 )}
               </div>
-            )}
+            ) : null}
           </div>
 
           <div className="mt-4 flex gap-2">
             <button onClick={save} className="px-4 py-2 bg-green-600 text-white rounded">Lưu</button>
-            {editingId && <button onClick={()=>remove(editingId)} className="px-4 py-2 bg-red-600 text-white rounded">Xoá</button>}
+            {editingId && <button onClick={()=>remove(editingId!)} className="px-4 py-2 bg-red-600 text-white rounded">Xoá</button>}
           </div>
         </div>
 
         {/* List */}
         <div className="border rounded-xl p-4">
           <div className="flex items-center justify-between mb-2">
-            <div className="font-semibold">Danh sách</div>
-            <Link href="/podcasts" className="text-sm text-blue-600 hover:underline">Xem trang người dùng →</Link>
+            <div className="font-semibold">List</div>
+            <Link href="/podcasts" className="text-sm text-blue-600 hover:underline">Open public page →</Link>
           </div>
           {loadingList ? (
-            <div>Đang tải…</div>
+            <div>Loading…</div>
           ) : (
             <div className="grid sm:grid-cols-2 gap-3">
               {items.map(it => {
@@ -403,13 +408,13 @@ export default function AdminPodcasts() {
                       <div className="flex-1">
                         <div className="font-medium line-clamp-2">{it.title}</div>
                         <div className="text-xs text-gray-500">
-                          {it.category || '—'} · {it.price_cents ? formatVND(it.price_cents) : 'Miễn phí'}
+                          {it.category || '—'} · {it.price_cents ? formatUSD(it.price_cents) : 'Miễn phí'}
                         </div>
                       </div>
                     </div>
                     <div className="mt-2 flex gap-2">
-                      <button className="px-3 py-1 text-sm border rounded" onClick={()=>pickEdit(it)}>Sửa</button>
-                      <button className="px-3 py-1 text-sm border rounded" onClick={()=>remove(it.id)}>Xoá</button>
+                      <button className="px-3 py-1 text-sm border rounded" onClick={()=>pickEdit(it)}>Edit</button>
+                      <button className="px-3 py-1 text-sm border rounded" onClick={()=>remove(it.id)}>Delete</button>
                       <Link className="px-3 py-1 text-sm border rounded" href={`/podcast/${it.id}`} target="_blank">Xem</Link>
                     </div>
                   </div>

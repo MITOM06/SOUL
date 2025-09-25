@@ -24,6 +24,8 @@ export default function EditBookPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<ProductInput>({ type: 'ebook', title: '', price_cents: 0 });
+  const [coverFile, setCoverFile] = useState<File | null>(null);
+  const [coverPreview, setCoverPreview] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -53,6 +55,16 @@ export default function EditBookPage() {
       });
       const j = await r.json();
       if (!j?.success) { alert(j?.message || 'Update failed'); return; }
+      if (coverFile) {
+        const fd = new FormData();
+        fd.append('image', coverFile);
+        const upThumb = await fetch(`${API}/v1/catalog/products/${id}/thumbnail`, { method: 'POST', body: fd, credentials: 'include' });
+        if (!upThumb.ok) {
+          const t = await upThumb.text();
+          alert('Upload thumbnail failed: ' + t);
+          return;
+        }
+      }
       alert('Saved');
       router.push('/admin/books');
     } finally {
@@ -68,7 +80,7 @@ export default function EditBookPage() {
         <h1 className="text-2xl font-bold">Edit Book</h1>
       </div>
 
-      <div className="grid md:grid-cols-2 gap-6">
+      <div className="grid md:grid-cols-1 gap-6">
         <div className="border rounded-xl p-4 space-y-3">
           <div className="grid md:grid-cols-2 gap-3">
             <div>
@@ -78,7 +90,7 @@ export default function EditBookPage() {
               </select>
             </div>
             <div>
-              <label className="block text-sm text-gray-600">Price (vnd)</label>
+              <label className="block text-sm text-gray-600">Price (cents, USD)</label>
               <input type="number" value={form.price_cents} onChange={e => setForm({ ...form, price_cents: Number(e.target.value) })} className="w-full border rounded px-3 py-2" />
             </div>
           </div>
@@ -101,8 +113,22 @@ export default function EditBookPage() {
             </div>
           </div>
           <div>
-            <label className="block text-sm text-gray-600">Thumbnail URL</label>
-            <input value={form.thumbnail_url || ''} onChange={e => setForm({ ...form, thumbnail_url: e.target.value })} placeholder="http(s)://... or /storage/..." className="w-full border rounded px-3 py-2" />
+            <label className="block text-sm text-gray-600">Cover image</label>
+            <input type="file" accept="image/*" onChange={(e)=>{
+              const f = e.target.files?.[0] || null;
+              setCoverFile(f);
+              if (f) {
+                const url = URL.createObjectURL(f);
+                setCoverPreview(url);
+              } else {
+                setCoverPreview(null);
+              }
+            }} className="w-full border rounded px-3 py-2" />
+            {(coverPreview || form.thumbnail_url) && (
+              <div className="mt-2">
+                <img src={coverPreview || form.thumbnail_url || ''} alt="cover" className="w-40 h-40 object-cover rounded border" />
+              </div>
+            )}
           </div>
           <div className="flex gap-2">
             <button onClick={save} disabled={saving} className="px-4 py-2 rounded bg-blue-600 text-white disabled:opacity-60">{saving ? 'Saving…' : 'Save'}</button>
@@ -110,11 +136,8 @@ export default function EditBookPage() {
           </div>
         </div>
 
-        <div className="hidden md:block p-4 rounded-xl border text-sm text-gray-600">
-          <p>Editing product #{id}</p>
-        </div>
+        {/* removed right panel */}
       </div>
     </section>
   );
 }
-

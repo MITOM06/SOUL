@@ -16,8 +16,20 @@ class ProductsSeeder extends Seeder
 {
     public function run()
     {
-        // 1) Tạo N sản phẩm (ebook/podcast) từ factory (thumbnail sẽ null)
-        $products = Product::factory()->count(30)->create();
+        // 1) Create exactly 100 ebooks and 100 podcasts
+        $ebooks   = Product::factory()->count(100)->state(['type' => 'ebook'])->create();
+        $podcasts = Product::factory()->count(100)->state(['type' => 'podcast'])->create();
+        $products = $ebooks->concat($podcasts);
+
+        // Mark some items as free (price_cents = 0) for both ebooks and podcasts
+        $freeE = $ebooks->shuffle()->take(10);
+        foreach ($freeE as $p) {
+            DB::table('products')->where('id', $p->id)->update(['price_cents' => 0]);
+        }
+        $freeP = $podcasts->shuffle()->take(10);
+        foreach ($freeP as $p) {
+            DB::table('products')->where('id', $p->id)->update(['price_cents' => 0]);
+        }
 
         // 2) Gán cover từ thư mục public storage (đã chuẩn bị sẵn)
         $coversBooks    = collect(Storage::disk('public')->files('books/thumbnail'))

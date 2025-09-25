@@ -52,8 +52,8 @@ const canOpenDirect = (u: string) => /^https?:\/\//i.test(u) || u.startsWith('/'
 const downloadUrl = (productId: number, fileId: number) =>
   `${API_BASE}/v1/catalog/products/${productId}/files/${fileId}/download`;
 
-const formatVND = (n: number | null | undefined) =>
-  Number(n ?? 0).toLocaleString('vi-VN', { maximumFractionDigits: 0 }) + ' ₫';
+const formatUSD = (cents: number | null | undefined) =>
+  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format((Number(cents ?? 0) || 0) / 100);
 
 /* -------------------------------- Related row -------------------------------- */
 function RelatedRow({ items }: { items: Array<{ id: number; title: string; cover?: string | null }> }) {
@@ -285,11 +285,13 @@ export default function BookDetail() {
   const priceCents = Number(p.price_cents ?? 0);
 
   const onRead = () => {
-    const url = toAbs(preview?.file_url || '') || '';
-    if (url) window.open(url, '_blank');
+    // Mở trang preview nội bộ để giới hạn theo chính sách (10 trang đầu)
+    if (!preview) { alert('No preview available.'); return; }
+    window.open(`/reader/ebook/${p.id}`, '_blank');
   };
   const onReadFull = () => {
-    if (!fullPdf || !canView) return;
+    const owned = canView || (priceCents === 0 && isCustomer);
+    if (!fullPdf || !owned) return;
     (async () => {
       try {
         const res = await api.get(`/v1/catalog/products/${p.id}/files/${fullPdf.id}/download`, { responseType: 'blob' });
@@ -311,26 +313,20 @@ export default function BookDetail() {
     } catch {}
   };
   const onBuy = async () => {
-    if (!isLoggedIn) {
-      alert('Vui lòng đăng nhập để mua sản phẩm.');
-      return;
-    }
-    if (isAdmin) {
-      alert('Tài khoản admin không thể mua sản phẩm.');
-      return;
-    }
+    if (!isLoggedIn) { alert('Please sign in to purchase.'); return; }
+    if (isAdmin) { alert('Admin accounts cannot purchase.'); return; }
     try {
       await add(p.id, 1);
-      toast.show('Đã thêm sản phẩm vào giỏ hàng');
+      toast.show('Added to cart');
     } catch {
-      toast.show('Không thể thêm vào giỏ. Vui lòng thử lại.');
+      toast.show('Failed to add to cart. Please try again.');
     }
   };
 
   const toggleFav = async () => {
-    if (!isLoggedIn) { alert('Vui lòng đăng nhập để sử dụng tính năng yêu thích.'); return; }
-    if (isAdmin) { alert('Tài khoản admin không thể sử dụng tính năng yêu thích.'); return; }
-    if (!canFav) { alert('Không thể sử dụng tính năng yêu thích vào lúc này.'); return; }
+    if (!isLoggedIn) { alert('Please sign in to use Favorites.'); return; }
+    if (isAdmin) { alert('Admin accounts cannot use Favorites.'); return; }
+    if (!canFav) { alert('Favorites not available right now.'); return; }
     const next = !favOn;
     setFavOn(next); // optimistic
     try {
@@ -345,6 +341,8 @@ export default function BookDetail() {
       }
     }
   };
+
+  const owned = canView || (priceCents === 0 && isCustomer);
 
   return (
     <>
@@ -379,7 +377,7 @@ export default function BookDetail() {
               </article>
               <div className="absolute top-3 right-3">
                 <div className="px-3 py-1 rounded-full text-sm font-bold text-white shadow bg-[color:var(--brand-500)]">
-                  {priceCents > 0 ? formatVND(priceCents) : 'Free'}
+                  {priceCents > 0 ? formatUSD(priceCents) : 'Free'}
                 </div>
               </div>
             </div>
@@ -443,11 +441,11 @@ export default function BookDetail() {
                   >
                     Read Preview
                   </button>
-                  {canView && (
+                  {owned && (
                     <button
                       onClick={onReadFull}
                       disabled={!fullPdf}
-                      title={!fullPdf ? 'Chưa có file PDF đầy đủ' : ''}
+                      title={!fullPdf ? 'No full PDF available yet' : ''}
                       className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 disabled:hover:bg-emerald-600/90 disabled:cursor-not-allowed disabled:opacity-50 text-white font-semibold px-5 py-2.5 rounded-xl shadow transition"
                     >
                       Read Full
@@ -475,11 +473,22 @@ export default function BookDetail() {
                   <div className="relative">
                     <div className="absolute -top-3 left-0 text-xs font-bold text-white px-2 py-0.5 rounded-full bg-[color:var(--brand-500)]">One-off</div>
                   </div>
-                  <div className="flex items-end gap-3 mt-1">
-                    {compareAt > 0 && <div className="text-zinc-500 line-through text-lg">{formatVND(compareAt)}</div>}
-                    <div className="text-3xl font-extrabold text-zinc-900">{priceCents > 0 ? formatVND(priceCents) : 'Free'}</div>
-                  </div>
-                  <div className="mt-2 text-emerald-600 text-sm font-semibold">Own this ebook forever</div>
+                  {canView ? (
+                    <>
+                      <div className="flex items-end gap-3 mt-1">
+                        <div className="text-3xl font-extrabold text-emerald-700">Owned</div>
+                      </div>
+                      <div className="mt-2 text-emerald-600 text-sm font-semibold">You already own this ebook</div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="flex items-end gap-3 mt-1">
+                        {compareAt > 0 && <div className="text-zinc-500 line-through text-lg">{formatUSD(compareAt)}</div>}
+                        <div className="text-3xl font-extrabold text-zinc-900">{priceCents > 0 ? formatUSD(priceCents) : 'Free'}</div>
+                      </div>
+                      <div className="mt-2 text-emerald-600 text-sm font-semibold">Own this ebook forever</div>
+                    </>
+                  )}
 
                   {canView ? (
                     <button
@@ -500,12 +509,12 @@ export default function BookDetail() {
                 </div>
 
                 <section className="relative rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
-                  {!canView && (
+                  {!owned && (
                     <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-white/80 text-center text-sm text-zinc-600 px-6">
-                      <p>Mua sách để xem mô tả chi tiết, tải tệp đính kèm và theo dõi tiến độ đọc.</p>
+                      <p>Purchase to view full description, download attachments and track reading progress.</p>
                     </div>
                   )}
-                  <div className={cn('space-y-5', !canView && 'pointer-events-none select-none opacity-60')}>
+                  <div className={cn('space-y-5', !owned && 'pointer-events-none select-none opacity-60')}>
                     {p.description && (
                       <div>
                         <h2 className="text-lg font-semibold mb-2">Description</h2>
@@ -518,7 +527,7 @@ export default function BookDetail() {
                         <ul className="list-disc pl-5 space-y-1 text-sm">
                           {files.map(f => (
                             <li key={f.id}>
-                              {canView ? (
+                              {owned ? (
                                 <a
                                   href={downloadUrl(p.id, f.id)}
                                   target="_blank"
@@ -547,12 +556,12 @@ export default function BookDetail() {
                           min={0}
                           value={page}
                           onChange={(e)=>setPage(Number(e.target.value))}
-                          disabled={!canView || !isCustomer}
+                          disabled={!owned || !isCustomer}
                           className="border rounded px-2 py-1 w-24 disabled:bg-zinc-100 disabled:cursor-not-allowed"
                         />
                         <button
                           onClick={()=>save({ current_page: page })}
-                          disabled={!canView || !isCustomer}
+                          disabled={!owned || !isCustomer}
                           className="px-3 py-1 rounded bg-green-600 text-white disabled:opacity-60 disabled:cursor-not-allowed"
                         >
                           Save progress
@@ -560,26 +569,35 @@ export default function BookDetail() {
                       </div>
                     </div>
                     <div className="flex items-end gap-3 mt-1">
-                      {compareAt > 0 && <div className="text-zinc-500 line-through text-lg">{formatVND(compareAt)}</div>}
-                      <div className="text-3xl font-extrabold text-zinc-900">{priceCents > 0 ? formatVND(priceCents) : 'Free'}</div>
+                      {compareAt > 0 && <div className="text-zinc-500 line-through text-lg">{formatUSD(compareAt)}</div>}
+                      <div className="text-3xl font-extrabold text-zinc-900">{priceCents > 0 ? formatUSD(priceCents) : 'Free'}</div>
                     </div>
                     <div className="mt-2 text-emerald-600 text-sm font-semibold">Own this ebook forever</div>
 
-                    {canView ? (
+                    {owned ? (
                       <button
                         onClick={onReadFull}
                         disabled={!fullPdf}
                         className="mt-4 w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:hover:bg-emerald-600/90 disabled:cursor-not-allowed disabled:opacity-50 text-white font-semibold py-2.5"
                       >
-                        Read Fulls
+                        Read Full
                       </button>
                     ) : (
-                      <button
-                        onClick={onBuy}
-                        className="mt-4 w-full rounded-xl bg-[color:var(--brand-500)] hover:bg-[color:var(--brand-600)] text-white font-semibold py-2.5"
-                      >
-                        Buy now
-                      </button>
+                      priceCents === 0 ? (
+                        <button
+                          onClick={() => { window.location.href = `/auth/login?next=${encodeURIComponent(window.location.pathname)}`; }}
+                          className="mt-4 w-full rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5"
+                        >
+                          Sign in to read
+                        </button>
+                      ) : (
+                        <button
+                          onClick={onBuy}
+                          className="mt-4 w-full rounded-xl bg-[color:var(--brand-500)] hover:bg-[color:var(--brand-600)] text-white font-semibold py-2.5"
+                        >
+                          Buy now
+                        </button>
+                      )
                     )}
                   </div>
                 </section>

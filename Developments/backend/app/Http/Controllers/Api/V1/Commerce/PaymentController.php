@@ -161,9 +161,9 @@ class PaymentController extends Controller
                     }
                 }
 
-                // 4) (Tuỳ chọn) Xoá order gốc sau khi cấp quyền
-                // Nếu bạn muốn giữ lại record order thì comment dòng dưới.
-                $order->delete();
+                // 4) Giữ lại order đã thanh toán để Library có thể hiển thị purchases
+                // Trước đây code xoá order sau khi thanh toán dẫn tới /v1/library không thấy sản phẩm đã mua
+                // nên chúng ta KHÔNG xoá order nữa. Order giữ status='paid'.
             }
         });
 

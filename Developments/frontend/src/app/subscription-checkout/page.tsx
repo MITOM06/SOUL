@@ -20,11 +20,11 @@ export default function SubscriptionCheckoutPage() {
   useEffect(() => {
     if (isLoading) return;
     if (!isLoggedIn) {
-      alert('Vui lòng đăng nhập để tiếp tục thanh toán gói.');
+      alert('Please sign in to continue.');
       const next = encodeURIComponent(window.location.pathname + window.location.search);
       router.replace(`/auth/login?next=${next}`);
     } else if (isAdmin) {
-      alert('Tài khoản admin không thể mua gói dịch vụ.');
+      alert('Admin accounts cannot purchase subscriptions.');
       router.replace('/upgrade');
     }
   }, [isLoading, isLoggedIn, isAdmin, router]);
@@ -51,13 +51,13 @@ export default function SubscriptionCheckoutPage() {
   const emoji = plan === 'vip' ? '🏆' : plan === 'premium' ? '💎' : '🎫';
 
   if (!isLoggedIn && !isLoading) {
-    return <div className="max-w-3xl mx-auto p-6">Đang chuyển đến trang đăng nhập...</div>;
+    return <div className="max-w-3xl mx-auto p-6">Redirecting to login…</div>;
   }
   if (isAdmin) {
     return (
       <div className="max-w-3xl mx-auto p-6 text-center">
-        <h1 className="text-2xl font-bold mb-3">Quản trị viên</h1>
-        <p className="text-zinc-600">Tài khoản admin không thể thanh toán gói dịch vụ.</p>
+        <h1 className="text-2xl font-bold mb-3">Administrator</h1>
+        <p className="text-zinc-600">Admin accounts cannot purchase subscriptions.</p>
       </div>
     );
   }
@@ -103,7 +103,7 @@ export default function SubscriptionCheckoutPage() {
           <div className="font-semibold mb-2">Summary</div>
           <div className="flex justify-between py-2 border-b text-sm">
             <div>{plan.toUpperCase()} (Qty 1)</div>
-            <div className="font-medium">{(amount/100).toLocaleString()} ₫</div>
+            <div className="font-medium">{new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format((amount||0)/100)}</div>
           </div>
           <div className="mt-3 flex justify-between">
             <div>Payment method</div>
@@ -111,7 +111,7 @@ export default function SubscriptionCheckoutPage() {
           </div>
           <div className="mt-1 flex justify-between">
             <div>Total</div>
-            <div className="text-lg font-bold">{(amount/100).toLocaleString()} ₫</div>
+            <div className="text-lg font-bold">{new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format((amount||0)/100)}</div>
           </div>
           <button onClick={confirm} className="mt-4 w-full px-5 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
             I have paid

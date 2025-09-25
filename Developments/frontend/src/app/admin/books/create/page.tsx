@@ -24,6 +24,8 @@ export default function CreateBookPage() {
   const [saving, setSaving] = useState(false);
   const [localQueue, setLocalQueue] = useState<{ file: File; is_preview: boolean }[]>([]);
   const [uploadingLocal, setUploadingLocal] = useState(false);
+  const [coverFile, setCoverFile] = useState<File | null>(null);
+  const [coverPreview, setCoverPreview] = useState<string | null>(null);
 
   const addUrlRow = () => setForm({ ...form, files: [...(form.files || []), { file_type: 'pdf', file_url: '', is_preview: false }] });
 
@@ -60,6 +62,17 @@ export default function CreateBookPage() {
       const j = await r.json();
       if (!j?.success) { alert(j?.message || 'Create failed'); return; }
       const id = Number(j?.data?.id);
+
+      // upload thumbnail if selected
+      if (coverFile) {
+        const fd = new FormData();
+        fd.append('image', coverFile);
+        const upThumb = await fetch(`${API}/v1/catalog/products/${id}/thumbnail`, { method: 'POST', body: fd, credentials: 'include' });
+        if (!upThumb.ok) {
+          const t = await upThumb.text();
+          alert('Product created but thumbnail upload failed: ' + t + '\nYou can add the thumbnail later by editing the product.');
+        }
+      }
       const up = await uploadLocalFiles(id);
       if (!up.ok) return;
       alert('Created');
@@ -75,7 +88,7 @@ export default function CreateBookPage() {
         <h1 className="text-2xl font-bold">Create Book</h1>
       </div>
 
-      <div className="grid md:grid-cols-2 gap-6">
+      <div className="grid md:grid-cols-1 gap-6">
         <div className="border rounded-xl p-4 space-y-3">
           <div className="grid md:grid-cols-2 gap-3">
             <div>
@@ -85,7 +98,7 @@ export default function CreateBookPage() {
               </select>
             </div>
             <div>
-              <label className="block text-sm text-gray-600">Price (vnd)</label>
+              <label className="block text-sm text-gray-600">Price (cents, USD)</label>
               <input type="number" value={form.price_cents} onChange={e => setForm({ ...form, price_cents: Number(e.target.value) })} className="w-full border rounded px-3 py-2" />
             </div>
           </div>
@@ -108,8 +121,23 @@ export default function CreateBookPage() {
             </div>
           </div>
           <div>
-            <label className="block text-sm text-gray-600">Thumbnail URL</label>
-            <input value={form.thumbnail_url || ''} onChange={e => setForm({ ...form, thumbnail_url: e.target.value })} placeholder="http(s)://... or /storage/..." className="w-full border rounded px-3 py-2" />
+            <label className="block text-sm text-gray-600">Cover image</label>
+            <input type="file" accept="image/*" onChange={(e)=>{
+              const f = e.target.files?.[0] || null;
+              setCoverFile(f);
+              if (f) {
+                const url = URL.createObjectURL(f);
+                setCoverPreview(url);
+              } else {
+                setCoverPreview(null);
+              }
+            }} className="w-full border rounded px-3 py-2" />
+            {coverPreview && (
+              <div className="mt-2">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={coverPreview} alt="preview" className="w-40 h-40 object-cover rounded border" />
+              </div>
+            )}
           </div>
 
           <div className="border rounded p-3">
@@ -190,15 +218,8 @@ export default function CreateBookPage() {
           </div>
         </div>
 
-        <div className="hidden md:block p-4 rounded-xl border text-sm text-gray-600">
-          <p>Tips:</p>
-          <ul className="list-disc pl-5 mt-2 space-y-1">
-            <li>Use external URLs for files hosted on CDN, or upload local files after creating.</li>
-            <li>Ensure you have run <code>php artisan storage:link</code> on the backend.</li>
-          </ul>
-        </div>
+        {/* removed right-side tip panel */}
       </div>
     </section>
   );
 }
-

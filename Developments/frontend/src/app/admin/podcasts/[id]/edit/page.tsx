@@ -26,6 +26,8 @@ export default function EditPodcastPage() {
   const [price, setPrice] = useState<number>(0);
   const [cat, setCat] = useState('');
   const [thumb, setThumb] = useState('');
+  const [coverFile, setCoverFile] = useState<File | null>(null);
+  const [coverPreview, setCoverPreview] = useState<string | null>(null);
   const [active, setActive] = useState(true);
   const [loading, setLoading] = useState(true);
 
@@ -56,6 +58,16 @@ export default function EditPodcastPage() {
     });
     const j = await r.json();
     if (!j?.success) return alert(j?.message || 'Update failed');
+    if (coverFile) {
+      const fd = new FormData();
+      fd.append('image', coverFile);
+      const upThumb = await fetch(`${API}/v1/catalog/products/${id}/thumbnail`, { method: 'POST', body: fd, credentials: 'include' });
+      if (!upThumb.ok) {
+        const t = await upThumb.text();
+        alert('Upload thumbnail failed: ' + t);
+        return;
+      }
+    }
     alert('Saved');
     router.push('/admin/podcasts');
   };
@@ -68,7 +80,7 @@ export default function EditPodcastPage() {
         <h1 className="text-2xl font-bold">Edit Podcast</h1>
       </div>
 
-      <div className="grid md:grid-cols-2 gap-6">
+      <div className="grid md:grid-cols-1 gap-6">
         <div className="border rounded-xl p-4">
           <label className="block text-sm mt-2">Title</label>
           <input value={title} onChange={e=>setTitle(e.target.value)} className="w-full border rounded px-3 py-2" />
@@ -78,7 +90,7 @@ export default function EditPodcastPage() {
 
           <div className="grid grid-cols-2 gap-3 mt-3">
             <div>
-              <label className="block text-sm">Price (cents)</label>
+              <label className="block text-sm">Price (cents, USD)</label>
               <input type="number" value={price} onChange={e=>setPrice(Number(e.target.value))} className="w-full border rounded px-3 py-2" />
             </div>
             <div>
@@ -86,9 +98,17 @@ export default function EditPodcastPage() {
               <input value={cat} onChange={e=>setCat(e.target.value)} className="w-full border rounded px-3 py-2" />
             </div>
           </div>
-
-          <label className="block text-sm mt-3">Thumbnail URL</label>
-          <input value={thumb} onChange={e=>setThumb(e.target.value)} placeholder="http(s)://... or /storage/..." className="w-full border rounded px-3 py-2" />
+          <label className="block text-sm mt-3">Cover image</label>
+          <input type="file" accept="image/*" onChange={(e)=>{
+            const f = e.target.files?.[0] || null;
+            setCoverFile(f);
+            if (f) setCoverPreview(URL.createObjectURL(f)); else setCoverPreview(null);
+          }} className="w-full border rounded px-3 py-2" />
+          {(coverPreview || thumb) && (
+            <div className="mt-2">
+              <img src={coverPreview || thumb} alt="cover" className="w-40 h-40 object-cover rounded border" />
+            </div>
+          )}
 
           <label className="inline-flex items-center gap-2 mt-3">
             <input type="checkbox" checked={active} onChange={e=>setActive(e.target.checked)} />
@@ -101,9 +121,7 @@ export default function EditPodcastPage() {
           </div>
         </div>
 
-        <div className="hidden md:block p-4 rounded-xl border text-sm text-gray-600">
-          <p>Editing podcast #{id}</p>
-        </div>
+        {/* removed right panel */}
       </div>
     </section>
   );

@@ -18,12 +18,11 @@ class DatabaseSeeder extends Seeder
             UsersSeeder::class,
             ProductsSeeder::class,
             ProductFilesSeeder::class,
+            DemoCommerceSeeder::class,
             UserSubscriptionsSeeder::class,
             FavouritesSeeder::class,
             ContinuesSeeder::class,
-            // OrdersSeeder::class,
-            // OrderItemsSeeder::class,
-            PaymentsSeeder::class,
+            // PaymentsSeeder is covered by DemoCommerceSeeder (for paid orders)
         ]);
     }
 }

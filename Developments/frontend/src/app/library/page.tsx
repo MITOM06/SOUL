@@ -93,23 +93,86 @@ export default function LibraryPage() {
         {loading ? <div>Loading…</div> : filtered.length === 0 ? (
           <div>No purchased items yet.</div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {filtered.map(i => (
-              <Link key={i.id} href={i.type==='ebook' ? `/book/${i.id}` : `/podcast/${i.id}`} className="group rounded-xl border overflow-hidden bg-white shadow-sm hover:shadow-md transition">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={toAbs(i.thumbnail_url) || FALLBACK_IMG}
-                  alt={i.title}
-                  className="w-full aspect-[3/4] object-cover group-hover:scale-[1.02] transition-transform duration-300"
-                  onError={(e)=>{ (e.currentTarget as HTMLImageElement).src = FALLBACK_IMG; }}
-                />
-                <div className="p-3">
-                  <div className="text-xs text-zinc-500">{i.type.toUpperCase()} · {i.category || '-'}</div>
-                  <div className="font-medium line-clamp-2 group-hover:text-blue-600 transition-colors">{i.title}</div>
+          (() => {
+            const books = filtered.filter(i => i.type==='ebook');
+            const pods  = filtered.filter(i => i.type==='podcast');
+            if (type === 'ebook') {
+              return (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {books.map(i => (
+                    <Link key={`b-${i.id}`} href={`/book/${i.id}`} className="group rounded-xl border overflow-hidden bg-white shadow-sm hover:shadow-md transition">
+                      <img src={toAbs(i.thumbnail_url) || FALLBACK_IMG} alt={i.title} className="w-full aspect-[3/4] object-cover group-hover:scale-[1.02] transition-transform duration-300" onError={(e)=>{ (e.currentTarget as HTMLImageElement).src = FALLBACK_IMG; }} />
+                      <div className="p-3">
+                        <div className="text-xs text-zinc-500">BOOK · {i.category || '-'}</div>
+                        <div className="font-medium line-clamp-2 group-hover:text-blue-600 transition-colors">{i.title}</div>
+                      </div>
+                    </Link>
+                  ))}
                 </div>
-              </Link>
-            ))}
-          </div>
+              );
+            }
+            if (type === 'podcast') {
+              return (
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                  {pods.map(i => (
+                    <Link
+                      key={`p-${i.id}`}
+                      href={`/podcast/${i.id}`}
+                      className="group rounded-2xl border overflow-hidden bg-white shadow-sm hover:shadow-md transition"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={toAbs(i.thumbnail_url) || FALLBACK_IMG}
+                        alt={i.title}
+                        className="w-full aspect-video object-cover group-hover:scale-[1.02] transition-transform duration-300"
+                        onError={(e)=>{ (e.currentTarget as HTMLImageElement).src = FALLBACK_IMG; }}
+                      />
+                      <div className="p-3">
+                        <div className="text-xs text-zinc-500">PODCAST · {i.category || '-'}</div>
+                        <div className="font-medium line-clamp-2 group-hover:text-blue-600 transition-colors">{i.title}</div>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              );
+            }
+            return (
+              <div className="space-y-6">
+                {books.length>0 && (
+                  <div>
+                    <div className="text-sm font-semibold text-zinc-700 mb-2">Books</div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      {books.map(i => (
+                        <Link key={`b-${i.id}`} href={`/book/${i.id}`} className="group rounded-xl border overflow-hidden bg-white shadow-sm hover:shadow-md transition">
+                          <img src={toAbs(i.thumbnail_url) || FALLBACK_IMG} alt={i.title} className="w-full aspect-[3/4] object-cover group-hover:scale-[1.02] transition-transform duration-300" onError={(e)=>{ (e.currentTarget as HTMLImageElement).src = FALLBACK_IMG; }} />
+                          <div className="p-3">
+                            <div className="text-xs text-zinc-500">BOOK · {i.category || '-'}</div>
+                            <div className="font-medium line-clamp-2 group-hover:text-blue-600 transition-colors">{i.title}</div>
+                          </div>
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {pods.length>0 && (
+                  <div>
+                    <div className="text-sm font-semibold text-zinc-700 mb-2">Podcasts</div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                      {pods.map(i => (
+                        <Link key={`p-${i.id}`} href={`/podcast/${i.id}`} className="group rounded-2xl border overflow-hidden bg-white shadow-sm hover:shadow-md transition">
+                          <img src={toAbs(i.thumbnail_url) || FALLBACK_IMG} alt={i.title} className="w-full aspect-video object-cover group-hover:scale-[1.02] transition-transform duration-300" onError={(e)=>{ (e.currentTarget as HTMLImageElement).src = FALLBACK_IMG; }} />
+                          <div className="p-3">
+                            <div className="text-xs text-zinc-500">PODCAST · {i.category || '-'}</div>
+                            <div className="font-medium line-clamp-2 group-hover:text-blue-600 transition-colors">{i.title}</div>
+                          </div>
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()
         )}
       </section>
     </UserPanelLayout>

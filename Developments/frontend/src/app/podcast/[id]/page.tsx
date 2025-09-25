@@ -31,8 +31,8 @@ interface ProductFile {
 const API_BASE = (process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api').replace(/\/$/, '');
 const ORIGIN   = API_BASE.replace(/\/api$/, '');
 
-const formatVND = (n: number | null | undefined) =>
-  Number(n ?? 0).toLocaleString('vi-VN', { maximumFractionDigits: 0 }) + ' đ';
+const formatUSD = (cents: number | null | undefined) =>
+  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format((Number(cents ?? 0) || 0)/100);
 
 const FALLBACK_IMG = (() => {
   const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='600' height='660'>
@@ -308,35 +308,30 @@ export default function PodcastDetailPage() {
     watch: (parseMaybeJSON(f.meta)?.watch_url) || f.file_url,
     thumb: (parseMaybeJSON(f.meta)?.thumbnail_url) || p.thumbnail_url || FALLBACK_IMG,
   } : null;
-  const yt  = canView ? (pickYt(ytFullFile) || pickYt(ytPreviewFile) || extractYoutubeFromFiles(files) || extractYoutubeFromProductMeta(p))
-                      : (pickYt(ytPreviewFile) || null);
-  const aud = files.find(f => (f.file_type === 'audio' || /\.mp3(\?|$)/i.test(f.file_url)) && (canView || f.is_preview));
+  const owned = canView || ((Number(p?.price_cents || 0) === 0) && isCustomer);
+  const yt  = owned ? (pickYt(ytFullFile) || pickYt(ytPreviewFile) || extractYoutubeFromFiles(files) || extractYoutubeFromProductMeta(p))
+                    : (pickYt(ytPreviewFile) || null);
+  const aud = files.find(f => (f.file_type === 'audio' || /\.mp3(\?|$)/i.test(f.file_url)) && (owned || f.is_preview));
   const cover = toAbs(p.thumbnail_url) || yt?.thumb || FALLBACK_IMG;
   const priceCents = Number(p.price_cents || 0);
 
   // Add to cart + toast (xanh, drop từ trên)
   const onBuy = async () => {
-    if (!isLoggedIn) {
-      alert('Vui lòng đăng nhập để mua sản phẩm.');
-      return;
-    }
-    if (isAdmin) {
-      alert('Tài khoản admin không thể mua sản phẩm.');
-      return;
-    }
+    if (!isLoggedIn) { alert('Please sign in to purchase.'); return; }
+    if (isAdmin) { alert('Admin accounts cannot purchase.'); return; }
     try {
       await add(p.id, 1);
-      toast.show('Đã thêm sản phẩm vào giỏ hàng');
+      toast.show('Added to cart');
     } catch {
-      toast.show('Không thể thêm vào giỏ. Vui lòng thử lại.');
+      toast.show('Failed to add to cart. Please try again.');
     }
   };
 
   // Toggle favourite
   const toggleFav = async () => {
-    if (!isLoggedIn) { alert('Vui lòng đăng nhập để sử dụng tính năng yêu thích.'); return; }
-    if (isAdmin) { alert('Tài khoản admin không thể sử dụng tính năng yêu thích.'); return; }
-    if (!canFav) { alert('Không thể sử dụng tính năng yêu thích vào lúc này.'); return; }
+    if (!isLoggedIn) { alert('Please sign in to use Favorites.'); return; }
+    if (isAdmin) { alert('Admin accounts cannot use Favorites.'); return; }
+    if (!canFav) { alert('Favorites not available right now.'); return; }
     const next = !favOn;
     setFavOn(next); // optimistic
     try {
@@ -386,16 +381,34 @@ export default function PodcastDetailPage() {
 
               {/* CTAs */}
               <div className="mt-5 flex items-center gap-3">
-                <button
-                  onClick={onBuy}
-                  aria-disabled={!isCustomer}
-                  className={cn(
-                    'inline-flex items-center gap-2 bg-[color:var(--brand-500)] hover:bg-[color:var(--brand-600)] text-white font-semibold px-5 py-2.5 rounded-xl shadow transition',
-                    !isCustomer && 'opacity-70'
+                  {owned ? (
+                    <a
+                      href="#player"
+                      className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold px-5 py-2.5 rounded-xl shadow transition"
+                    >
+                      Listen now
+                    </a>
+                  ) : (
+                  priceCents === 0 ? (
+                    <button
+                      onClick={() => { window.location.href = `/auth/login?next=${encodeURIComponent(window.location.pathname)}`; }}
+                      className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold px-5 py-2.5 rounded-xl shadow transition"
+                    >
+                      Sign in to listen
+                    </button>
+                  ) : (
+                    <button
+                      onClick={onBuy}
+                      aria-disabled={!isCustomer}
+                      className={cn(
+                        'inline-flex items-center gap-2 bg-[color:var(--brand-500)] hover:bg-[color:var(--brand-600)] text-white font-semibold px-5 py-2.5 rounded-xl shadow transition',
+                        !isCustomer && 'opacity-70'
+                      )}
+                    >
+                      Buy {priceCents>0 ? `(${formatUSD(priceCents)})` : '(Free)'}
+                    </button>
+                  )
                   )}
-                >
-                  Buy {priceCents>0 ? `(${formatVND(priceCents)})` : '(Free)'}
-                </button>
                 <button
                   onClick={toggleFav}
                   aria-pressed={favOn}
@@ -415,24 +428,51 @@ export default function PodcastDetailPage() {
               <div className="mt-6 max-w-sm">
                 <div className="relative rounded-2xl border border-zinc-200 bg-white p-4 shadow-lg">
                   <div className="absolute -top-3 left-4 text-xs font-bold text-white px-2 py-0.5 rounded-full bg-[color:var(--brand-500)]">One-off</div>
-                  <div className="text-3xl font-extrabold text-zinc-900">{priceCents>0?formatVND(priceCents):'Free'}</div>
-                  <div className="mt-2 text-sm text-zinc-600">Own this podcast forever</div>
-                  <button
-                    onClick={onBuy}
-                    aria-disabled={!isCustomer}
-                    className={cn(
-                      'mt-4 w-full rounded-xl bg-[color:var(--brand-500)] hover:bg-[color:var(--brand-600)] text-white font-semibold py-2.5',
-                      !isCustomer && 'opacity-70'
-                    )}
-                  >
-                    Buy now
-                  </button>
+                  {canView ? (
+                    <>
+                      <div className="text-3xl font-extrabold text-emerald-700">Owned</div>
+                      <div className="mt-2 text-sm text-emerald-600">You already own this podcast</div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="text-3xl font-extrabold text-zinc-900">{priceCents>0?formatUSD(priceCents):'Free'}</div>
+                      <div className="mt-2 text-sm text-zinc-600">Own this podcast forever</div>
+                    </>
+                  )}
+                  {owned ? (
+                    <a
+                      href="#player"
+                      className="mt-4 w-full inline-block text-center rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2.5"
+                    >
+                      Listen now
+                    </a>
+                  ) : (
+                    priceCents === 0 ? (
+                      <button
+                        onClick={() => { window.location.href = `/auth/login?next=${encodeURIComponent(window.location.pathname)}`; }}
+                        className={cn('mt-4 w-full rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5')}
+                      >
+                        Sign in to listen
+                      </button>
+                    ) : (
+                      <button
+                        onClick={onBuy}
+                        aria-disabled={!isCustomer}
+                        className={cn(
+                          'mt-4 w-full rounded-xl bg-[color:var(--brand-500)] hover:bg-[color:var(--brand-600)] text-white font-semibold py-2.5',
+                          !isCustomer && 'opacity-70'
+                        )}
+                      >
+                        Buy now
+                      </button>
+                    )
+                  )}
                 </div>
               </div>
             </div>
 
             {/* Right: player */}
-            <div>
+            <div id="player">
               {(() => {
                 const yt = canView
                   ? ( (ytFullFile && pickYt(ytFullFile)) || (ytPreviewFile && pickYt(ytPreviewFile)) || extractYoutubeFromFiles(files) || extractYoutubeFromProductMeta(p) )

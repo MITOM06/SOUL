@@ -32,11 +32,9 @@ interface User {
   email: string;
 }
 
-/** Format cents → "xxx.xxx đ" */
-const formatVNDFromCents = (cents: number | null | undefined) => {
-  const vnd = Math.round(Number(cents ?? 0) / 100);
-  return `${vnd.toLocaleString("vi-VN")} đ`;
-};
+/** Format cents → $x,xxx.xx */
+const formatUSDFromCents = (cents: number | null | undefined) =>
+  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format((Number(cents ?? 0) || 0)/100);
 
 export default function AdminOrderManage() {
   const [orders, setOrders] = useState<Order[]>([]);
@@ -143,7 +141,7 @@ export default function AdminOrderManage() {
               type="number"
               inputMode="numeric"
               min={0}
-              placeholder="Min (đ)"
+              placeholder="Min ($)"
               value={minPrice}
               onChange={(e) => {
                 setCurrentPage(1);
@@ -156,7 +154,7 @@ export default function AdminOrderManage() {
               type="number"
               inputMode="numeric"
               min={0}
-              placeholder="Max (đ)"
+              placeholder="Max ($)"
               value={maxPrice}
               onChange={(e) => {
                 setCurrentPage(1);
@@ -202,9 +200,7 @@ export default function AdminOrderManage() {
                 <td className="border p-2">{startIndex + index + 1}</td>
                 <td className="border p-2 text-blue-600">{order.user?.name}</td>
                 <td className="border p-2">{order.user?.email}</td>
-                <td className="border p-2">
-                  {formatVNDFromCents(order.total_cents)}
-                </td>
+                <td className="border p-2">{formatUSDFromCents(order.total_cents)}</td>
                 <td className="border p-2">{order.status}</td>
                 <td className="border p-2">
                   {new Date(order.created_at).toLocaleString()}
@@ -289,7 +285,7 @@ export default function AdminOrderManage() {
                       <div>
                         <p className="font-semibold">{item.product?.title}</p>
                         <p className="text-sm text-gray-600">
-                          Qty: {item.quantity} × {formatVNDFromCents(item.unit_price_cents)}
+                          Qty: {item.quantity} × {formatUSDFromCents(item.unit_price_cents)}
                         </p>
                       </div>
                     </div>

@@ -14,12 +14,22 @@ class AdminUserController extends Controller
      */
     public function index(Request $request)
     {
-        $role = $request->query('role');
+        $role     = $request->query('role');
+        $search   = trim((string) $request->query('search', ''));
+        $perPage  = (int) $request->query('per_page', 15);
 
         $users = User::query()
             ->when($role, fn($q) => $q->where('role', $role))
+            ->when($search !== '', function ($q) use ($search) {
+                $like = "%{$search}%";
+                $q->where(function ($w) use ($like) {
+                    $w->where('email', 'like', $like)
+                      ->orWhere('name', 'like', $like);
+                });
+            })
             ->orderByDesc('id')
-            ->paginate(15);
+            ->paginate(max(1, $perPage))
+            ->withQueryString();
 
         return response()->json([
             'success' => true,

@@ -26,6 +26,7 @@ export default function AdminUserSubsPage() {
   const [planFilter, setPlanFilter] = useState<"all"|"basic"|"premium"|"vip">('all');
   const [statusFilter, setStatusFilter] = useState<"all"|"active"|"canceled"|"expired"|"pending">('all');
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [meta, setMeta] = useState<any>(null);
 
   // form nhỏ để thêm/sửa
   const emptyForm: Partial<Sub> = {
@@ -40,29 +41,46 @@ export default function AdminUserSubsPage() {
   const [form, setForm] = useState<Partial<Sub>>(emptyForm);
   const [editingId, setEditingId] = useState<number | null>(null);
 
-  const fetchAll = async () => {
+  const fetchAll = async (pageArg = page) => {
     setLoading(true);
     try {
-      const res = await adminUserSubscriptionsAPI.getAll();
-      setItems(res.data?.data ?? []);
+      const params: any = { page: pageArg, per_page: perPage };
+      if (statusFilter !== 'all') params.status = statusFilter;
+      if (planFilter !== 'all') params.plan = planFilter;
+      if (query.trim()) params.search = query.trim();
+      const res = await adminUserSubscriptionsAPI.getAll(params);
+      const payload = res?.data ?? {};
+      const paginator = payload?.data && Array.isArray(payload.data?.data) ? payload.data : null;
+      setItems(paginator?.data ?? []);
+      setMeta(paginator);
     } catch (err) {
       console.error(err);
       setItems([]);
+      setMeta(null);
     } finally {
       setLoading(false);
     }
   };
 
+  // Fetch when filters change (reset to page 1)
   useEffect(() => {
-    fetchAll();
-  }, []);
+    setPage(1);
+    fetchAll(1);
+  }, [query, statusFilter, planFilter]);
+
+  // Fetch when page changes (only if not triggered by filter change)
+  useEffect(() => {
+    if (page !== 1) {
+      fetchAll(page);
+    }
+  }, [page]);
 
   const onCreate = async () => {
     try {
       if (!form.user_id) return toast.error("user_id is required");
       const payload = {
         user_id: Number(form.user_id),
-        plan: (form.plan ?? "basic") as Sub["plan"],
+        plan_key: (form.plan ?? "basic") as Sub["plan"],
         status: (form.status ?? "active") as Sub["status"],
         start_date: form.start_date || null,
         end_date: form.end_date || null,
@@ -140,7 +158,7 @@ export default function AdminUserSubsPage() {
           <div className="relative flex-1 md:w-80">
             <input
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              onChange={(e) => { setPage(1); setQuery(e.target.value); }}
               placeholder="Search by user name or email..."
               className="w-full border rounded-lg pl-9 pr-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
@@ -195,30 +213,19 @@ export default function AdminUserSubsPage() {
             {!loading && items.length === 0 && (
               <tr><td colSpan={8} className="px-4 py-4 text-center text-sm text-zinc-500">No data</td></tr>
             )}
-            {items
-              .filter((s) => {
-                if (!query.trim()) return true;
-                const q = query.toLowerCase();
-                const email = s.user?.email?.toLowerCase() || '';
-                const name = (s.user?.name || '').toLowerCase();
-                return email.includes(q) || name.includes(q);
-              })
-              .filter(s => statusFilter==='all' ? true : s.status === statusFilter)
-              .filter(s => planFilter==='all' ? true : s.plan === planFilter)
-              .slice((page-1)*perPage, page*perPage)
-              .map((s, idx) => (
-                <tr
-                  key={s.id}
-                  className={`text-left transition cursor-pointer ${selectedId===s.id ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
-                  onClick={() => setSelectedId(prev => prev === s.id ? null : s.id)}
-                >
-                  <td className="px-4 py-2 border">{(page-1)*perPage + idx + 1}</td>
+            {items.map((s, idx) => (
+              <tr
+                key={s.id}
+                className={`text-left transition cursor-pointer ${selectedId===s.id ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
+                onClick={() => setSelectedId(prev => prev === s.id ? null : s.id)}
+              >
+                  <td className="px-4 py-2 border">{((meta?.from ?? 0) as number) + idx}</td>
                   <td className="px-4 py-2 border">{s.user?.name || s.user?.email || s.user_id}</td>
                   <td className="px-4 py-2 border">{s.plan}</td>
                   <td className="px-4 py-2 border">{s.status}</td>
                   <td className="px-4 py-2 border">{s.start_date?.slice(0,10) ?? '-'}</td>
                   <td className="px-4 py-2 border">{s.end_date?.slice(0,10) ?? '-'}</td>
-                  <td className="px-4 py-2 border">{((s.price_cents ?? 0)/100).toFixed(2)}</td>
+                  <td className="px-4 py-2 border">{new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(((s.price_cents ?? 0))/100)}</td>
                   <td className="px-4 py-2 border">
                     {selectedId === s.id ? (
                       <div className="flex gap-2">
@@ -241,24 +248,14 @@ export default function AdminUserSubsPage() {
       <div className="flex justify-between items-center p-3">
         <button
           className="px-3 py-1 border rounded disabled:opacity-50"
-          disabled={page === 1}
-          onClick={() => setPage(p => Math.max(1, p-1))}
+          disabled={!meta?.prev_page_url}
+          onClick={() => { const next = Math.max(1, page - 1); setPage(next); fetchAll(next); }}
         >Prev</button>
-        <span className="text-sm text-zinc-600">Page {page}</span>
+        <span className="text-sm text-zinc-600">Page {meta?.current_page ?? page} / {meta?.last_page ?? '?'}</span>
         <button
           className="px-3 py-1 border rounded disabled:opacity-50"
-          disabled={items
-          .filter((s) => {
-            if (!query.trim()) return true;
-            const q = query.toLowerCase();
-            const email = s.user?.email?.toLowerCase() || '';
-            const name = (s.user?.name || '').toLowerCase();
-            return email.includes(q) || name.includes(q);
-          })
-          .filter(s => statusFilter==='all' ? true : s.status === statusFilter)
-          .filter(s => planFilter==='all' ? true : s.plan === planFilter)
-          .length <= page*perPage}
-          onClick={() => setPage(p => p+1)}
+          disabled={!meta?.next_page_url}
+          onClick={() => { const next = page + 1; setPage(next); fetchAll(next); }}
         >Next</button>
       </div>
 

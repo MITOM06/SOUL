@@ -44,14 +44,23 @@ export default function AdminProductsV2() {
   const [localQueue, setLocalQueue] = useState<{ file: File; is_preview: boolean }[]>([]);
   const [uploadingLocal, setUploadingLocal] = useState(false);
 
-  const [minPriceVND, setMinPriceVND] = useState<string>('');
-  const [maxPriceVND, setMaxPriceVND] = useState<string>('');
+  const [minPriceUSD, setMinPriceUSD] = useState<string>('');
+  const [maxPriceUSD, setMaxPriceUSD] = useState<string>('');
+
+  // Toolbar + paging states (declare early to avoid TDZ with effects)
+  const [query, setQuery] = useState('');
+  const [cat, setCat] = useState('all');
+  const [page, setPage] = useState(1);
+  const perPage = 15;
+  const [selectedId, setSelectedId] = useState<number | null>(null);
 
   const load = async () => {
     setLoading(true);
     const params = new URLSearchParams({ type: 'ebook', per_page: '100' });
-    const min = Number(minPriceVND);
-    const max = Number(maxPriceVND);
+    if (query.trim()) params.set('search', query.trim());
+    if (cat !== 'all') params.set('category', cat);
+    const min = Number(minPriceUSD);
+    const max = Number(maxPriceUSD);
     if (!Number.isNaN(min) && min > 0) params.set('min_price', String(min * 100));
     if (!Number.isNaN(max) && max > 0) params.set('max_price', String(max * 100));
     const r = await fetch(`${API}/v1/catalog/products?${params.toString()}`, { credentials: 'include' });
@@ -61,6 +70,7 @@ export default function AdminProductsV2() {
   };
 
   useEffect(() => { load(); }, []);
+  useEffect(() => { setPage(1); load(); }, [query, cat]);
 
   const resetForm = () => {
     setForm({ type: 'ebook', title: '', price_cents: 0, files: [] });
@@ -70,31 +80,20 @@ export default function AdminProductsV2() {
   };
 
   // ---- helpers ----
-  const formatVND = (n: number | null | undefined, withSymbol = true) => {
+  const formatUSD = (n: number | null | undefined) => {
     const v = Number(n ?? 0);
-    const s = v.toLocaleString('vi-VN', { maximumFractionDigits: 0 });
-    return withSymbol ? `${s} đ` : s;
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD'
+    }).format(v / 100);
   };
 
-  // New list toolbar states
-  const [query, setQuery] = useState('');
-  const [cat, setCat] = useState('all');
   const categories = useMemo(() => {
     const set = new Set<string>();
     items.forEach(i => { if (i.category) set.add(i.category); });
     return ['all', ...Array.from(set.values())];
   }, [items]);
-  const [page, setPage] = useState(1);
-  const perPage = 15;
-  const [selectedId, setSelectedId] = useState<number | null>(null);
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return items.filter(it => {
-      const okCat = cat === 'all' || (it.category || '').toLowerCase() === cat.toLowerCase();
-      const okQ = !q || it.title.toLowerCase().includes(q);
-      return okCat && okQ;
-    });
-  }, [items, query, cat]);
+  const filtered = useMemo(() => items, [items]);
 
   const uploadLocalFiles = async (productId: number, queue: { file: File; is_preview: boolean }[]) => {
     if (!queue.length) return { ok: true };
@@ -117,7 +116,7 @@ export default function AdminProductsV2() {
       });
       if (!res.ok) {
         const t = await res.text();
-        alert('Upload thất bại: ' + t);
+        alert('Upload failed: ' + t);
         return { ok: false };
       }
       return { ok: true };
@@ -204,7 +203,7 @@ export default function AdminProductsV2() {
       });
       const j = await r.json();
       if (!j?.success) {
-        alert(j?.message || 'Lỗi cập nhật sản phẩm');
+        alert(j?.message || 'Update failed');
         return;
       }
 
@@ -214,7 +213,7 @@ export default function AdminProductsV2() {
         if (!up.ok) return;
       }
 
-      alert('Đã lưu thay đổi');
+      alert('Saved changes');
       resetForm();
       await load();
     } finally {
@@ -223,14 +222,14 @@ export default function AdminProductsV2() {
   };
 
   const del = async (id: number) => {
-    if (!confirm('Xoá sản phẩm này?')) return;
+    if (!confirm('Delete this product?')) return;
     const r = await fetch(`${API}/v1/catalog/products/${id}`, { method: 'DELETE', credentials: 'include' });
     const j = await r.json();
     if (j?.success) {
       if (editingId === id) resetForm();
       await load();
     } else {
-      alert(j?.message || 'Không xoá được');
+      alert(j?.message || 'Delete failed');
     }
   };
 
@@ -280,23 +279,23 @@ export default function AdminProductsV2() {
           <div className="flex items-center gap-2">
             <input
               type="number"
-              value={minPriceVND}
-              onChange={(e)=>setMinPriceVND(e.target.value)}
-              placeholder="Min ₫"
+              value={minPriceUSD}
+              onChange={(e)=>setMinPriceUSD(e.target.value)}
+              placeholder="Min $"
               className="w-28 border rounded px-2 py-2"
             />
             <span>–</span>
             <input
               type="number"
-              value={maxPriceVND}
-              onChange={(e)=>setMaxPriceVND(e.target.value)}
-              placeholder="Max ₫"
+              value={maxPriceUSD}
+              onChange={(e)=>setMaxPriceUSD(e.target.value)}
+              placeholder="Max $"
               className="w-28 border rounded px-2 py-2"
             />
             <button
               onClick={() => {
-                const min = Number(minPriceVND || '0');
-                const max = Number(maxPriceVND || '0');
+                const min = Number(minPriceUSD || '0');
+                const max = Number(maxPriceUSD || '0');
                 if (min && max && max < min) { alert('Max price must be ≥ Min price'); return; }
                 setPage(1);
                 load();
@@ -338,7 +337,7 @@ export default function AdminProductsV2() {
                 <td className="p-2 border">{(page-1)*perPage + idx + 1}</td>
                 <td className="p-2 border">{it.title}</td>
                 <td className="p-2 border">{it.category || '-'}</td>
-                <td className="p-2 border">{(it.price_cents/100).toLocaleString()} ₫</td>
+                <td className="p-2 border">{new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format((it.price_cents||0)/100)}</td>
                 <td className="p-2 border">{(it.is_active ?? 1) ? '✅' : '❌'}</td>
                 <td className="p-2 border">
                   {selectedId===it.id ? (
@@ -549,7 +548,7 @@ export default function AdminProductsV2() {
                 <div key={p.id} className="border rounded p-3">
                   <div className="font-medium">{p.title}</div>
                   <div className="text-sm text-gray-500">{p.type} · {p.category || '—'}</div>
-                  <div className="text-sm">{p.price_cents ? formatVND(p.price_cents, true) : 'Miễn phí'}</div>
+                  <div className="text-sm">{p.price_cents ? new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format((p.price_cents||0)/100) : 'Free'}</div>
                   <div className="mt-2 flex gap-2">
                     <a href={`/book/${p.id}`} className="px-2 py-1 rounded bg-gray-100">Xem</a>
                     <button onClick={() => startEdit(p.id)} className="px-2 py-1 rounded bg-yellow-500 text-white">Sửa</button>

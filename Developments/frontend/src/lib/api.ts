@@ -166,8 +166,8 @@ export const adminOrderItemsAPI = {
 
 /* ======================= ADMIN USERS ======================= */
 export const adminUsersAPI = {
-  getAll: ({ page = 1, role, per_page = 15 }: { page?: number; role?: 'user' | 'admin'; per_page?: number }) =>
-    api.get('/v1/admin/users', { params: { page, role, per_page } }),
+  getAll: ({ page = 1, role, per_page = 15, search }: { page?: number; role?: 'user' | 'admin'; per_page?: number; search?: string }) =>
+    api.get('/v1/admin/users', { params: { page, role, per_page, search } }),
   create: (data: any) => api.post('/v1/admin/users', data),
   update: (id: number, data: any) => api.put(`/v1/admin/users/${id}`, data),
   delete: (id: number) => api.delete(`/v1/admin/users/${id}`),
@@ -200,7 +200,8 @@ export const userSubscriptionsAPI = {
 
 /* -------- Admin subscriptions CRUD (yêu cầu quyền admin) -------- */
 export const adminUserSubscriptionsAPI = {
-  getAll: () => api.get('/v1/admin/users-sub'),
+  getAll: (params?: { page?: number; per_page?: number; status?: string; plan?: string; search?: string }) =>
+    api.get('/v1/admin/users-sub', { params }),
   getById: (id: number) => api.get(`/v1/admin/users-sub/${id}`),
 
   // Tạo: bắt buộc user_id + plan_key + status

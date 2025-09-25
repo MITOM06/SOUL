@@ -207,8 +207,12 @@ function BooksHero({ items, loading }: { items: Array<any>; loading: boolean }) 
           {prevItem && (
             <Link
               href={`/book/${prevItem.id}`}
-              className={`absolute inset-y-12 left-[8%] w-[36%] rounded-2xl shadow-2xl overflow-hidden transition-all duration-700 ease-in-out
-                ${anim === 'prev' ? 'left-[33%] w-[34%] opacity-100 scale-100 rotate-0 z-20' : anim === 'next' ? '-left-[20%] opacity-0 scale-75 -rotate-2 z-0' : 'opacity-70 scale-90 -rotate-2 z-10'}`}
+              className={`absolute inset-y-12 left-[8%] w-[36%] rounded-2xl shadow-2xl overflow-hidden transition-all duration-700 ease-in-out will-change-transform
+                ${anim === 'prev'
+                  ? 'left-[33%] w-[34%] opacity-100 scale-100 rotate-0 translate-y-0 z-20'
+                  : anim === 'next'
+                  ? '-left-[20%] opacity-0 scale-75 -rotate-12 -translate-y-6 z-0'
+                  : 'opacity-70 scale-90 -rotate-2 -translate-y-2 z-10'}`}
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
@@ -220,8 +224,12 @@ function BooksHero({ items, loading }: { items: Array<any>; loading: boolean }) 
             </Link>
           )}
           {/* current */}
-          <Link href={`/book/${cur.id}`} className={`absolute inset-y-0 left-[33%] w-[34%] rounded-2xl shadow-2xl ring-1 ring-black/10 overflow-hidden transition-all duration-700 ease-in-out
-            ${anim === 'next' ? 'left-[56%] w-[36%] opacity-70 scale-90 rotate-2 z-10' : anim === 'prev' ? 'left-[8%] w-[36%] opacity-70 scale-90 -rotate-2 z-10' : 'opacity-100 scale-100 rotate-0 z-20'}`}
+          <Link href={`/book/${cur.id}`} className={`absolute inset-y-0 left-[33%] w-[34%] rounded-2xl shadow-2xl ring-1 ring-black/10 overflow-hidden transition-all duration-700 ease-in-out will-change-transform
+            ${anim === 'next'
+              ? 'left-[56%] w-[36%] opacity-70 scale-90 rotate-8 translate-y-2 z-10'
+              : anim === 'prev'
+              ? 'left-[8%] w-[36%] opacity-70 scale-90 -rotate-8 -translate-y-2 z-10'
+              : 'opacity-100 scale-100 rotate-0 translate-y-0 z-20'}`}
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
@@ -235,8 +243,12 @@ function BooksHero({ items, loading }: { items: Array<any>; loading: boolean }) 
           {nextItem && (
             <Link
               href={`/book/${nextItem.id}`}
-              className={`absolute inset-y-12 left-[56%] w-[36%] rounded-2xl shadow-2xl overflow-hidden transition-all duration-700 ease-in-out
-                ${anim === 'next' ? 'left-[33%] w-[34%] opacity-100 scale-100 rotate-0 z-20' : anim === 'prev' ? 'left-[120%] opacity-0 scale-75 rotate-2 z-0' : 'opacity-70 scale-90 rotate-2 z-10'}`}
+              className={`absolute inset-y-12 left-[56%] w-[36%] rounded-2xl shadow-2xl overflow-hidden transition-all duration-700 ease-in-out will-change-transform
+                ${anim === 'next'
+                  ? 'left-[33%] w-[34%] opacity-100 scale-100 rotate-0 translate-y-0 z-20'
+                  : anim === 'prev'
+                  ? 'left-[120%] opacity-0 scale-75 rotate-12 translate-y-6 z-0'
+                  : 'opacity-70 scale-90 rotate-2 translate-y-2 z-10'}`}
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
@@ -340,7 +352,7 @@ function FavBtn({
       onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggle(); }}
       aria-pressed={on}
       aria-label={on ? 'Unfavorite' : 'Favorite'}
-      className={`absolute top-2 right-2 z-20 h-9 px-3 rounded-full border backdrop-blur bg-white/80 hover:bg-white transition text-sm 
+      className={`absolute top-10 right-2 z-20 h-9 px-3 rounded-full border backdrop-blur bg-white/80 hover:bg-white transition text-sm 
       ${on ? 'border-rose-200 text-rose-600 bg-rose-50' : 'border-zinc-200 text-zinc-700'}`}
       title={on ? 'Unfavorite' : 'Favorite'}
     >
@@ -354,8 +366,8 @@ export default function BooksListPage() {
   const [items, setItems] = useState<ProductApi[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [minVND, setMinVND] = useState<string>('');
-  const [maxVND, setMaxVND] = useState<string>('');
+  const [minUSD, setMinUSD] = useState<string>('');
+  const [maxUSD, setMaxUSD] = useState<string>('');
 
   // favourites
   const { favIds, canFav, load: loadFavs, toggle: toggleFav } = useFavourites();
@@ -366,8 +378,8 @@ export default function BooksListPage() {
       try {
         setLoading(true); setError(null);
         const params = new URLSearchParams({ type: 'ebook', per_page: '200' });
-        const min = Number(minVND);
-        const max = Number(maxVND);
+        const min = Number(minUSD);
+        const max = Number(maxUSD);
         if (!Number.isNaN(min) && min > 0) params.set('min_price', String(min*100));
         if (!Number.isNaN(max) && max > 0) params.set('max_price', String(max*100));
         if (!Number.isNaN(min) && !Number.isNaN(max) && min && max && max < min) {
@@ -389,7 +401,7 @@ export default function BooksListPage() {
       }
     })();
     return () => ac.abort();
-  }, [minVND, maxVND]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [minUSD, maxUSD]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Normalize
   const books = useMemo(() => {
@@ -412,9 +424,9 @@ export default function BooksListPage() {
       <SectionHeader title="Books" />
       <div className="px-4 md:px-8">
         <div className="flex items-center gap-2">
-          <input type="number" value={minVND} onChange={e=>setMinVND(e.target.value)} placeholder="Min ₫" className="w-28 border rounded px-2 py-1" />
+          <input type="number" value={minUSD} onChange={e=>setMinUSD(e.target.value)} placeholder="Min $" className="w-28 border rounded px-2 py-1" />
           <span>–</span>
-          <input type="number" value={maxVND} onChange={e=>setMaxVND(e.target.value)} placeholder="Max ₫" className="w-28 border rounded px-2 py-1" />
+          <input type="number" value={maxUSD} onChange={e=>setMaxUSD(e.target.value)} placeholder="Max $" className="w-28 border rounded px-2 py-1" />
           <span className="text-xs text-gray-500">(Filters apply instantly)</span>
         </div>
       </div>
@@ -444,7 +456,15 @@ export default function BooksListPage() {
                       </div>
                     </>
                   ) : (
-                    <BookCard book={b} />
+                    <>
+                      {/* Price/Free badge */}
+                      <span className="absolute top-2 right-2 z-20 text-xs font-semibold px-2 py-0.5 rounded-full bg-black/70 text-white">
+                        {Number(b?.price_cents || 0) > 0
+                          ? new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format((b.price_cents||0)/100)
+                          : 'Free'}
+                      </span>
+                      <BookCard book={b} />
+                    </>
                   )}
                 </div>
               );

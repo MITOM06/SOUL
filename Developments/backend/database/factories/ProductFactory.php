@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 
 class ProductFactory extends Factory
 {
@@ -24,22 +25,16 @@ class ProductFactory extends Factory
         // Generate a random title; keep it concise
         $title = $this->faker->sentence(4, true);
 
-        // Pick a cover from public/... based on type
+        // Pick a cover from storage/public under separated folders (books/thumbnail or podcasts/thumbnail)
         $coverUrl = null;
         try {
             $dir = $type === 'ebook' ? 'books/thumbnail' : 'podcasts/thumbnail';
-            $abs = public_path($dir);
-
-            if (is_dir($abs)) {
-                $files = collect(File::files($abs))
-                    ->filter(fn($f) => preg_match('/\.(jpg|jpeg|png|webp|avif)$/i', $f->getFilename()))
-                    ->values();
-
-                if ($files->count() > 0) {
-                    $name = $files->random()->getFilename();
-                    // URL hiển thị ra web:
-                    $coverUrl = asset("$dir/$name"); // hoặc "/$dir/$name" nếu muốn URL tương đối
-                }
+            $files = collect(Storage::disk('public')->files($dir))
+                ->filter(fn($p) => preg_match('/\.(jpg|jpeg|png|webp|avif)$/i', $p))
+                ->values();
+            if ($files->count() > 0) {
+                $pick = $files->random();
+                $coverUrl = Storage::url($pick); // "/storage/..."
             }
         } catch (\Throwable $e) {
             // ignore; leave null
