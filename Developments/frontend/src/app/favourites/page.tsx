@@ -7,6 +7,8 @@ import BookCard from '@/components/BookCard';
 import PodcastCard from '@/components/PodcastCard';
 import api, { favouritesAPI } from '@/lib/api';
 import toast from 'react-hot-toast';
+import { useAuth } from '@/contexts/AuthContext';
+import { normalizeRole } from '@/lib/role';
 
 type ProductType = 'ebook' | 'podcast';
 interface Product {
@@ -20,6 +22,9 @@ interface Product {
 }
 
 export default function FavouritesPage() {
+  const { user } = useAuth();
+  const role = normalizeRole(user);
+  const isAdmin = role === 'admin';
   const [books, setBooks] = useState<Product[]>([]);
   const [podcasts, setPodcasts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
@@ -104,13 +109,20 @@ export default function FavouritesPage() {
       <div className="space-y-6">
         <h1 className="text-2xl font-bold">Favourites</h1>
 
-        {err && (
+        {isAdmin && (
+          <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800">
+            Admin accounts cannot use Favourites.
+          </div>
+        )}
+
+        {!isAdmin && err && (
           <div className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-700">
             {err}
           </div>
         )}
 
         {/* Books */}
+        {!isAdmin && (
         <section className="space-y-3">
           <h2 className="text-xl font-semibold">Favourite Books</h2>
           {loading ? (
@@ -138,8 +150,10 @@ export default function FavouritesPage() {
             </div>
           )}
         </section>
+        )}
 
         {/* Podcasts */}
+        {!isAdmin && (
         <section className="space-y-3">
           <h2 className="text-xl font-semibold">Favourite Podcasts</h2>
           {loading ? (
@@ -167,6 +181,7 @@ export default function FavouritesPage() {
             </div>
           )}
         </section>
+        )}
       </div>
     </UserPanelLayout>
   );

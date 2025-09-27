@@ -76,6 +76,15 @@ class ProductController extends Controller
 
     public function destroy(Product $product)
     {
+        // Không cho xoá nếu có order items
+        $hasOrders = \DB::table('order_items')->where('product_id', $product->id)->exists();
+        if ($hasOrders) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Cannot delete: product has existing orders'
+            ], 422);
+        }
+
         // delete files physically
         foreach ($product->files as $f) {
             if ($f->path && Storage::disk('public')->exists($f->path)) {

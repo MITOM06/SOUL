@@ -4,6 +4,8 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import BookCard from '@/components/BookCard';
 import api from '@/lib/api';
+import { useAuth } from '@/contexts/AuthContext';
+import { normalizeRole } from '@/lib/role';
 
 type ProductType = 'ebook' | 'podcast';
 interface ProductApi {
@@ -363,6 +365,9 @@ function FavBtn({
 }
 
 export default function BooksListPage() {
+  const { user } = useAuth();
+  const role = normalizeRole(user);
+  const isAdmin = role === 'admin';
   const [items, setItems] = useState<ProductApi[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -443,8 +448,10 @@ export default function BooksListPage() {
                   key={b?.id ?? i}
                   className="relative snap-start shrink-0 basis-[calc((100vw-3rem)/2)] sm:basis-[calc((100vw-4rem)/3)] md:basis-[calc((100vw-8rem)/5)]"
                 >
-                  {/* Favourite overlay button */}
-                  <FavBtn on={favOn} onToggle={() => toggleFav(b.id)} />
+                  {/* Favourite overlay button (hide for admin) */}
+                  {!isAdmin && (
+                    <FavBtn on={favOn} onToggle={() => toggleFav(b.id)} />
+                  )}
                   {/* Card */}
                   {loading ? (
                     <>

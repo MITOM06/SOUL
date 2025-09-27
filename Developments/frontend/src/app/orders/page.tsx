@@ -66,22 +66,7 @@ export default function OrdersPage() {
 
   const { refresh } = useCart(); // 👈 lấy hàm refresh từ CartContext
 
-  const updateQuantity = async (itemId: number, newQty: number) => {
-    if (!order) return;
-    setActionLoading(true);
-
-    try {
-      if (newQty < 1) {
-        await deleteItem(itemId);
-        return;
-      }
-      await ordersAPI.updateItemQuantity(itemId, newQty);
-      await fetchOrder();
-      await refresh(); // 👈 cập nhật badge cart
-    } finally {
-      setActionLoading(false);
-    }
-  };
+  // Quantity is fixed to 1 per item; no UI to update
 
   const deleteItem = async (itemId: number) => {
     if (!order) return;
@@ -136,23 +121,7 @@ export default function OrdersPage() {
                 </div>
                 <div>
                   <h2 className="font-semibold">{item.product?.title}</h2>
-                  <div className="mt-2 flex items-center gap-2">
-                    <button
-                      onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                      disabled={actionLoading}
-                      className="px-2 py-1 border rounded"
-                    >
-                      -
-                    </button>
-                    <span>{item.quantity}</span>
-                    <button
-                      onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                      disabled={actionLoading}
-                      className="px-2 py-1 border rounded"
-                    >
-                      +
-                    </button>
-                  </div>
+                  <div className="mt-2 text-sm text-gray-600">Quantity: 1</div>
                 </div>
               </div>
 

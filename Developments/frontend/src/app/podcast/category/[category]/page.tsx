@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import api from '@/lib/api';
+import { useAuth } from '@/contexts/AuthContext';
+import { normalizeRole } from '@/lib/role';
 
 type Item = { id: number; title: string; thumbnail_url?: string | null; price_cents: number };
 
@@ -97,6 +99,9 @@ function FavBtn({ on, onToggle }: { on: boolean; onToggle: () => void }) {
 }
 
 export default function PodcastCategoryPage() {
+  const { user } = useAuth();
+  const role = normalizeRole(user);
+  const isAdmin = role === 'admin';
   const params = useParams();
   const sp = useSearchParams();
   const category = decodeURIComponent(String(params?.category || ''));
@@ -190,8 +195,10 @@ export default function PodcastCategoryPage() {
                     ? new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format((p.price_cents||0)/100)
                     : 'Free'}
                 </span>
-                {/* Favourite overlay button */}
-                <FavBtn on={favOn} onToggle={() => toggleFav(p.id)} />
+                {/* Favourite overlay button (hide for admin) */}
+                {!isAdmin && (
+                  <FavBtn on={favOn} onToggle={() => toggleFav(p.id)} />
+                )}
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={cover} alt={p.title} className="w-full aspect-video object-cover transition-transform duration-300 group-hover:scale-[1.02]" onError={(e)=>{ (e.currentTarget as HTMLImageElement).src = FALLBACK; }} />
                 <div className="p-3">

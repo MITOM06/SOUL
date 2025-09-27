@@ -44,7 +44,8 @@ class UserSubscriptionController extends Controller
         ];
 
         $now = Carbon::now();
-        $end = (clone $now)->addMonth();
+        // Chỉ premium/vip có thời hạn 1 tháng; basic không có end_date
+        $end = in_array($planKey, ['premium','vip'], true) ? (clone $now)->addMonth() : null;
 
         // Ensure only one active subscription: cancel others before creating
         UserSubscription::where('user_id', $user->id)

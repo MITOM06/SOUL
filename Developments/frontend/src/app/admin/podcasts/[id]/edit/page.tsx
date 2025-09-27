@@ -25,6 +25,7 @@ export default function EditPodcastPage() {
   const [desc, setDesc] = useState('');
   const [price, setPrice] = useState<number>(0);
   const [cat, setCat] = useState('');
+  const [slug, setSlug] = useState('');
   const [thumb, setThumb] = useState('');
   const [coverFile, setCoverFile] = useState<File | null>(null);
   const [coverPreview, setCoverPreview] = useState<string | null>(null);
@@ -41,6 +42,7 @@ export default function EditPodcastPage() {
         setDesc(p?.description || '');
         setPrice(p?.price_cents || 0);
         setCat(p?.category || '');
+        setSlug(p?.slug || '');
         setThumb(p?.thumbnail_url || '');
         setActive(Boolean(p?.is_active ?? 1));
       } catch {}
@@ -53,8 +55,10 @@ export default function EditPodcastPage() {
       type: 'podcast', title, description: desc, price_cents: Number(price || 0),
       category: cat || null, thumbnail_url: thumb || null, is_active: !!active,
     };
+    const body: any = { ...payload };
+    if (slug.trim()) body.slug = slug.trim();
     const r = await fetch(`${API}/v1/catalog/products/${id}`, {
-      method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify(payload)
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify(body)
     });
     const j = await r.json();
     if (!j?.success) return alert(j?.message || 'Update failed');
@@ -96,6 +100,12 @@ export default function EditPodcastPage() {
             <div>
               <label className="block text-sm">Category</label>
               <input value={cat} onChange={e=>setCat(e.target.value)} className="w-full border rounded px-3 py-2" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3 mt-3">
+            <div>
+              <label className="block text-sm">Slug</label>
+              <input value={slug} onChange={e=>setSlug(e.target.value)} className="w-full border rounded px-3 py-2" placeholder="optional" />
             </div>
           </div>
           <label className="block text-sm mt-3">Cover image</label>

@@ -276,7 +276,7 @@ export default function PodcastDetailPage() {
             const items: any[] = j2?.data?.items || [];
             const mapped = items
               .filter((it) => Number(it?.id) !== id)
-              .map((it) => ({ id: it.id, title: it.title, thumb: toAbs(it.thumbnail_url) || FALLBACK_IMG }));
+              .map((it) => ({ id: it.id, title: it.title, thumb: toAbs(it.thumbnail_url) || FALLBACK_IMG, price_cents: Number(it.price_cents || 0) }));
             setRelated(mapped.slice(0, 9));
           }
         } catch {}
@@ -314,14 +314,61 @@ export default function PodcastDetailPage() {
   const aud = files.find(f => (f.file_type === 'audio' || /\.mp3(\?|$)/i.test(f.file_url)) && (owned || f.is_preview));
   const cover = toAbs(p.thumbnail_url) || yt?.thumb || FALLBACK_IMG;
   const priceCents = Number(p.price_cents || 0);
+  
+  // Add free podcast into local library on first play
+  const addToLocalLibrary = () => {
+    try {
+      const entry = {
+        id: p.id,
+        type: 'podcast' as const,
+        title: p.title,
+        price_cents: priceCents,
+        thumbnail_url: p.thumbnail_url || null,
+        category: p.category || null,
+        added_at: Date.now(),
+      };
+      const key = 'my_library_free_v1';
+      const raw = localStorage.getItem(key);
+      const arr = Array.isArray(raw ? JSON.parse(raw) : []) ? JSON.parse(raw as string) : [];
+      const k = (x: any) => `${x.type}:${x.id}`;
+      const map = new Map<string, any>(arr.map((x: any) => [k(x), x]));
+      map.set(k(entry), entry);
+      localStorage.setItem(key, JSON.stringify(Array.from(map.values())));
+    } catch {}
+  };
+
+  const ensureContinue = async () => {
+    try {
+      // Requires auth for per-user tracking; silently ignore if not logged in
+      if (!isLoggedIn) return;
+      await fetch(`${API_BASE}/v1/continues/${p.id}`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ current_time_seconds: 0 }),
+      }).catch(()=>{});
+    } catch {}
+  };
+
+  const onListenNow = async () => {
+    addToLocalLibrary();
+    await ensureContinue();
+    // Scroll to player area
+    const target = document.getElementById('player');
+    if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
 
   // Add to cart + toast (xanh, drop từ trên)
   const onBuy = async () => {
     if (!isLoggedIn) { alert('Please sign in to purchase.'); return; }
     if (isAdmin) { alert('Admin accounts cannot purchase.'); return; }
     try {
-      await add(p.id, 1);
-      toast.show('Added to cart');
+      const r = await add(p.id, 1);
+      if ((r as any)?.alreadyInCart) {
+        toast.show('This product is already in your cart');
+      } else {
+        toast.show('Added to cart');
+      }
     } catch {
       toast.show('Failed to add to cart. Please try again.');
     }
@@ -440,12 +487,12 @@ export default function PodcastDetailPage() {
                     </>
                   )}
                   {owned ? (
-                    <a
-                      href="#player"
-                      className="mt-4 w-full inline-block text-center rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2.5"
+                    <button
+                      onClick={onListenNow}
+                      className="mt-4 w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2.5"
                     >
                       Listen now
-                    </a>
+                    </button>
                   ) : (
                     priceCents === 0 ? (
                       <button
@@ -536,6 +583,11 @@ export default function PodcastDetailPage() {
                     href={`/podcast/${r.id}`}
                     className="snap-start shrink-0 basis-[calc((100vw-6rem)/1.2)] sm:basis-[calc((100vw-9rem)/2.2)] lg:basis-[calc((100vw-18rem)/3)] xl:basis-[360px] group rounded-xl border overflow-hidden bg-white shadow-sm hover:shadow-md transition"
                   >
+                    <span className="absolute top-2 right-2 z-20 text-xs font-semibold px-2 py-0.5 rounded-full bg-black/70 text-white">
+                      {Number(r?.price_cents || 0) > 0
+                        ? new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format((r.price_cents||0)/100)
+                        : 'Free'}
+                    </span>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={r.thumb}

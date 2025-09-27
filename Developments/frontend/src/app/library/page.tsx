@@ -48,7 +48,33 @@ export default function LibraryPage() {
         const params: any = {};
         if (type !== 'all') params.type = type;
         const res = await libraryAPI.getAll(params);
-        setItems(res.data?.data || []);
+        const purchased: Item[] = res.data?.data || [];
+
+        // Merge local free items saved when user started reading/listening
+        let local: Item[] = [];
+        try {
+          const raw = localStorage.getItem('my_library_free_v1');
+          const arr = raw ? JSON.parse(raw) : [];
+          if (Array.isArray(arr)) {
+            local = arr.map((x: any) => ({
+              id: Number(x.id),
+              type: (x.type === 'podcast' ? 'podcast' : 'ebook') as 'ebook'|'podcast',
+              title: String(x.title || ''),
+              description: undefined,
+              price_cents: typeof x.price_cents === 'number' ? x.price_cents : 0,
+              thumbnail_url: x.thumbnail_url || null,
+              category: x.category || null,
+              purchased_at: undefined,
+            }));
+          }
+        } catch {}
+
+        // Deduplicate by type:id (prefer server purchases)
+        const map = new Map<string, Item>();
+        const key = (i: Item) => `${i.type}:${i.id}`;
+        purchased.forEach(i => map.set(key(i), i));
+        local.forEach(i => { if (!map.has(key(i))) map.set(key(i), i); });
+        setItems(Array.from(map.values()));
       } finally {
         setLoading(false);
       }

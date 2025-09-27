@@ -20,6 +20,7 @@ export interface Podcast {
   category?: string
   audio_url?: string
   access_level?: AccessLevel
+  price_cents?: number
 }
 
 // src/types/index.ts

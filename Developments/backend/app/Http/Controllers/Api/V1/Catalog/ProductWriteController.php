@@ -9,6 +9,7 @@ use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Validator;
 use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\Http;
+use Laravel\Sanctum\PersonalAccessToken;
 
 class ProductWriteController extends Controller
 {
@@ -260,16 +261,20 @@ class ProductWriteController extends Controller
 
     /**
      * DELETE /api/v1/catalog/products/{id}
-     * Xoá product + toàn bộ orders/items liên quan
+     * Không cho xoá nếu sản phẩm đã từng có người đặt (order_items tồn tại)
      */
     public function destroy($id)
     {
-        return DB::transaction(function () use ($id) {
-            $orderIds = DB::table('order_items')->where('product_id', $id)->distinct()->pluck('order_id');
-            if ($orderIds->count() > 0) {
-                DB::table('orders')->whereIn('id', $orderIds)->delete(); // order_items cascade
-            }
+        // Cấm xoá nếu có bất kỳ order_items nào tham chiếu tới product
+        $hasOrders = DB::table('order_items')->where('product_id', $id)->exists();
+        if ($hasOrders) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Cannot delete: product has existing orders'
+            ], 422);
+        }
 
+        return DB::transaction(function () use ($id) {
             // Xoá file vật lý nếu URL thuộc /storage
             $files = DB::table('product_files')->where('product_id',$id)->get();
             foreach ($files as $f) {
@@ -285,7 +290,7 @@ class ProductWriteController extends Controller
             if (!$deleted) {
                 return response()->json(['success'=>false,'message'=>'Product not found'],404);
             }
-            return response()->json(['success'=>true,'message'=>'Product and related orders/items deleted']);
+            return response()->json(['success'=>true,'message'=>'Product deleted']);
         });
     }
 
@@ -309,7 +314,17 @@ class ProductWriteController extends Controller
         // Gate: allow previews, restrict full files to paid users
         $isPreview = (bool) ($file->is_preview ?? 0);
         if (!$isPreview) {
+            // Resolve current user: prefer session (auth middleware) then fallback to Bearer token (Sanctum)
             $user = auth()->user();
+            if (!$user) {
+                $token = request()->bearerToken();
+                if ($token) {
+                    $pat = PersonalAccessToken::findToken($token);
+                    if ($pat) {
+                        $user = $pat->tokenable;
+                    }
+                }
+            }
             if (!$user) {
                 return response()->json(['success' => false, 'message' => 'Authentication required'], 401);
             }
@@ -335,6 +350,7 @@ class ProductWriteController extends Controller
 
         $urlPath = parse_url((string)$file->file_url, PHP_URL_PATH) ?: (string)$file->file_url;
 
+        // Files stored under storage symlinked path
         if (Str::startsWith($urlPath, '/storage/')) {
             $rel = Str::replaceFirst('/storage/', '', $urlPath); // products/5/a.pdf
             $absolute = storage_path('app/public/' . $rel);
@@ -350,6 +366,23 @@ class ProductWriteController extends Controller
             }
 
             return response()->json(['success' => false, 'message' => 'File missing on server'], 404);
+        }
+
+        // Files placed directly under public/ (e.g. /books/Content/...) — support inline/protected access
+        if (Str::startsWith($urlPath, '/books/')) {
+            $rel = ltrim($urlPath, '/'); // books/Content/...
+            $absolute = public_path($rel);
+            if (!is_file($absolute)) {
+                return response()->json(['success' => false, 'message' => 'File missing on server'], 404);
+            }
+            $ext = strtolower(pathinfo($absolute, PATHINFO_EXTENSION));
+            $name = basename($absolute);
+            $mime = @mime_content_type($absolute) ?: 'application/octet-stream';
+            // Keep inline to allow iframe rendering; browser will still allow Save when viewing
+            return response()->file($absolute, [
+                'Content-Type' => $mime,
+                'Content-Disposition' => 'inline; filename="'.$name.'"',
+            ]);
         }
 
         if (preg_match('#^https?://#i', (string)$file->file_url)) {

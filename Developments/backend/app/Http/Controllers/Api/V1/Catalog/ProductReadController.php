@@ -6,6 +6,7 @@ use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
+use Laravel\Sanctum\PersonalAccessToken;
 
 class ProductReadController extends Controller
 {
@@ -143,6 +144,16 @@ class ProductReadController extends Controller
 
         // Compute access for current user (if authenticated via Sanctum token)
         $user = Auth::user();
+        if (!$user) {
+            // Fallback: if Bearer token is sent but route is public, resolve user via Sanctum
+            $token = request()->bearerToken();
+            if ($token) {
+                $pat = PersonalAccessToken::findToken($token);
+                if ($pat) {
+                    $user = $pat->tokenable;
+                }
+            }
+        }
         $canView = false;
         if ($user) {
             $canView = DB::table('order_items')

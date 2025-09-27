@@ -19,11 +19,22 @@ class AuthController extends Controller
 				'message' => 'Not authenticated.'
 			], 401);
 		}
-        // Lấy gói hiện tại (nếu có)
+        // Lấy gói hiện tại (nếu có) và tự động hết hạn nếu quá hạn 1 tháng (premium/vip)
         $currentSub = $user->subscriptions()
             ->where('status', 'active')
             ->orderByDesc('end_date')
             ->first();
+
+        if ($currentSub) {
+            $plan = (string) $currentSub->plan_key;
+            $end  = $currentSub->end_date ? \Carbon\Carbon::parse($currentSub->end_date) : null;
+            if (in_array($plan, ['premium','vip'], true) && $end && $end->isPast()) {
+                // Hết hạn → chuyển subscription về expired
+                $currentSub->status = 'expired';
+                $currentSub->save();
+                $currentSub = null; // không còn active
+            }
+        }
 
         return response()->json([
             'success' => true,
@@ -34,7 +45,7 @@ class AuthController extends Controller
                 'role' => $user->role,
                 'is_active' => $user->is_active,
                 // Dùng cho FE hiện plan hiện tại
-                'subscription_level' => $currentSub?->plan_key ?? 'free',
+                'subscription_level' => $currentSub?->plan_key ?? 'basic',
                 'current_plan' => $currentSub?->plan_key,
                 'current_plan_status' => $currentSub?->status,
                 'current_plan_end_date' => $currentSub?->end_date,

@@ -12,7 +12,7 @@ use App\Http\Controllers\Api\V1\Commerce\OrderItemController;
 use App\Http\Controllers\Api\V1\Commerce\PaymentController;
 use App\Http\Controllers\Api\V1\Users\UserController;
 
-use App\Http\Controllers\Api\DashboardController;
+use App\Http\Controllers\Api\V1\Admin\DashboardController as AdminDashboardController;
 use App\Http\Controllers\Api\V1\Admin\AdminOrderController;
 use App\Http\Controllers\Api\V1\Admin\AdminOrderItemController;
 use App\Http\Controllers\Api\V1\Admin\SubscriptionController;
@@ -113,7 +113,7 @@ Route::prefix('v1')->group(function () {
     // 🔹 Admin routes
     // =====================================================
     Route::prefix('admin')->middleware(['auth:sanctum', 'admin'])->group(function () {
-        Route::get('stats', [DashboardController::class, 'stats']);
+        Route::get('stats', [AdminDashboardController::class, 'stats']);
 
         // Users management
         Route::apiResource('users', AdminUserController::class);

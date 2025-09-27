@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\File;
 
 class SeedDemoMedia extends Command
 {
@@ -13,58 +14,76 @@ class SeedDemoMedia extends Command
 
     public function handle(): int
     {
-        $coversBooks    = collect(Storage::disk('public')->files('books/thumbnail'))
-            ->filter(fn($p) => preg_match('/\.(jpg|jpeg|png|webp|avif)$/i', $p));
-        $coversPodcasts = collect(Storage::disk('public')->files('podcasts/thumbnail'))
-            ->filter(fn($p) => preg_match('/\.(jpg|jpeg|png|webp|avif)$/i', $p));
-        $pdfs           = collect(Storage::disk('public')->files('books/Content'))
-            ->filter(fn($p) => preg_match('/\.(pdf)$/i', $p));
+        // 1) Chuẩn bị danh sách nguồn trong public/ (đọc trực tiếp từ public_path)
+        $coversBooksAbs    = $this->listPublicFiles('books/thumbnail', ['jpg','jpeg','png','webp','avif']);
+        $coversPodcastsAbs = $this->listPublicFiles('podcasts/thumbnail', ['jpg','jpeg','png','webp','avif']);
+
+        // Ưu tiên C hoa theo yêu cầu của bạn: public/books/Content
+        $pdfsAbs = $this->listPublicFiles('books/Content', ['pdf']);
+        if (empty($pdfsAbs)) {
+            // fallback nếu thư mục chữ thường
+            $pdfsAbs = $this->listPublicFiles('books/content', ['pdf']);
+        }
 
         $force = (bool) $this->option('force');
         $now   = now();
 
+        // 2) Nhắc nhở nếu chưa có symlink public/storage
+        $storageLink = public_path('storage');
+        if (!is_link($storageLink) && !is_dir($storageLink)) {
+            $this->warn('⚠️  Chưa thấy symlink public/storage. Hãy chạy: php artisan storage:link');
+        }
+
+        // 3) Lấy toàn bộ products
         $products = DB::table('products')->orderBy('id')->get();
         $this->info('Found products: ' . $products->count());
 
         foreach ($products as $p) {
-            // Assign cover if missing or --force
             if ($p->type === 'ebook') {
-                // Ensure /products/{id}/cover.ext + content.pdf exist to keep a clear structure
                 $baseDir = "products/{$p->id}";
                 if ($force) {
-                    // Clean existing files in this product dir
-                    if (Storage::disk('public')->exists($baseDir)) {
-                        foreach (Storage::disk('public')->files($baseDir) as $f) {
-                            Storage::disk('public')->delete($f);
-                        }
-                    }
+                    $this->cleanStorageDir($baseDir);
                 }
 
-                if ($coversBooks->count()) {
-                    $coverSrc = $coversBooks->random();
-                    $ext = pathinfo($coverSrc, PATHINFO_EXTENSION) ?: 'jpg';
-                    $coverDst = "$baseDir/cover.$ext";
+                // 3a) Gán cover
+                if (!empty($coversBooksAbs)) {
+                    $coverSrcAbs = $coversBooksAbs[array_rand($coversBooksAbs)];
+                    $ext         = strtolower(pathinfo($coverSrcAbs, PATHINFO_EXTENSION) ?: 'jpg');
+                    $coverDst    = "$baseDir/cover.$ext";
+
                     if ($force || !Storage::disk('public')->exists($coverDst)) {
-                        Storage::disk('public')->put($coverDst, Storage::disk('public')->get($coverSrc));
+                        $this->copyAbsToPublicDisk($coverSrcAbs, $coverDst);
                     }
+
                     DB::table('products')->where('id', $p->id)->update([
-                        'thumbnail_url' => Storage::url($coverDst),
+                        'thumbnail_url' => Storage::url($coverDst), // /storage/products/{id}/cover.ext
                         'updated_at'    => $now,
                     ]);
                 }
 
-                // Attach PDFs (preview + full) under /products/{id}
-                $hasPdf = DB::table('product_files')->where('product_id', $p->id)->whereIn('file_type', ['pdf','txt','doc','docx'])->exists();
+                // 3b) Gán PDF (full + preview)
+                $hasPdf = DB::table('product_files')
+                    ->where('product_id', $p->id)
+                    ->whereIn('file_type', ['pdf','txt','doc','docx'])
+                    ->exists();
+
                 if ($force || !$hasPdf) {
-                    if ($force) DB::table('product_files')->where('product_id', $p->id)->delete();
-                    if ($pdfs->count()) {
-                        $pdfSrc = $pdfs->random();
-                        $pdfDst = "$baseDir/content.pdf";
+                    if ($force) {
+                        DB::table('product_files')->where('product_id', $p->id)->delete();
+                    }
+
+                    if (!empty($pdfsAbs)) {
+                        $pdfSrcAbs = $pdfsAbs[array_rand($pdfsAbs)];
+                        $pdfDst    = "$baseDir/content.pdf";
+
                         if ($force || !Storage::disk('public')->exists($pdfDst)) {
-                            Storage::disk('public')->put($pdfDst, Storage::disk('public')->get($pdfSrc));
+                            $this->copyAbsToPublicDisk($pdfSrcAbs, $pdfDst);
                         }
-                        $url = Storage::url($pdfDst);
+
+                        $url  = Storage::url($pdfDst); // /storage/products/{id}/content.pdf
                         $size = Storage::disk('public')->size($pdfDst) ?: null;
+
+                        // Full
                         DB::table('product_files')->insert([
                             'product_id'     => $p->id,
                             'file_type'      => 'pdf',
@@ -75,7 +94,7 @@ class SeedDemoMedia extends Command
                             'created_at'     => $now,
                             'updated_at'     => $now,
                         ]);
-                        // Preview: reuse same file as demo
+                        // Preview (dùng chung file demo)
                         DB::table('product_files')->insert([
                             'product_id'     => $p->id,
                             'file_type'      => 'pdf',
@@ -90,33 +109,43 @@ class SeedDemoMedia extends Command
                 }
             } elseif ($p->type === 'podcast') {
                 $baseDir = "products/{$p->id}";
-                if ($force && Storage::disk('public')->exists($baseDir)) {
-                    foreach (Storage::disk('public')->files($baseDir) as $f) {
-                        Storage::disk('public')->delete($f);
-                    }
+                if ($force) {
+                    $this->cleanStorageDir($baseDir);
                 }
-                if ($coversPodcasts->count()) {
-                    $coverSrc = $coversPodcasts->random();
-                    $ext = pathinfo($coverSrc, PATHINFO_EXTENSION) ?: 'jpg';
-                    $coverDst = "$baseDir/cover.$ext";
+
+                // 4a) Gán cover podcast
+                if (!empty($coversPodcastsAbs)) {
+                    $coverSrcAbs = $coversPodcastsAbs[array_rand($coversPodcastsAbs)];
+                    $ext         = strtolower(pathinfo($coverSrcAbs, PATHINFO_EXTENSION) ?: 'jpg');
+                    $coverDst    = "$baseDir/cover.$ext";
+
                     if ($force || !Storage::disk('public')->exists($coverDst)) {
-                        Storage::disk('public')->put($coverDst, Storage::disk('public')->get($coverSrc));
+                        $this->copyAbsToPublicDisk($coverSrcAbs, $coverDst);
                     }
+
                     DB::table('products')->where('id', $p->id)->update([
                         'thumbnail_url' => Storage::url($coverDst),
                         'updated_at'    => $now,
                     ]);
                 }
 
-                // Attach demo YouTube if none
-                $hasVideo = DB::table('product_files')->where('product_id', $p->id)->where('file_type', 'youtube')->exists();
+                // 4b) Seed demo YouTube nếu chưa có
+                $hasVideo = DB::table('product_files')
+                    ->where('product_id', $p->id)
+                    ->where('file_type', 'youtube')
+                    ->exists();
+
                 if ($force || !$hasVideo) {
-                    if ($force) DB::table('product_files')->where('product_id', $p->id)->delete();
-                    $vids = [ 'pIrkcBp-UO8','dQw4w9WgXcQ','kXYiU_JCYtU','9bZkp7q19f0','3JZ_D3ELwOQ' ];
-                    $vid = $vids[array_rand($vids)];
+                    if ($force) {
+                        DB::table('product_files')->where('product_id', $p->id)->delete();
+                    }
+
+                    $vids  = ['pIrkcBp-UO8','dQw4w9WgXcQ','kXYiU_JCYtU','9bZkp7q19f0','3JZ_D3ELwOQ'];
+                    $vid   = $vids[array_rand($vids)];
                     $watch = "https://www.youtube.com/watch?v={$vid}";
                     $embed = "https://www.youtube.com/embed/{$vid}";
                     $thumb = "https://img.youtube.com/vi/{$vid}/hqdefault.jpg";
+
                     DB::table('product_files')->insert([
                         'product_id'     => $p->id,
                         'file_type'      => 'youtube',
@@ -137,7 +166,55 @@ class SeedDemoMedia extends Command
             }
         }
 
-        $this->info('Done.');
+        $this->info('✅ Done.');
         return self::SUCCESS;
+    }
+
+    /**
+     * Liệt kê file trong public/{subdir} với whitelist phần mở rộng (case-insensitive).
+     * Trả về mảng đường dẫn tuyệt đối (absolute).
+     */
+    private function listPublicFiles(string $subdir, array $extWhitelist): array
+    {
+        $absDir = public_path(trim($subdir, '/'));
+        if (!is_dir($absDir)) {
+            return [];
+        }
+
+        $exts = array_map(fn($e) => strtolower($e), $extWhitelist);
+        $out  = [];
+
+        foreach (File::files($absDir) as $file) {
+            $ext = strtolower($file->getExtension());
+            if (in_array($ext, $exts, true)) {
+                $out[] = $file->getPathname(); // absolute path
+            }
+        }
+        return $out;
+    }
+
+    /**
+     * Xoá toàn bộ file trong storage/app/public/{dir}
+     */
+    private function cleanStorageDir(string $dir): void
+    {
+        $disk = Storage::disk('public');
+        if ($disk->exists($dir)) {
+            foreach ($disk->files($dir) as $f) {
+                $disk->delete($f);
+            }
+        }
+    }
+
+    /**
+     * Copy 1 file tuyệt đối (trong public/ hoặc bất kỳ) vào disk('public') tại đích $dstPath.
+     */
+    private function copyAbsToPublicDisk(string $absSrc, string $dstPath): void
+    {
+        $contents = @file_get_contents($absSrc);
+        if ($contents === false) {
+            throw new \RuntimeException("Cannot read source file: {$absSrc}");
+        }
+        Storage::disk('public')->put($dstPath, $contents);
     }
 }

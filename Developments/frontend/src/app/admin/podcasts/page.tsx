@@ -85,11 +85,13 @@ export default function AdminPodcasts() {
   const load = async () => {
     setLoadingList(true);
     const params = new URLSearchParams({ type: 'podcast', per_page: '100' });
+    if (query.trim()) params.set('search', query.trim());
+    if (catFilter !== 'all') params.set('category', catFilter);
     const min = Number(minPriceUSD);
     const max = Number(maxPriceUSD);
     if (!Number.isNaN(min) && min > 0) params.set('min_price', String(min * 100));
     if (!Number.isNaN(max) && max > 0) params.set('max_price', String(max * 100));
-    const r = await fetch(`${API}/v1/catalog/products?${params.toString()}`);
+    const r = await fetch(`${API}/v1/catalog/products?${params.toString()}`, { credentials: 'include' });
     const j = await r.json();
     setItems(j?.data?.items || []);
     setLoadingList(false);
@@ -163,7 +165,7 @@ export default function AdminPodcasts() {
 
   const remove = async (id: number) => {
     if (!confirm('Delete this podcast?')) return;
-    const r = await fetch(`${API}/v1/catalog/products/${id}`, { method: 'DELETE' });
+    const r = await fetch(`${API}/v1/catalog/products/${id}`, { method: 'DELETE', credentials: 'include' });
     const j = await r.json();
     if (!j?.success) return alert(j?.message || 'Delete failed');
     await load();
@@ -189,13 +191,7 @@ export default function AdminPodcasts() {
     return ['all', ...Array.from(set.values())];
   }, [items]);
 
-  const filtered = useMemo(() => {
-    return items.filter(item => {
-      const matchesQuery = !query || item.title.toLowerCase().includes(query.toLowerCase());
-      const matchesCategory = catFilter === 'all' || item.category === catFilter;
-      return matchesQuery && matchesCategory;
-    });
-  }, [items, query, catFilter]);
+  const filtered = useMemo(() => items, [items]);
 
   // moved above
   const perPage = 15;
@@ -258,7 +254,13 @@ export default function AdminPodcasts() {
             </tr>
           </thead>
           <tbody className="bg-white">
-            {filtered.slice((page-1)*perPage, page*perPage).map((it, idx) => (
+            {loadingList && (
+              <tr><td className="p-3 text-center" colSpan={6}>Loading...</td></tr>
+            )}
+            {!loadingList && filtered.length === 0 && (
+              <tr><td className="p-3 text-center" colSpan={6}>No items</td></tr>
+            )}
+            {!loadingList && filtered.slice((page-1)*perPage, page*perPage).map((it, idx) => (
               <tr
                 key={it.id}
                 className={`cursor-pointer ${selectedId===it.id ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
@@ -292,138 +294,5 @@ export default function AdminPodcasts() {
       </div>
     </section>
   );
-
-  return (
-    <div className="p-6 max-w-6xl mx-auto">
-      <h1 className="text-2xl font-bold mb-6">Admin · Podcast Management (YouTube audio)</h1>
-
-      <div className="grid md:grid-cols-2 gap-6">
-        {/* Form */}
-        <div className="border rounded-xl p-4">
-          <div className="flex items-center justify-between mb-2">
-            <div className="font-semibold">{editingId ? `Edit podcast #${editingId}` : 'Create podcast'}</div>
-            <button className="text-sm px-3 py-1 border rounded" onClick={resetForm}>New</button>
-          </div>
-
-          <label className="block text-sm mt-2">Tiêu đề</label>
-          <input value={title} onChange={e=>setTitle(e.target.value)} className="w-full border rounded px-3 py-2" />
-
-          <label className="block text-sm mt-3">Mô tả</label>
-          <textarea value={desc} onChange={e=>setDesc(e.target.value)} className="w-full border rounded px-3 py-2 h-28" />
-
-          <div className="grid grid-cols-2 gap-3 mt-3">
-            <div>
-              <label className="block text-sm">Price (cents)</label>
-              <input type="number" value={price} onChange={e=>setPrice(Number(e.target.value))} className="w-full border rounded px-3 py-2" />
-            </div>
-            <div>
-              <label className="block text-sm">Category</label>
-              <input value={cat} onChange={e=>setCat(e.target.value)} className="w-full border rounded px-3 py-2" />
-            </div>
-          </div>
-
-          <label className="block text-sm mt-3">Cover URL</label>
-          <input value={thumb} onChange={e=>setThumb(e.target.value)} placeholder="http(s)://... hoặc /storage/..." className="w-full border rounded px-3 py-2" />
-
-          <label className="inline-flex items-center gap-2 mt-3">
-            <input type="checkbox" checked={active} onChange={e=>setActive(e.target.checked)} />
-            Kích hoạt
-          </label>
-
-          <div className="mt-5 border-t pt-4">
-            <div className="font-semibold mb-2">YouTube</div>
-            <div className="flex gap-2">
-              <input
-                value={ytUrl}
-                onChange={e=>setYtUrl(e.target.value)}
-                placeholder="Dán URL YouTube (watch/share/shorts/embed...)"
-                className="flex-1 border rounded px-3 py-2"
-              />
-              <button onClick={lookupYt} className="px-3 py-2 rounded bg-blue-600 text-white">Tra cứu</button>
-            </div>
-
-            {ytMeta ? (
-              <div className="mt-3 p-3 border rounded">
-                <div className="font-medium">{ytMeta.title}</div>
-                <div className="text-sm text-gray-600 break-all">{ytMeta.watch_url}</div>
-                <div className="mt-2 flex items-center gap-3">
-                  <img
-                    src={toAbs(ytMeta.thumbnail_url) || FALLBACK_IMG}
-                    alt=""
-                    className="w-28 h-16 object-cover rounded"
-                    onError={(e)=>{ (e.currentTarget as HTMLImageElement).src = FALLBACK_IMG; }}
-                  />
-                  <button
-                    className="px-3 py-2 border rounded"
-                    onClick={()=>setPreviewVideo(v=>!v)}
-                  >
-                    {previewVideo ? 'Ẩn preview' : 'Xem/Nghe thử'}
-                  </button>
-                </div>
-                {previewVideo && (
-                  <div className="mt-3">
-                    <iframe
-                      className="rounded"
-                      width="100%" height="300"
-                      src={`${ytMeta.embed_url}?autoplay=0&rel=0&modestbranding=1`}
-                      title="YouTube preview" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                      allowFullScreen
-                    />
-                    <div className="text-xs text-gray-500 mt-1">
-                      * Người dùng có thể phát “chỉ nghe” bằng cách hiển thị giao diện audio riêng (ẩn video bằng CSS).
-                    </div>
-                  </div>
-                )}
-              </div>
-            ) : null}
-          </div>
-
-          <div className="mt-4 flex gap-2">
-            <button onClick={save} className="px-4 py-2 bg-green-600 text-white rounded">Lưu</button>
-            {editingId && <button onClick={()=>remove(editingId!)} className="px-4 py-2 bg-red-600 text-white rounded">Xoá</button>}
-          </div>
-        </div>
-
-        {/* List */}
-        <div className="border rounded-xl p-4">
-          <div className="flex items-center justify-between mb-2">
-            <div className="font-semibold">List</div>
-            <Link href="/podcasts" className="text-sm text-blue-600 hover:underline">Open public page →</Link>
-          </div>
-          {loadingList ? (
-            <div>Loading…</div>
-          ) : (
-            <div className="grid sm:grid-cols-2 gap-3">
-              {items.map(it => {
-                const cover = toAbs(it.thumbnail_url) || FALLBACK_IMG;
-                return (
-                  <div key={it.id} className="border rounded p-3">
-                    <div className="flex gap-3">
-                      <img
-                        src={cover}
-                        alt={it.title}
-                        className="w-16 h-16 object-cover rounded border"
-                        onError={(e)=>{ (e.currentTarget as HTMLImageElement).src = FALLBACK_IMG; }}
-                      />
-                      <div className="flex-1">
-                        <div className="font-medium line-clamp-2">{it.title}</div>
-                        <div className="text-xs text-gray-500">
-                          {it.category || '—'} · {it.price_cents ? formatUSD(it.price_cents) : 'Miễn phí'}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="mt-2 flex gap-2">
-                      <button className="px-3 py-1 text-sm border rounded" onClick={()=>pickEdit(it)}>Edit</button>
-                      <button className="px-3 py-1 text-sm border rounded" onClick={()=>remove(it.id)}>Delete</button>
-                      <Link className="px-3 py-1 text-sm border rounded" href={`/podcast/${it.id}`} target="_blank">Xem</Link>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
+  return listUI;
 }

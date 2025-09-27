@@ -200,6 +200,21 @@ export default function BookDetail() {
   const [canFav, setCanFav] = useState(true);
   const [related, setRelated] = useState<any[]>([]);
 
+  // Inline PDF viewer state (declare before any early returns)
+  const [pdfUrl, setPdfUrl] = useState<string>('');
+  const [pdfTitle, setPdfTitle] = useState<string>('');
+  useEffect(() => {
+    if (pdfUrl) {
+      const prev = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = prev;
+        if (pdfUrl) URL.revokeObjectURL(pdfUrl);
+      };
+    }
+    return () => {};
+  }, [pdfUrl]);
+
   useEffect(() => {
     if (!id) return;
     const ac = new AbortController();
@@ -268,7 +283,7 @@ export default function BookDetail() {
   const p = data.product;
   const files = data.files || [];
   const canView = Boolean((data as any)?.access?.can_view);
-  const preview = files.find(f => !!f.is_preview && canOpenDirect(f.file_url)) || null;
+  const preview = files.find(f => !!f.is_preview && f.file_type === 'pdf' && canOpenDirect(f.file_url)) || null;
   const fullPdf = files.find(f => f.file_type === 'pdf' && !f.is_preview) || null;
   const coverSrc = toAbs(p.thumbnail_url) || FALLBACK_IMG;
 
@@ -284,25 +299,85 @@ export default function BookDetail() {
   const compareAt = Number(meta.compare_at_cents ?? 0);
   const priceCents = Number(p.price_cents ?? 0);
 
-  const onRead = () => {
-    // Mở trang preview nội bộ để giới hạn theo chính sách (10 trang đầu)
-    if (!preview) { alert('No preview available.'); return; }
-    window.open(`/reader/ebook/${p.id}`, '_blank');
+  const openPdfInline = async (productId: number, fileId: number, title: string) => {
+    try {
+      const res = await api.get(`/v1/catalog/products/${productId}/files/${fileId}/download`, { responseType: 'blob' });
+      const blob = new Blob([res.data], { type: res.headers['content-type'] || 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      if (pdfUrl) URL.revokeObjectURL(pdfUrl);
+      setPdfUrl(url);
+      setPdfTitle(title);
+    } catch (e) {
+      alert('Unable to load PDF. Please ensure you are logged in and have purchased.');
+    }
   };
+
+  // Add free product into local library on first open
+  const addToLocalLibrary = () => {
+    try {
+      const entry = {
+        id: p.id,
+        type: 'ebook' as const,
+        title: p.title,
+        price_cents: priceCents,
+        thumbnail_url: p.thumbnail_url || null,
+        category: p.category || null,
+        added_at: Date.now(),
+      };
+      const key = 'my_library_free_v1';
+      const raw = localStorage.getItem(key);
+      const arr = Array.isArray(raw ? JSON.parse(raw) : []) ? JSON.parse(raw as string) : [];
+      const k = (x: any) => `${x.type}:${x.id}`;
+      const map = new Map<string, any>(arr.map((x: any) => [k(x), x]));
+      map.set(k(entry), entry);
+      localStorage.setItem(key, JSON.stringify(Array.from(map.values())));
+    } catch {}
+  };
+
+  const onRead = () => {
+    const previewFile = files.find(f => !!f.is_preview && f.file_type === 'pdf');
+    if (!previewFile) { alert('No preview available.'); return; }
+    openPdfInline(p.id, previewFile.id, `${p.title} — Preview`);
+    // Save a continues entry and add to local library (non-destructive)
+    try {
+      if (isLoggedIn) save({ current_page: Math.max(1, Number(progress?.current_page || 0)) }).catch(()=>{});
+      addToLocalLibrary();
+    } catch {}
+  };
+
   const onReadFull = () => {
     const owned = canView || (priceCents === 0 && isCustomer);
-    if (!fullPdf || !owned) return;
-    (async () => {
-      try {
-        const res = await api.get(`/v1/catalog/products/${p.id}/files/${fullPdf.id}/download`, { responseType: 'blob' });
-        const blob = new Blob([res.data], { type: res.headers['content-type'] || 'application/pdf' });
-        const url = URL.createObjectURL(blob);
-        window.open(url, '_blank');
-        setTimeout(() => URL.revokeObjectURL(url), 60000);
-      } catch (e) {
-        alert('Unable to open full content. Please ensure you are logged in and have purchased.');
-      }
-    })();
+    if (!fullPdf) return;
+    if (!owned) return;
+    // Require login for full content; if free but not logged in, redirect to login
+    if (!isLoggedIn) {
+      const next = encodeURIComponent(window.location.pathname);
+      window.location.href = `/auth/login?next=${next}`;
+      return;
+    }
+    openPdfInline(p.id, fullPdf.id, p.title);
+    try {
+      save({ current_page: Math.max(1, Number(progress?.current_page || 0)) }).catch(()=>{});
+      addToLocalLibrary();
+    } catch {}
+  };
+  const downloadFullPdf = async () => {
+    if (!fullPdf) return;
+    try {
+      const res = await api.get(`/v1/catalog/products/${p.id}/files/${fullPdf.id}/download`, { responseType: 'blob' });
+      const headers: any = res.headers || {};
+      const cd = headers['content-disposition'] || headers['Content-Disposition'] || '';
+      let filename = `${p.title}.pdf`.replace(/[\\/:*?"<>|]+/g, '_');
+      const m = /filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i.exec(cd);
+      if (m) filename = decodeURIComponent(m[1] || m[2]);
+      const blob = new Blob([res.data], { type: headers['content-type'] || 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+    } catch (e) {
+      alert('Download failed. Please ensure you are logged in and own this title.');
+    }
   };
   const onShare = async () => {
     try {
@@ -316,8 +391,12 @@ export default function BookDetail() {
     if (!isLoggedIn) { alert('Please sign in to purchase.'); return; }
     if (isAdmin) { alert('Admin accounts cannot purchase.'); return; }
     try {
-      await add(p.id, 1);
-      toast.show('Added to cart');
+      const r = await add(p.id, 1);
+      if ((r as any)?.alreadyInCart) {
+        toast.show('This product is already in your cart');
+      } else {
+        toast.show('Added to cart');
+      }
     } catch {
       toast.show('Failed to add to cart. Please try again.');
     }
@@ -431,7 +510,43 @@ export default function BookDetail() {
                 </div>
               </div>
 
-              {/* Rail: hành động mua + nội dung chi tiết */}
+              {/* Fullscreen reader overlay is rendered at the end of the page */}
+
+              {/* Description (always visible) under Content, left area */}
+              <div className="mt-6 space-y-6">
+                {p.description && (
+                  <div>
+                    <h2 className="text-lg font-semibold mb-2">Description</h2>
+                    <p className="text-sm text-zinc-700 whitespace-pre-wrap leading-relaxed">{p.description}</p>
+                  </div>
+                )}
+                {/* Attachments list removed; we provide a single Download PDF button in the purchase card */}
+                {owned && (
+                  <div>
+                    <h2 className="text-lg font-semibold mb-2">Reading Progress</h2>
+                    <div className="text-sm text-gray-600">Current page: {progress?.current_page ?? 0}</div>
+                    <div className="mt-3 flex items-center gap-2">
+                      <input
+                        type="number"
+                        min={0}
+                        value={page}
+                        onChange={(e)=>setPage(Number(e.target.value))}
+                        disabled={!owned || !isCustomer}
+                        className="border rounded px-2 py-1 w-24 disabled:bg-zinc-100 disabled:cursor-not-allowed"
+                      />
+                      <button
+                        onClick={()=>save({ current_page: page })}
+                        disabled={!owned || !isCustomer}
+                        className="px-3 py-1 rounded bg-green-600 text-white disabled:opacity-60 disabled:cursor-not-allowed"
+                      >
+                        Save progress
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Rail: hành động mua ở bên phải */}
               <aside className="mt-6 w-full lg:max-w-sm xl:max-w-md space-y-4 lg:ml-auto">
                 <div className="flex items-center gap-3 flex-wrap">
                   <button
@@ -441,16 +556,7 @@ export default function BookDetail() {
                   >
                     Read Preview
                   </button>
-                  {owned && (
-                    <button
-                      onClick={onReadFull}
-                      disabled={!fullPdf}
-                      title={!fullPdf ? 'No full PDF available yet' : ''}
-                      className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 disabled:hover:bg-emerald-600/90 disabled:cursor-not-allowed disabled:opacity-50 text-white font-semibold px-5 py-2.5 rounded-xl shadow transition"
-                    >
-                      Read Full
-                    </button>
-                  )}
+                  {/* Removed duplicate Read Full button here */}
                   <button
                     onClick={toggleFav}
                     aria-pressed={favOn}
@@ -490,7 +596,7 @@ export default function BookDetail() {
                     </>
                   )}
 
-                  {canView ? (
+                  {(canView || (priceCents === 0)) ? (
                     <button
                       onClick={onReadFull}
                       disabled={!fullPdf}
@@ -506,109 +612,47 @@ export default function BookDetail() {
                       Buy now
                     </button>
                   )}
+                  {(canView || (priceCents === 0 && isLoggedIn)) && fullPdf && (
+                    <button
+                      onClick={downloadFullPdf}
+                      className="mt-3 w-full rounded-xl border border-zinc-300 hover:bg-zinc-50 text-zinc-800 font-semibold py-2.5"
+                    >
+                      Download PDF
+                    </button>
+                  )}
                 </div>
 
-                <section className="relative rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
-                  {!owned && (
-                    <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-white/80 text-center text-sm text-zinc-600 px-6">
-                      <p>Purchase to view full description, download attachments and track reading progress.</p>
-                    </div>
-                  )}
-                  <div className={cn('space-y-5', !owned && 'pointer-events-none select-none opacity-60')}>
-                    {p.description && (
-                      <div>
-                        <h2 className="text-lg font-semibold mb-2">Description</h2>
-                        <p className="text-sm text-zinc-700 whitespace-pre-wrap leading-relaxed">{p.description}</p>
-                      </div>
-                    )}
-                    {files.length > 0 && (
-                      <div>
-                        <h2 className="text-lg font-semibold mb-2">Attachments</h2>
-                        <ul className="list-disc pl-5 space-y-1 text-sm">
-                          {files.map(f => (
-                            <li key={f.id}>
-                              {owned ? (
-                                <a
-                                  href={downloadUrl(p.id, f.id)}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="text-[color:var(--brand-600)] hover:underline"
-                                >
-                                  Download {f.file_type.toUpperCase()}
-                                </a>
-                              ) : (
-                                <span className="text-zinc-500">Tệp {f.file_type.toUpperCase()}</span>
-                              )}
-                              {f.is_preview ? (
-                                <span className="ml-2 text-xs px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-600">preview</span>
-                              ) : null}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                    <div>
-                      <h2 className="text-lg font-semibold mb-2">Reading Progress</h2>
-                      <div className="text-sm text-gray-600">Current page: {progress?.current_page ?? 0}</div>
-                      <div className="mt-3 flex items-center gap-2">
-                        <input
-                          type="number"
-                          min={0}
-                          value={page}
-                          onChange={(e)=>setPage(Number(e.target.value))}
-                          disabled={!owned || !isCustomer}
-                          className="border rounded px-2 py-1 w-24 disabled:bg-zinc-100 disabled:cursor-not-allowed"
-                        />
-                        <button
-                          onClick={()=>save({ current_page: page })}
-                          disabled={!owned || !isCustomer}
-                          className="px-3 py-1 rounded bg-green-600 text-white disabled:opacity-60 disabled:cursor-not-allowed"
-                        >
-                          Save progress
-                        </button>
-                      </div>
-                    </div>
-                    <div className="flex items-end gap-3 mt-1">
-                      {compareAt > 0 && <div className="text-zinc-500 line-through text-lg">{formatUSD(compareAt)}</div>}
-                      <div className="text-3xl font-extrabold text-zinc-900">{priceCents > 0 ? formatUSD(priceCents) : 'Free'}</div>
-                    </div>
-                    <div className="mt-2 text-emerald-600 text-sm font-semibold">Own this ebook forever</div>
-
-                    {owned ? (
-                      <button
-                        onClick={onReadFull}
-                        disabled={!fullPdf}
-                        className="mt-4 w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:hover:bg-emerald-600/90 disabled:cursor-not-allowed disabled:opacity-50 text-white font-semibold py-2.5"
-                      >
-                        Read Full
-                      </button>
-                    ) : (
-                      priceCents === 0 ? (
-                        <button
-                          onClick={() => { window.location.href = `/auth/login?next=${encodeURIComponent(window.location.pathname)}`; }}
-                          className="mt-4 w-full rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5"
-                        >
-                          Sign in to read
-                        </button>
-                      ) : (
-                        <button
-                          onClick={onBuy}
-                          className="mt-4 w-full rounded-xl bg-[color:var(--brand-500)] hover:bg-[color:var(--brand-600)] text-white font-semibold py-2.5"
-                        >
-                          Buy now
-                        </button>
-                      )
-                    )}
-                  </div>
-                </section>
+                {/* Removed purchase overlay and duplicate content section */}
               </aside>
             </div>
           </div>
         </section>
 
-        {/* Related books */}
-        {related.length > 0 && <RelatedRow items={related} />}
+      {/* Related books */}
+      {related.length > 0 && <RelatedRow items={related} />}
+    </div>
+
+    {/* Fullscreen PDF reader overlay */}
+    {pdfUrl && (
+      <div className="fixed inset-0 z-[1000] bg-black/90">
+        <div className="h-12 px-4 flex items-center justify-between text-white">
+          <div className="truncate pr-3">{pdfTitle}</div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setPdfUrl('')}
+              className="px-3 py-1 rounded bg-white/10 hover:bg-white/20"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+        <iframe
+          src={pdfUrl + '#view=FitH'}
+          title={pdfTitle}
+          className="w-full h-[calc(100vh-48px)] bg-white"
+        />
       </div>
+    )}
 
       {/* Toast */}
       <Toast open={toast.open} msg={toast.msg} onClose={toast.hide} />
