@@ -27,7 +27,7 @@ class ProductFilesSeeder extends Seeder
             if ($files->count() === 0) continue;
 
             $count = random_int(0, 5); // ví dụ count(rand(0,5))
-            for ($i=0; $i<$count; $i++) {
+            for ($i = 0; $i < $count; $i++) {
                 $path = $files->random();
                 DB::table('product_files')->insert([
                     'product_id'     => $p->id,

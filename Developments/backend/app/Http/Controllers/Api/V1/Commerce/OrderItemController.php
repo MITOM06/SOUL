@@ -32,16 +32,20 @@ class OrderItemController extends Controller
             ['total_cents' => 0]
         );
 
-        // 👉 Kiểm tra item đã tồn tại chưa
+        // 👉 Kiểm tra item đã tồn tại chưa (chỉ cho phép mỗi sản phẩm 1 lần)
         $item = $order->items()->where('product_id', $product->id)->first();
-
+        $already = false;
         if ($item) {
-            $item->quantity += $qty;
-            $item->save();
+            // Giữ quantity = 1 cố định
+            if ((int)$item->quantity !== 1) {
+                $item->quantity = 1;
+                $item->save();
+            }
+            $already = true;
         } else {
             $item = $order->items()->create([
                 'product_id'       => $product->id,
-                'quantity'         => $qty,
+                'quantity'         => 1, // cố định 1
                 'unit_price_cents' => $product->price_cents,
                 'meta'             => ['title' => $product->title],
             ]);
@@ -53,7 +57,8 @@ class OrderItemController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Item added to pending order',
+            'message' => $already ? 'Item already in cart' : 'Item added to cart',
+            'already_in_cart' => $already,
             'data'    => $order->load('items.product'),
         ]);
     }
@@ -75,8 +80,11 @@ class OrderItemController extends Controller
             return response()->json(['success' => false, 'message' => 'Item not found'], 404);
         }
 
-        $item->quantity = $request->quantity;
-        $item->save();
+        // Bỏ qua thay đổi số lượng: luôn cố định 1
+        if ((int)$item->quantity !== 1) {
+            $item->quantity = 1;
+            $item->save();
+        }
 
         $order = $item->order;
         $order->total_cents = $order->items->sum(fn($i) => $i->quantity * $i->unit_price_cents);
@@ -84,7 +92,7 @@ class OrderItemController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Item updated',
+            'message' => 'Quantity is fixed to 1',
             'data'    => $item->load('product')
         ]);
     }

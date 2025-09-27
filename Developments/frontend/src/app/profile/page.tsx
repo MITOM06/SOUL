@@ -24,14 +24,16 @@ export default function ProfilePage() {
             <p><strong>Name:</strong> {user?.name ?? '—'}</p>
             <p><strong>Email:</strong> {user?.email ?? '—'}</p>
             <p><strong>Role:</strong> {role}</p>
-            <p>
-              <strong>Current plan:</strong>{' '}
-              <span className="inline-flex items-center gap-2">
-                <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
-                  {planLabel}
+            {role !== 'admin' && (
+              <p>
+                <strong>Current plan:</strong>{' '}
+                <span className="inline-flex items-center gap-2">
+                  <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
+                    {planLabel}
+                  </span>
                 </span>
-              </span>
-            </p>
+              </p>
+            )}
           </div>
           <button className="mt-5 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Edit Profile</button>
         </div>

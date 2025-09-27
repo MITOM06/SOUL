@@ -23,6 +23,7 @@ export default function CreatePodcastPage() {
   const [desc, setDesc] = useState('');
   const [price, setPrice] = useState<number>(0);
   const [cat, setCat] = useState('');
+  const [slug, setSlug] = useState('');
   const [thumb, setThumb] = useState('');
   const [coverFile, setCoverFile] = useState<File | null>(null);
   const [coverPreview, setCoverPreview] = useState<string | null>(null);
@@ -37,8 +38,12 @@ export default function CreatePodcastPage() {
         type: 'podcast', title, description: desc, price_cents: Number(price || 0),
         category: cat || null, thumbnail_url: thumb || null, is_active: !!active,
       };
+      // include slug if provided
+      const body: any = { ...payload };
+      if (slug.trim()) body.slug = slug.trim();
+
       const r = await fetch(`${API}/v1/catalog/products`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
       });
       const j = await r.json();
       if (!j?.success) return alert(j?.message || 'Create failed');
@@ -72,7 +77,19 @@ export default function CreatePodcastPage() {
       </div>
 
       <div className="grid md:grid-cols-1 gap-6">
-        <div className="border rounded-xl p-4">
+        <div className="border rounded-xl p-4 space-y-3">
+          <div className="grid md:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm text-gray-600">Type</label>
+              <select value={'podcast'} disabled className="w-full border rounded px-3 py-2 bg-gray-50 text-gray-700">
+                <option value="podcast">Podcast</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm text-gray-600">Price (cents, USD)</label>
+              <input type="number" value={price} onChange={e=>setPrice(Number(e.target.value))} className="w-full border rounded px-3 py-2" />
+            </div>
+          </div>
           <label className="block text-sm mt-2">Title</label>
           <input value={title} onChange={e=>setTitle(e.target.value)} className="w-full border rounded px-3 py-2" />
 
@@ -81,12 +98,12 @@ export default function CreatePodcastPage() {
 
           <div className="grid grid-cols-2 gap-3 mt-3">
             <div>
-              <label className="block text-sm">Price (cents, USD)</label>
-              <input type="number" value={price} onChange={e=>setPrice(Number(e.target.value))} className="w-full border rounded px-3 py-2" />
-            </div>
-            <div>
               <label className="block text-sm">Category</label>
               <input value={cat} onChange={e=>setCat(e.target.value)} className="w-full border rounded px-3 py-2" />
+            </div>
+            <div>
+              <label className="block text-sm">Slug</label>
+              <input value={slug} onChange={e=>setSlug(e.target.value)} className="w-full border rounded px-3 py-2" placeholder="optional" />
             </div>
           </div>
           <label className="block text-sm mt-3">Cover image</label>

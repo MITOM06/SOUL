@@ -191,9 +191,7 @@ export default function CheckoutPage() {
               <div key={it.id} className="py-2 flex justify-between gap-3">
                 <div>
                   <div className="font-medium">{it.product?.title}</div>
-                  <div className="text-gray-500">
-                    Qty: {it.quantity} × {new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format((it.unit_price_cents||0)/100)}
-                  </div>
+                  <div className="text-gray-500">{new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format((it.unit_price_cents||0)/100)}</div>
                 </div>
                 <div className="font-semibold">
                   {new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(((it.unit_price_cents||0) * it.quantity)/100)}

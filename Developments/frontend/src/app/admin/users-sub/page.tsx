@@ -21,6 +21,7 @@ export default function AdminUserSubsPage() {
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [showForm, setShowForm] = useState(false);
+  const [viewOnly, setViewOnly] = useState(true);
   const [page, setPage] = useState(1);
   const perPage = 15;
   const [planFilter, setPlanFilter] = useState<"all"|"basic"|"premium"|"vip">('all');
@@ -185,12 +186,7 @@ export default function AdminUserSubsPage() {
             <option value="premium">Premium</option>
             <option value="vip">VIP</option>
           </select>
-          <button
-            onClick={() => { setEditingId(null); setForm(emptyForm); setShowForm(true); }}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:brightness-110"
-          >
-            Add Subscription
-          </button>
+          {/* Admin is read-only for user subscriptions (no create/update/delete) */}
         </div>
       </div>
 
@@ -229,8 +225,7 @@ export default function AdminUserSubsPage() {
                   <td className="px-4 py-2 border">
                     {selectedId === s.id ? (
                       <div className="flex gap-2">
-                        <button className="px-3 py-1 bg-yellow-500 text-white rounded" onClick={(e) => { e.stopPropagation(); startEdit(s); }}>Edit</button>
-                        <button className="px-3 py-1 bg-red-600 text-white rounded" onClick={(e) => { e.stopPropagation(); onDelete(s.id); }}>Delete</button>
+                        <button className="px-3 py-1 bg-gray-700 text-white rounded" onClick={(e) => { e.stopPropagation(); setViewOnly(true); startEdit(s); }}>View</button>
                       </div>
                     ) : (
                       <span className="text-xs text-zinc-500">Click row to select</span>
@@ -272,91 +267,97 @@ export default function AdminUserSubsPage() {
               <button onClick={cancelEdit} className="px-3 py-2 text-gray-600 hover:bg-gray-200 rounded" aria-label="Close">✕</button>
             </div>
 
-            <div className="px-6 py-5 grid gap-4">
-              <div className="grid md:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm text-gray-600">User ID</label>
-                  <input
-                    type="number"
-                    value={form.user_id ?? ''}
+              <div className="px-6 py-5 grid gap-4">
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm text-gray-600">User ID</label>
+                    <input
+                      type="number"
+                      value={form.user_id ?? ''}
                     onChange={(e) => setForm({ ...form, user_id: Number(e.target.value) })}
-                    className="mt-1 w-full border px-3 py-2 rounded"
-                    placeholder="user_id"
-                  />
-                </div>
-                <div>
-                  <label className="text-sm text-gray-600">Plan</label>
-                  <select
-                    value={form.plan}
+                    disabled={viewOnly}
+                      className="mt-1 w-full border px-3 py-2 rounded"
+                      placeholder="user_id"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm text-gray-600">Plan</label>
+                    <select
+                      value={form.plan}
                     onChange={(e) => setForm({ ...form, plan: e.target.value as any })}
-                    className="mt-1 w-full border px-3 py-2 rounded"
-                  >
-                    <option value="basic">basic</option>
-                    <option value="premium">premium</option>
-                    <option value="vip">vip</option>
-                  </select>
+                    disabled={viewOnly}
+                      className="mt-1 w-full border px-3 py-2 rounded"
+                    >
+                      <option value="basic">basic</option>
+                      <option value="premium">premium</option>
+                      <option value="vip">vip</option>
+                    </select>
+                  </div>
                 </div>
-              </div>
 
               <div className="grid md:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm text-gray-600">Status</label>
-                  <select
-                    value={form.status}
+                  <div>
+                    <label className="text-sm text-gray-600">Status</label>
+                    <select
+                      value={form.status}
                     onChange={(e) => setForm({ ...form, status: e.target.value as any })}
-                    className="mt-1 w-full border px-3 py-2 rounded"
-                  >
-                    <option value="active">active</option>
-                    <option value="canceled">canceled</option>
-                    <option value="expired">expired</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="text-sm text-gray-600">Price (cents)</label>
-                  <input
-                    type="number"
-                    value={form.price_cents ?? 0}
+                    disabled={viewOnly}
+                      className="mt-1 w-full border px-3 py-2 rounded"
+                    >
+                      <option value="active">active</option>
+                      <option value="canceled">canceled</option>
+                      <option value="expired">expired</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-sm text-gray-600">Price (cents)</label>
+                    <input
+                      type="number"
+                      value={form.price_cents ?? 0}
                     onChange={(e) => setForm({ ...form, price_cents: Number(e.target.value) })}
-                    className="mt-1 w-full border px-3 py-2 rounded"
-                  />
+                    disabled={viewOnly}
+                      className="mt-1 w-full border px-3 py-2 rounded"
+                    />
+                  </div>
                 </div>
-              </div>
 
               <div className="grid md:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm text-gray-600">Start date</label>
-                  <input
-                    type="date"
-                    value={form.start_date ?? ''}
+                  <div>
+                    <label className="text-sm text-gray-600">Start date</label>
+                    <input
+                      type="date"
+                      value={form.start_date ?? ''}
                     onChange={(e) => setForm({ ...form, start_date: e.target.value })}
-                    className="mt-1 w-full border px-3 py-2 rounded"
-                  />
-                </div>
-                <div>
-                  <label className="text-sm text-gray-600">End date</label>
-                  <input
-                    type="date"
-                    value={form.end_date ?? ''}
+                    disabled={viewOnly}
+                      className="mt-1 w-full border px-3 py-2 rounded"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm text-gray-600">End date</label>
+                    <input
+                      type="date"
+                      value={form.end_date ?? ''}
                     onChange={(e) => setForm({ ...form, end_date: e.target.value })}
-                    className="mt-1 w-full border px-3 py-2 rounded"
-                  />
+                    disabled={viewOnly}
+                      className="mt-1 w-full border px-3 py-2 rounded"
+                    />
+                  </div>
                 </div>
-              </div>
 
               <div>
-                <label className="text-sm text-gray-600">Payment ID</label>
-                <input
-                  type="number"
-                  value={form.payment_id ?? ''}
+                  <label className="text-sm text-gray-600">Payment ID</label>
+                  <input
+                    type="number"
+                    value={form.payment_id ?? ''}
                   onChange={(e) => setForm({ ...form, payment_id: Number(e.target.value) })}
-                  className="mt-1 w-full border px-3 py-2 rounded"
-                />
+                  disabled={viewOnly}
+                    className="mt-1 w-full border px-3 py-2 rounded"
+                  />
+                </div>
               </div>
-            </div>
 
             <div className="px-6 py-4 border-t bg-gray-50 flex justify-end gap-2">
-              <button onClick={cancelEdit} className="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300">Cancel</button>
-              <button onClick={editingId ? onUpdate : onCreate} className="px-4 py-2 bg-blue-600 text-white rounded hover:brightness-110">{editingId ? 'Update' : 'Create'}</button>
+              <button onClick={cancelEdit} className="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300">Close</button>
             </div>
           </div>
         </div>

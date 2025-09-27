@@ -37,6 +37,7 @@ export default function UserManage({ roleFilter }: UserManageProps) {
   const [selectedRowId, setSelectedRowId] = useState<number | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<Partial<User & { password: string }>>({});
+  const [viewOnly, setViewOnly] = useState(false);
   const [meta, setMeta] = useState<LaravelPaginator<User> | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [query, setQuery] = useState("");
@@ -195,7 +196,20 @@ export default function UserManage({ roleFilter }: UserManageProps) {
                   </td>
                   <td className="border p-2">{user.name || "(No name)"}</td>
                   <td className="border p-2">{user.email}</td>
-                  <td className="border p-2">{user.is_active ? "✅" : "❌"}</td>
+                  <td
+                    className="border p-2 select-none"
+                    title="Click to toggle active"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      // Toggle is_active directly
+                      adminUsersAPI
+                        .update(user.id, { is_active: !user.is_active })
+                        .then(() => fetchUsers(currentPage, roleFilter, query))
+                        .catch(() => {/* ignore */});
+                    }}
+                  >
+                    {user.is_active ? "✅" : "❌"}
+                  </td>
                   <td className="border p-2">
                     {new Date(user.created_at).toLocaleString()}
                   </td>
@@ -210,21 +224,14 @@ export default function UserManage({ roleFilter }: UserManageProps) {
                               email: user.email,
                               name: user.name,
                               is_active: user.is_active,
+                              password: "",
                             });
+                            setViewOnly(true);
                             setShowForm(true);
                           }}
-                          className="px-3 py-1 bg-yellow-500 text-white rounded hover:brightness-105"
+                          className="px-3 py-1 bg-gray-700 text-white rounded hover:brightness-105"
                         >
-                          Edit
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            deleteUser(user.id);
-                          }}
-                          className="px-3 py-1 bg-red-500 text-white rounded hover:brightness-105"
-                        >
-                          Delete
+                          View
                         </button>
                       </>
                     ) : (
@@ -279,7 +286,7 @@ export default function UserManage({ roleFilter }: UserManageProps) {
               </div>
               <div className="flex-1 min-w-0">
                 <h2 className="text-lg font-semibold truncate">
-                  {selectedUser ? "Edit Profile" : "Add Profile"}
+                  {selectedUser ? "View Profile" : "Add Profile"}
                 </h2>
                 <p className="text-sm text-gray-500">
                   Role: {roleFilter === "admin" ? "Admin" : "User"}
@@ -300,19 +307,21 @@ export default function UserManage({ roleFilter }: UserManageProps) {
                 <div>
                   <label className="text-sm text-gray-600">Full name</label>
                   <input
-                    className="mt-1 w-full border px-3 py-2 rounded"
+                    className="mt-1 w-full border px-3 py-2 rounded disabled:bg-gray-100"
                     placeholder="Name"
                     value={form.name ?? ""}
                     onChange={(e) => setForm({ ...form, name: e.target.value })}
+                    disabled={viewOnly}
                   />
                 </div>
                 <div>
                   <label className="text-sm text-gray-600">Email</label>
                   <input
-                    className="mt-1 w-full border px-3 py-2 rounded"
+                    className="mt-1 w-full border px-3 py-2 rounded disabled:bg-gray-100"
                     placeholder="Email"
                     value={form.email ?? ""}
                     onChange={(e) => setForm({ ...form, email: e.target.value })}
+                    disabled={viewOnly}
                   />
                 </div>
               </div>
@@ -320,11 +329,12 @@ export default function UserManage({ roleFilter }: UserManageProps) {
                 <div>
                   <label className="text-sm text-gray-600">Password</label>
                   <input
-                    className="mt-1 w-full border px-3 py-2 rounded"
-                    placeholder="Set new password"
+                    className="mt-1 w-full border px-3 py-2 rounded disabled:bg-gray-100"
+                    placeholder="Password is hidden"
                     type="password"
-                    value={form.password ?? ""}
+                    value={viewOnly ? "••••••••" : (form.password ?? "")}
                     onChange={(e) => setForm({ ...form, password: e.target.value })}
+                    disabled={viewOnly}
                   />
                 </div>
                 <div className="flex items-center gap-3 pt-6">
@@ -333,9 +343,8 @@ export default function UserManage({ roleFilter }: UserManageProps) {
                     type="checkbox"
                     className="h-4 w-4"
                     checked={form.is_active ?? true}
-                    onChange={(e) =>
-                      setForm({ ...form, is_active: e.target.checked })
-                    }
+                    onChange={(e) => setForm({ ...form, is_active: e.target.checked })}
+                    disabled={viewOnly}
                   />
                   <label htmlFor="active" className="text-sm">
                     Active account
@@ -347,17 +356,19 @@ export default function UserManage({ roleFilter }: UserManageProps) {
             {/* Footer */}
             <div className="px-6 py-4 border-t bg-gray-50 flex justify-end gap-2">
               <button
-                onClick={() => setShowForm(false)}
+                onClick={() => { setShowForm(false); setViewOnly(false);} }
                 className="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300"
               >
-                Cancel
+                Close
               </button>
-              <button
-                onClick={selectedUser ? updateUser : createUser}
-                className="px-4 py-2 bg-blue-600 text-white rounded hover:brightness-110"
-              >
-                {selectedUser ? "Update" : "Create"}
-              </button>
+              {!viewOnly && (
+                <button
+                  onClick={selectedUser ? updateUser : createUser}
+                  className="px-4 py-2 bg-blue-600 text-white rounded hover:brightness-110"
+                >
+                  {selectedUser ? "Update" : "Create"}
+                </button>
+              )}
             </div>
           </div>
         </div>

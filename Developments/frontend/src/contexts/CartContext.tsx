@@ -8,7 +8,7 @@ interface CartContextType {
   count: number;
   refresh: () => Promise<void>;
   reset: () => void;
-  add: (productId: number, qty?: number) => Promise<void>;
+  add: (productId: number, qty?: number) => Promise<{ alreadyInCart: boolean } | void>;
   remove: (productId: number) => Promise<void>;
 }
 
@@ -32,8 +32,10 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   const add = async (productId: number, qty = 1) => {
     try {
-      await cartAPI.add(productId, qty);
+      const res = await cartAPI.add(productId, qty);
       await refresh();
+      const already = !!(res?.data?.already_in_cart);
+      return { alreadyInCart: already };
     } catch (err) {
       console.error("Failed to add to cart:", err);
     }

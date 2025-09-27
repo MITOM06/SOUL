@@ -65,34 +65,10 @@ class UserSubscriptionController extends Controller
      */
     public function store(Request $request)
     {
-        // Chấp nhận cả plan_key và plan
-        $planKey = $request->input('plan_key', $request->input('plan'));
-        $request->merge(['plan_key' => $planKey]);
-
-        $data = $request->validate([
-            'user_id'     => ['required', 'exists:users,id'],
-            'plan_key'    => ['required', Rule::in(['basic', 'premium', 'vip'])],
-            'status'      => ['required', Rule::in(['active', 'canceled', 'expired', 'pending'])],
-            'start_date'  => ['nullable', 'date'],
-            'end_date'    => ['nullable', 'date', 'after_or_equal:start_date'],
-            'price_cents' => ['nullable', 'integer', 'min:0'],
-            'payment_id'  => ['nullable', 'exists:payments,id'],
-        ]);
-
-        // Nếu tạo active → hủy các subscription active khác
-        if ($data['status'] === 'active') {
-            UserSubscription::where('user_id', $data['user_id'])
-                ->where('status', 'active')
-                ->update(['status' => 'canceled']);
-        }
-
-        $sub = UserSubscription::create($data);
-
         return response()->json([
-            'success' => true,
-            'message' => 'Subscription created',
-            'data'    => $sub,
-        ], 201);
+            'success' => false,
+            'message' => 'Admin editing of user subscriptions is disabled',
+        ], 403);
     }
 
     /**
@@ -100,40 +76,10 @@ class UserSubscriptionController extends Controller
      */
     public function update(Request $request, $id)
     {
-        $sub = UserSubscription::findOrFail($id);
-
-        // Chấp nhận cả plan_key và plan
-        $planKey = $request->has('plan_key') ? $request->input('plan_key')
-                  : ($request->has('plan') ? $request->input('plan') : null);
-
-        if ($planKey !== null) {
-            $request->merge(['plan_key' => $planKey]);
-        }
-
-        $data = $request->validate([
-            'plan_key'    => ['sometimes', Rule::in(['basic', 'premium', 'vip'])],
-            'status'      => ['sometimes', Rule::in(['active', 'canceled', 'expired', 'pending'])],
-            'start_date'  => ['nullable', 'date'],
-            'end_date'    => ['nullable', 'date', 'after_or_equal:start_date'],
-            'price_cents' => ['nullable', 'integer', 'min:0'],
-            'payment_id'  => ['nullable', 'exists:payments,id'],
-        ]);
-
-        // Nếu set thành active → hủy active khác
-        if (($data['status'] ?? null) === 'active') {
-            UserSubscription::where('user_id', $sub->user_id)
-                ->where('id', '!=', $sub->id)
-                ->where('status', 'active')
-                ->update(['status' => 'canceled']);
-        }
-
-        $sub->update($data);
-
         return response()->json([
-            'success' => true,
-            'message' => 'Subscription updated',
-            'data'    => $sub,
-        ]);
+            'success' => false,
+            'message' => 'Admin editing of user subscriptions is disabled',
+        ], 403);
     }
 
     /**
@@ -141,12 +87,9 @@ class UserSubscriptionController extends Controller
      */
     public function destroy($id)
     {
-        $sub = UserSubscription::findOrFail($id);
-        $sub->delete();
-
         return response()->json([
-            'success' => true,
-            'message' => 'Subscription deleted',
-        ]);
+            'success' => false,
+            'message' => 'Admin editing of user subscriptions is disabled',
+        ], 403);
     }
 }
