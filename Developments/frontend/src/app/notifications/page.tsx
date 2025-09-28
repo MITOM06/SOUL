@@ -2,7 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import UserPanelLayout from "@/components/UserPanelLayout";
-import api from "@/lib/api";
+import api, { notificationsAPI } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
+import { normalizeRole } from "@/lib/role";
 
 type InboxItem = {
   id: number;
@@ -16,6 +18,8 @@ type InboxItem = {
 };
 
 export default function NotificationsPage() {
+  const { user } = useAuth();
+  const role = normalizeRole(user);
   const [items, setItems] = useState<InboxItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string|null>(null);
@@ -31,6 +35,13 @@ export default function NotificationsPage() {
         const arr: InboxItem[] = res.data?.data?.items || [];
         setItems(arr);
         if (arr.length > 0) setActiveId(arr[0].id);
+        // mark all as read and notify header
+        try { await notificationsAPI.markRead(); } catch {}
+        try {
+          const who = user?.id ? `${user.id}_${role}` : `guest_${role}`;
+          localStorage.setItem(`notif_seen_${who}`, new Date().toISOString());
+          window.dispatchEvent(new Event('notifications-updated'));
+        } catch {}
       } catch (e: any) {
         setError(e?.message || 'Failed to load inbox');
       } finally {
@@ -38,7 +49,7 @@ export default function NotificationsPage() {
       }
     })();
     return () => ac.abort();
-  }, []);
+  }, [user, role]);
 
   return (
     <UserPanelLayout>

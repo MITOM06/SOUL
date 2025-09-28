@@ -57,4 +57,57 @@ class NotificationController extends Controller
             ],
         ]);
     }
+
+    /**
+     * GET /api/v1/notifications/unread-count
+     * Returns count of notifications with read_at IS NULL for the current user (direct+role+global).
+     */
+    public function unreadCount(Request $r)
+    {
+        $user = $r->user();
+        $role = $user->role ?? 'user';
+
+        $q = DB::table('notifications')
+            ->where(function($x) use ($user) {
+                $x->where('to_user_id', $user->id)
+                  ->orWhereNull('to_user_id');
+            })
+            ->where(function($x) use ($role) {
+                $x->whereNull('to_role')
+                  ->orWhere('to_role', $role);
+            })
+            ->whereNull('read_at');
+
+        $count = (int) $q->count();
+        return response()->json(['success' => true, 'data' => ['unread' => $count]]);
+    }
+
+    /**
+     * POST /api/v1/notifications/mark-read
+     * Body: { ids?: number[] } — if not provided, mark all current-user notifications as read.
+     */
+    public function markRead(Request $r)
+    {
+        $user = $r->user();
+        $ids = $r->input('ids');
+
+        $q = DB::table('notifications')
+            ->where(function($x) use ($user) {
+                $x->where('to_user_id', $user->id)
+                  ->orWhereNull('to_user_id');
+            })
+            ->where(function($x) use ($user) {
+                $role = $user->role ?? 'user';
+                $x->whereNull('to_role')
+                  ->orWhere('to_role', $role);
+            })
+            ->whereNull('read_at');
+
+        if (is_array($ids) && !empty($ids)) {
+            $q->whereIn('id', array_map('intval', $ids));
+        }
+
+        $updated = $q->update(['read_at' => now()]);
+        return response()->json(['success' => true, 'data' => ['updated' => (int) $updated]]);
+    }
 }

@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import api from "@/lib/api";
+import api, { notificationsAPI } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
+import { normalizeRole } from "@/lib/role";
 
-type Tab = 'broadcast' | 'individual';
+type Tab = 'inbox' | 'broadcast' | 'individual';
 
 type Product = {
   id: number;
@@ -27,7 +29,7 @@ const toAbs = (u?: string|null) => {
 };
 
 export default function AdminNotificationsPage() {
-  const [tab, setTab] = useState<Tab>('broadcast');
+  const [tab, setTab] = useState<Tab>('inbox');
   const [status, setStatus] = useState<string | null>(null);
 
   return (
@@ -35,15 +37,99 @@ export default function AdminNotificationsPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Notifications</h1>
         <div className="inline-flex rounded-lg border overflow-hidden">
+          <button className={`px-3 py-2 ${tab==='inbox' ? 'bg-gray-100 font-semibold' : ''}`} onClick={()=>setTab('inbox')}>Inbox</button>
           <button className={`px-3 py-2 ${tab==='broadcast' ? 'bg-gray-100 font-semibold' : ''}`} onClick={()=>setTab('broadcast')}>Broadcast</button>
           <button className={`px-3 py-2 ${tab==='individual' ? 'bg-gray-100 font-semibold' : ''}`} onClick={()=>setTab('individual')}>Individual</button>
         </div>
       </div>
 
-      {tab === 'broadcast' ? <BroadcastForm onSent={setStatus} /> : <IndividualForm onSent={setStatus} />}
+      {tab === 'inbox' ? <AdminInbox /> : tab === 'broadcast' ? <BroadcastForm onSent={setStatus} /> : <IndividualForm onSent={setStatus} />}
 
       {status && <div className="text-green-600 text-sm">{status}</div>}
     </section>
+  );
+}
+
+function AdminInbox() {
+  const { user } = useAuth();
+  const role = normalizeRole(user);
+  const [items, setItems] = useState<Array<{ id:number; title:string; body?:string|null; payload?:any; created_at:string }>>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string|null>(null);
+  const [activeId, setActiveId] = useState<number | null>(null);
+  const active = useMemo(() => items.find(i => i.id === activeId) || items[0] || null, [items, activeId]);
+
+  useEffect(() => {
+    const ac = new AbortController();
+    (async () => {
+      try {
+        setLoading(true); setError(null);
+        const res = await api.get('/v1/notifications', { signal: ac.signal as any });
+        const arr: any[] = res.data?.data?.items || [];
+        setItems(arr);
+        if (arr.length > 0) setActiveId(arr[0].id);
+        try { await notificationsAPI.markRead(); } catch {}
+        try {
+          const who = user?.id ? `${user.id}_${role}` : `guest_${role}`;
+          localStorage.setItem(`notif_seen_${who}`, new Date().toISOString());
+          window.dispatchEvent(new Event('notifications-updated'));
+        } catch {}
+      } catch (e: any) { setError(e?.message || 'Failed to load inbox'); }
+      finally { setLoading(false); }
+    })();
+    return () => ac.abort();
+  }, [user, role]);
+
+  return (
+    <div className="grid md:grid-cols-[300px_minmax(0,1fr)] min-h-[60vh] rounded-2xl border overflow-hidden">
+      <div className="border-r bg-white">
+        <div className="p-3 font-semibold">Inbox</div>
+        {loading && <div className="p-3 text-sm text-zinc-500">Loading…</div>}
+        {error && <div className="p-3 text-sm text-red-600">{error}</div>}
+        <div className="divide-y">
+          {items.map(n => (
+            <button key={n.id} className={`w-full text-left p-3 hover:bg-gray-50 ${active?.id===n.id?'bg-gray-50':''}`} onClick={()=>setActiveId(n.id)}>
+              <div className="text-sm font-medium line-clamp-1">{n.title}</div>
+              <div className="text-xs text-zinc-600">{new Date(n.created_at).toLocaleString()}</div>
+            </button>
+          ))}
+          {!loading && items.length === 0 && (
+            <div className="p-3 text-sm text-zinc-500">No notifications</div>
+          )}
+        </div>
+      </div>
+      <div className="bg-white p-4 grid content-start gap-3">
+        {active ? (
+          <>
+            <div className="text-lg font-semibold">{active.title}</div>
+            <div className="text-xs text-zinc-500">{new Date(active.created_at).toLocaleString()}</div>
+            {active.payload?.product && (
+              <div className="mt-1 flex items-center gap-3 p-2 border rounded">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={active.payload.product.thumbnail_url || ''} alt="" className="h-16 w-12 object-cover rounded" />
+                <div className="text-sm">
+                  <div className="font-medium">{active.payload.product.title}</div>
+                  <div className="text-xs text-zinc-500">{active.payload.product.type} · {active.payload.product.category || '—'}</div>
+                </div>
+              </div>
+            )}
+            {active.payload?.attachments?.length ? (
+              <div className="mt-1 grid gap-2">
+                <div className="text-xs text-zinc-600">Attachments</div>
+                {active.payload.attachments.map((f:any, idx:number) => (
+                  <a key={idx} href={f.url} className="text-blue-600 text-sm underline" target="_blank" rel="noreferrer">
+                    {f.name || f.url}
+                  </a>
+                ))}
+              </div>
+            ) : null}
+            <div className="mt-2 text-sm whitespace-pre-wrap">{active.body || ''}</div>
+          </>
+        ) : (
+          <div className="text-zinc-600">Select a notification</div>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -273,7 +359,7 @@ function BroadcastForm({ onSent }: { onSent: (s: string) => void }) {
                   setSelected(p);
                 }} className={`relative text-left border rounded-lg overflow-hidden hover:shadow transition ${selected?.id===p.id?'ring-2 ring-blue-500':''}`}>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={toAbs(p.thumbnail_url) || ''} alt={p.title} className="w-full aspect-[3/4] object-cover" />
+                  <img src={toAbs(p.thumbnail_url) || ''} alt={p.title} className={`w-full ${p.type==='podcast' ? 'aspect-[16/9]' : 'aspect-[3/4]'} object-cover`} />
                   <div className="p-2">
                     <div className="text-sm font-semibold line-clamp-2">{p.title}</div>
                     <div className="text-xs text-zinc-500">{p.category || '—'} · {p.price_cents ? new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(p.price_cents/100) : 'Free'}</div>
@@ -324,23 +410,49 @@ function BroadcastForm({ onSent }: { onSent: (s: string) => void }) {
 function IndividualForm({ onSent }: { onSent: (s: string) => void }) {
   const [search, setSearch] = useState('');
   const [group, setGroup] = useState<'admin'|'users'>('users');
-  const [role, setRole] = useState<'admin'|'user'>('user');
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
-  const [userId, setUserId] = useState<number | ''>('');
-  const [productId, setProductId] = useState<number | ''>('');
+  const [users, setUsers] = useState<Array<{id:number;name?:string|null;email:string}>>([]);
+  const [selected, setSelected] = useState<number[]>([]);
+  const [files, setFiles] = useState<FileList | null>(null);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+
+  useEffect(() => {
+    const ac = new AbortController();
+    (async () => {
+      try {
+        const params = new URLSearchParams({ per_page: '10', page: String(page) });
+        params.set('role', group === 'admin' ? 'admin' : 'user');
+        if (search.trim()) params.set('search', search.trim());
+        const res = await api.get(`/v1/admin/users?${params.toString()}`, { signal: ac.signal as any });
+        const data = res.data?.data || res.data || {};
+        const items = (data?.data || data?.items || []) as any[];
+        setUsers(items.map((u:any) => ({ id: u.id, name: u.name, email: u.email })));
+        const current = Number(data?.current_page || data?.meta?.current_page || 1);
+        const last    = Number(data?.last_page || data?.meta?.last_page || 1);
+        if (Number.isFinite(current)) setPage(current);
+        if (Number.isFinite(last)) setTotalPages(last);
+      } catch {}
+    })();
+    return () => ac.abort();
+  }, [group, search, page]);
+
+  const toggleSel = (id: number) => setSelected(prev => prev.includes(id) ? prev.filter(x=>x!==id) : [...prev, id]);
 
   const send = async () => {
     try {
-      if (!userId) { onSent('Please enter user ID'); return; }
-      await api.post('/v1/admin/notifications/individual', {
-        user_id: Number(userId),
-        title: subject || '(No subject)',
-        message: body || '',
-        product_id: productId ? Number(productId) : undefined,
-      });
-      onSent('Notification sent to user.');
-      setSubject(''); setBody('');
+      if (!selected.length) { onSent('Please select at least one recipient'); return; }
+      const fd = new FormData();
+      selected.forEach(id => fd.append('user_ids[]', String(id)));
+      fd.append('title', subject || '(No subject)');
+      fd.append('message', body || '');
+      if (files && files.length) {
+        Array.from(files).forEach(f => fd.append('files[]', f));
+      }
+      await api.post('/v1/admin/notifications/individual', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+      onSent('Message sent successfully.');
+      setSubject(''); setBody(''); setSelected([]); setFiles(null);
     } catch (e: any) {
       onSent(e?.message || 'Failed to send');
     }
@@ -348,11 +460,7 @@ function IndividualForm({ onSent }: { onSent: (s: string) => void }) {
 
   return (
     <div className="rounded-2xl border bg-white p-4 grid gap-3">
-      <div className="grid md:grid-cols-2 gap-3">
-        <div>
-          <label className="text-sm text-zinc-600">Search users</label>
-          <input value={search} onChange={e=>setSearch(e.target.value)} className="w-full border rounded px-3 py-2" placeholder="Name or email" />
-        </div>
+      <div className="grid md:grid-cols-3 gap-3">
         <div>
           <label className="text-sm text-zinc-600">Choose group</label>
           <select value={group} onChange={e=>setGroup(e.target.value as any)} className="w-full border rounded px-3 py-2">
@@ -360,20 +468,12 @@ function IndividualForm({ onSent }: { onSent: (s: string) => void }) {
             <option value="admin">Admins</option>
           </select>
         </div>
-      </div>
-      <div className="grid md:grid-cols-2 gap-3">
-        <div>
-          <label className="text-sm text-zinc-600">Send to role</label>
-          <select value={role} onChange={e=>setRole(e.target.value as any)} className="w-full border rounded px-3 py-2">
-            <option value="user">User</option>
-            <option value="admin">Admin</option>
-          </select>
-        </div>
-        <div>
-          <label className="text-sm text-zinc-600">User ID</label>
-          <input type="number" value={userId} onChange={e=>setUserId(e.target.value ? Number(e.target.value) : '')} className="w-full border rounded px-3 py-2" placeholder="Numeric ID" />
+        <div className="md:col-span-2">
+          <label className="text-sm text-zinc-600">Search</label>
+          <input value={search} onChange={e=>setSearch(e.target.value)} className="w-full border rounded px-3 py-2" placeholder="Name or email" />
         </div>
       </div>
+
       <div className="grid md:grid-cols-2 gap-3">
         <div>
           <label className="text-sm text-zinc-600">Subject</label>
@@ -381,17 +481,43 @@ function IndividualForm({ onSent }: { onSent: (s: string) => void }) {
         </div>
         <div>
           <label className="text-sm text-zinc-600">Message</label>
-          <input value={body} onChange={e=>setBody(e.target.value)} className="w-full border rounded px-3 py-2" />
+          <textarea value={body} onChange={e=>setBody(e.target.value)} className="w-full border rounded px-3 py-2 h-24" placeholder="Write your message..." />
         </div>
       </div>
+
+      <div>
+        <label className="text-sm text-zinc-600">Attachments (optional)</label>
+        <input type="file" multiple onChange={e=>setFiles(e.target.files)} className="block w-full text-sm" />
+        {files && files.length > 0 && (
+          <div className="mt-1 text-xs text-zinc-600">{Array.from(files).map(f=>f.name).join(', ')}</div>
+        )}
+      </div>
+
       <div className="grid md:grid-cols-2 gap-3">
-        <div>
-          <label className="text-sm text-zinc-600">Attach product (optional) – ID</label>
-          <input type="number" value={productId} onChange={e=>setProductId(e.target.value ? Number(e.target.value) : '')} className="w-full border rounded px-3 py-2" placeholder="Product ID" />
+        <div className="md:col-span-2">
+          <label className="text-sm text-zinc-600">Recipients</label>
+          <div className="border rounded p-2 max-h-64 overflow-auto divide-y">
+            {users.map(u => (
+              <label key={u.id} className="flex items-center gap-3 p-3 cursor-pointer">
+                <input type="checkbox" className="h-4 w-4" checked={selected.includes(u.id)} onChange={()=>toggleSel(u.id)} />
+                <span className="text-base font-medium">{u.name || u.email}</span>
+                <span className="text-sm text-zinc-500">{u.email}</span>
+              </label>
+            ))}
+            {users.length === 0 && (<div className="p-2 text-sm text-zinc-500">No users found</div>)}
+          </div>
+          <div className="mt-2 flex items-center justify-between">
+            <button className="px-3 py-1.5 border rounded disabled:opacity-50" disabled={page<=1} onClick={()=>setPage(p=>Math.max(1,p-1))}>Prev</button>
+            <div className="text-sm text-zinc-600">Page {page} of {totalPages}</div>
+            <button className="px-3 py-1.5 border rounded disabled:opacity-50" disabled={page>=totalPages} onClick={()=>setPage(p=>Math.min(totalPages,p+1))}>Next</button>
+          </div>
         </div>
       </div>
+
       <div className="flex justify-end">
-        <button onClick={send} className="px-4 py-2 bg-blue-600 text-white rounded">Send</button>
+        <button onClick={send} className="px-4 py-2 bg-blue-600 text-white rounded disabled:opacity-60" disabled={!subject.trim() || !selected.length}>
+          Send
+        </button>
       </div>
     </div>
   );

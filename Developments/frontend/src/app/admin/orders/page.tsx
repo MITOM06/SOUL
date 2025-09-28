@@ -266,7 +266,7 @@ export default function AdminOrderManage() {
               </h2>
               <p>Email: {selectedOrder.user?.email}</p>
               <p>Status: {selectedOrder.status}</p>
-              <p>Total: <strong>{formatVNDFromCents(selectedOrder.total_cents)}</strong></p>
+              <p>Total: <strong>{formatUSDFromCents(selectedOrder.total_cents)}</strong></p>
               <p>Created: {new Date(selectedOrder.created_at).toLocaleString()}</p>
 
               <h3 className="text-lg font-semibold mt-4 mb-2">Products</h3>

@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\PersonalAccessToken;
+use App\Services\PlanInclusions;
 
 class ProductReadController extends Controller
 {
@@ -162,6 +163,12 @@ class ProductReadController extends Controller
                 ->where('orders.status', 'paid')
                 ->where('order_items.product_id', $id)
                 ->exists();
+            if (!$canView) {
+                // Also allow access if included in the user's active subscription plan
+                try {
+                    $canView = PlanInclusions::userHasAccessViaPlan($user->id, (int) $id);
+                } catch (\Throwable $e) { /* ignore */ }
+            }
         }
         $hasPreview = DB::table('product_files')->where('product_id', $id)->where('is_preview', 1)->exists();
 

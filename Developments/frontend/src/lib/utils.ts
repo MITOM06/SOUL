@@ -115,14 +115,14 @@ export function fromCents(cents: number): number {
 
 export function formatCurrency(
   amount: number,
-  locale = "vi-VN",
-  currency: string = "VND"
+  locale = "en-US",
+  currency: string = "USD"
 ): string {
   try {
     return new Intl.NumberFormat(locale, {
       style: "currency",
       currency,
-      maximumFractionDigits: currency === "VND" ? 0 : 2,
+      maximumFractionDigits: currency === "JPY" ? 0 : 2,
     }).format(amount);
   } catch {
     // fallback: không ném lỗi render UI
@@ -139,7 +139,7 @@ export function formatDate(
     month: "short",
     day: "2-digit",
   },
-  locale = "vi-VN"
+  locale = "en-US"
 ): string {
   const d = input instanceof Date ? input : new Date(input);
   try {
