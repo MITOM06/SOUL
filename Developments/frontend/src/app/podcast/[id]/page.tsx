@@ -1,6 +1,13 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  forwardRef,
+  useImperativeHandle,
+} from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import api from '@/lib/api';
@@ -9,6 +16,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { normalizeRole } from '@/lib/role';
 import { cn } from '@/lib/utils';
 
+/* ---------------- Types & helpers ---------------- */
 type ProductType = 'ebook' | 'podcast';
 interface Product {
   id: number;
@@ -31,9 +39,6 @@ interface ProductFile {
 const API_BASE = (process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api').replace(/\/$/, '');
 const ORIGIN   = API_BASE.replace(/\/api$/, '');
 
-const formatUSD = (cents: number | null | undefined) =>
-  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format((Number(cents ?? 0) || 0)/100);
-
 const FALLBACK_IMG = (() => {
   const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='600' height='660'>
     <rect width='120%' height='120%' rx='8' fill='#f3f4f6'/>
@@ -42,7 +47,6 @@ const FALLBACK_IMG = (() => {
   </svg>`;
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 })();
-
 const toAbs = (u?: string | null) => {
   if (!u) return '';
   const s = u.trim();
@@ -51,22 +55,28 @@ const toAbs = (u?: string | null) => {
   if (s.startsWith('/')) return `${ORIGIN}${s}`;
   return s;
 };
-
 const parseMaybeJSON = (v: any) => {
   if (!v) return null;
   if (typeof v === 'object') return v;
   try { return JSON.parse(String(v)); } catch { return null; }
 };
-
 const pickYoutubeId = (u: string) =>
   u.match(/(?:youtu\.be\/|v=|embed\/|shorts\/)([A-Za-z0-9_-]{11})/)?.[1];
+const formatUSD = (cents?: number | null) =>
+  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' })
+    .format(((cents ?? 0) as number) / 100);
+const secToClock = (s: number) => {
+  const t = Math.max(0, Math.floor(s || 0));
+  const m = Math.floor(t / 60);
+  const ss = t % 60;
+  return `${m}:${String(ss).padStart(2, '0')}`;
+};
 
-/* ------------------------------- Toast helpers ------------------------------- */
-function useToast(autoHideMs = 2500) {
+/* ---------------- Toast ---------------- */
+function useToast(autoHideMs = 2200) {
   const [open, setOpen] = useState(false);
   const [msg, setMsg] = useState('');
   const timer = useRef<number | null>(null);
-
   const show = (text: string) => {
     setMsg(text);
     setOpen(true);
@@ -74,54 +84,303 @@ function useToast(autoHideMs = 2500) {
     // @ts-ignore
     timer.current = window.setTimeout(() => setOpen(false), autoHideMs);
   };
-  const hide = () => {
-    setOpen(false);
-    if (timer.current) { window.clearTimeout(timer.current); timer.current = null; }
-  };
+  const hide = () => { setOpen(false); if (timer.current) { window.clearTimeout(timer.current); timer.current = null; } };
   return { open, msg, show, hide };
 }
-
 function Toast({ open, msg, onClose }: { open: boolean; msg: string; onClose: () => void }) {
   return (
     <div
-      className={`fixed z-[1000] left-1/2 -translate-x-1/2 top-0 w-full max-w-md px-3 transition-transform duration-300 ease-out
-        ${open ? 'translate-y-4' : '-translate-y-10 pointer-events-none'}`}
-      role="status"
-      aria-live="polite"
-    >
+      className={`fixed z-[1000] left-1/2 -translate-x-1/2 top-0 w-full max-w-md px-3 transition-transform
+      duration-300 ease-out ${open ? 'translate-y-4' : '-translate-y-10 pointer-events-none'}`}
+      role="status" aria-live="polite">
       <div className="flex items-center gap-2 rounded-xl bg-emerald-600 text-white px-4 py-2 shadow-xl ring-1 ring-emerald-700/40">
-        <span className="text-lg">🛒</span>
+        <span className="hidden" aria-hidden="true">🛟</span>
         <span className="text-sm font-medium">{msg}</span>
-        <button
-          onClick={onClose}
-          className="ml-auto text-white/80 hover:text-white text-sm"
-          aria-label="Đóng thông báo"
-        >
-          ✕
-        </button>
+        <button onClick={onClose} className="ml-auto text-white/80 hover:text-white text-sm" aria-label="close">✕</button>
       </div>
     </div>
   );
 }
 
-/** Ưu tiên: lấy YouTube từ product_files */
+/* ---------------- Continue hook (server + local fallback) ---------------- */
+function useListenContinue(productId: number | null, enabled: boolean) {
+  const [seconds, setSeconds]   = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [loaded, setLoaded]     = useState(false);
+  const lastSaved = useRef(0);
+
+  const lsKey = useMemo(() => (productId ? `continue_podcast_${productId}` : ''), [productId]);
+
+  // Load from server first, then fallback local
+  useEffect(() => {
+    if (!productId || !enabled) { setLoaded(true); return; }
+    let cancel = false;
+    (async () => {
+      try {
+        const r = await api.get(`/v1/continues/${productId}`);
+        const d = r.data?.data || {};
+        const cur =
+          Number(d?.current_time_seconds) ||
+          Number(d?.progress_seconds)     ||
+          Number(d?.current_page)         || 0;
+        const dur =
+          Number(d?.duration_seconds) ||
+          Number(d?.total_seconds)   ||
+          Number(d?.total_pages)     || 0;
+
+        if (!cancel) {
+          setSeconds(cur || 0);
+          if (dur) setDuration(dur);
+          lastSaved.current = cur || 0;
+          setLoaded(true);
+          try { if (lsKey) localStorage.setItem(lsKey, JSON.stringify({ s: cur || 0 })); } catch {}
+        }
+      } catch {
+        let cur = 0;
+        try { const raw = lsKey && localStorage.getItem(lsKey); if (raw) cur = Number(JSON.parse(raw)?.s || 0); } catch {}
+        if (!cancel) {
+          setSeconds(cur || 0);
+          lastSaved.current = cur || 0;
+          setLoaded(true);
+        }
+      }
+    })();
+    return () => { cancel = true; };
+  }, [productId, enabled, lsKey]);
+
+  // Save to DB (try multiple payload shapes)
+  const save = async (cur: number, dur?: number) => {
+    const now   = Math.max(0, Math.floor(cur || 0));
+    const total = Math.max(0, Math.floor(dur ?? duration ?? 0));
+
+    // local first
+    try { if (lsKey) localStorage.setItem(lsKey, JSON.stringify({ s: now })); } catch {}
+    lastSaved.current = now;
+
+    if (!productId || !enabled) return;
+
+    const variants: any[] = [
+      { type: 'podcast', current_time_seconds: now, duration_seconds: total || undefined },
+      { type: 'podcast', progress_seconds: now,       total_seconds: total || undefined },
+      { type: 'podcast', current_chapter: 1, current_page: Math.max(1, now || 1), total_pages: Math.max(1, total || 1) },
+    ];
+
+    let ok = false, lastErr: any = null;
+    for (const payload of variants) {
+      try {
+        const res = await api.post(`/v1/continues/${productId}`, payload);
+        if (res.status >= 200 && res.status < 300) { ok = true; break; }
+      } catch (e) { lastErr = e; }
+    }
+
+    if (!ok) {
+      try {
+        await fetch(`${API_BASE}/v1/continues/${productId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify(variants[0]),
+          keepalive: true,
+        });
+      } catch (e) {
+        console.warn('continue save failed', lastErr || e);
+      }
+    }
+  };
+
+  // Autosave on close/hidden
+  useEffect(() => {
+    if (!enabled) return;
+    const handler = () => {
+      if (Math.abs(seconds - lastSaved.current) < 1) return;
+      try { if (lsKey) localStorage.setItem(lsKey, JSON.stringify({ s: Math.floor(seconds) })); } catch {}
+      fetch(`${API_BASE}/v1/continues/${productId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          type: 'podcast',
+          current_time_seconds: Math.floor(seconds),
+          duration_seconds: Math.floor(duration || 0),
+        }),
+        keepalive: true,
+      }).catch(()=>{});
+    };
+    window.addEventListener('beforeunload', handler);
+    window.addEventListener('pagehide', handler);
+    const vis = () => { if (document.visibilityState === 'hidden') handler(); };
+    document.addEventListener('visibilitychange', vis);
+    return () => {
+      window.removeEventListener('beforeunload', handler);
+      window.removeEventListener('pagehide', handler);
+      document.removeEventListener('visibilitychange', vis);
+    };
+  }, [enabled, seconds, duration, productId, lsKey]);
+
+  return { seconds, setSeconds, duration, setDuration, loaded, save };
+}
+
+/* ---------------- YouTube audio-only (ready handshake + queue) ---------------- */
+type AudioHandle = { play: () => void; pause: () => void; save: () => void; };
+
+const YouTubeAudioOnly = forwardRef(function _YouTubeAudioOnly(
+  {
+    embedUrl,
+    cover,
+    title,
+    resumeAt = 0,
+    onProgress,
+    onSaveClick,
+  }: {
+    embedUrl: string;
+    cover?: string;
+    title?: string;
+    resumeAt?: number;
+    onProgress: (cur: number, dur?: number) => void;
+    onSaveClick: (cur: number, dur?: number) => void;
+  },
+  ref: React.Ref<AudioHandle>
+) {
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const [playing, setPlaying] = useState(false);
+  const [cur, setCur] = useState(0);
+  const [dur, setDur] = useState(0);
+
+  const readyRef = useRef(false);
+  const handshakeId = useRef<number | null>(null);
+  const queue = useRef<Array<{ func: string; args?: any[] }>>([]);
+  const lastTick = useRef(0);
+
+  const post = (func: string, args: any[] = []) => {
+    const w = iframeRef.current?.contentWindow;
+    if (!w) return;
+    if (!readyRef.current && func !== 'seekTo') {
+      queue.current.push({ func, args });
+    }
+    w.postMessage(JSON.stringify({ event: 'command', func, args }), '*');
+  };
+
+  // handshake + listeners
+  useEffect(() => {
+    const sayListening = () => {
+      const w = iframeRef.current?.contentWindow;
+      if (!w || readyRef.current) return;
+      w.postMessage(JSON.stringify({ event: 'listening' }), '*');
+    };
+    // @ts-ignore
+    handshakeId.current = window.setInterval(sayListening, 300);
+
+    const onMsg = (e: MessageEvent) => {
+      try {
+        const d = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
+
+        if (d?.event === 'onReady') {
+          readyRef.current = true;
+          if (handshakeId.current) window.clearInterval(handshakeId.current);
+          handshakeId.current = null;
+
+          // resume 1 lần
+          if (resumeAt > 0) post('seekTo', [Math.floor(resumeAt), true]);
+
+          // flush queue
+          while (queue.current.length) {
+            const c = queue.current.shift()!;
+            post(c.func, c.args || []);
+          }
+        }
+
+        if (d?.event === 'infoDelivery' && d?.info) {
+          if (typeof d.info.currentTime === 'number') {
+            const now = d.info.currentTime as number;
+            setCur(now);
+            const t = Date.now();
+            if (t - lastTick.current > 500) {
+              lastTick.current = t;
+              onProgress(now, dur);
+            }
+          }
+          if (typeof d.info.duration === 'number') {
+            setDur(d.info.duration as number);
+          }
+        }
+      } catch {}
+    };
+
+    window.addEventListener('message', onMsg);
+
+    const poll = window.setInterval(() => {
+      post('getCurrentTime');
+      post('getDuration');
+    }, 1000);
+
+    return () => {
+      window.removeEventListener('message', onMsg);
+      window.clearInterval(poll);
+      if (handshakeId.current) window.clearInterval(handshakeId.current);
+      handshakeId.current = null;
+    };
+  }, [resumeAt, dur, onProgress]);
+
+  const play  = () => { setPlaying(true);  post('playVideo'); };
+  const pause = () => { setPlaying(false); post('pauseVideo'); onSaveClick(cur, dur); };
+  const toggle= () => (playing ? pause() : play());
+  const seek  = (sec: number) => { const t = Math.max(0, Math.floor(sec)); setCur(t); post('seekTo', [t, true]); };
+  const saveNow = () => onSaveClick(cur, dur);
+
+  useImperativeHandle(ref, () => ({ play, pause, save: saveNow }), [cur, dur]);
+
+  return (
+    <div className="rounded-2xl overflow-hidden ring-1 ring-black/10 bg-white p-4 shadow-lg">
+      <div className="flex items-center gap-4">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={toAbs(cover) || FALLBACK_IMG}
+          alt={title || 'podcast'}
+          className="w-16 h-16 object-cover rounded-md"
+          onError={(e)=>{ (e.currentTarget as HTMLImageElement).src = FALLBACK_IMG; }}
+        />
+        <button onClick={toggle} className="px-4 py-2 rounded bg-indigo-600 text-white hover:bg-indigo-700">
+          {playing ? 'Pause' : 'Play'}
+        </button>
+        <div className="text-sm text-zinc-700">{secToClock(cur)}{dur ? ` / ${secToClock(dur)}` : ''}</div>
+        <button onClick={saveNow} className="ml-auto px-3 py-1 rounded bg-emerald-600 text-white hover:bg-emerald-700">
+          Save
+        </button>
+      </div>
+
+      <input
+        type="range"
+        min={0}
+        max={Math.max(1, Math.floor(dur || 1))}
+        value={Math.floor(cur)}
+        onChange={(e) => seek(Number(e.target.value))}
+        className="mt-3 w-full"
+      />
+
+      {/* Hidden iframe - audio only */}
+      <iframe
+        ref={iframeRef}
+        src={`${embedUrl}?enablejsapi=1&playsinline=1&controls=0&modestbranding=1&rel=0&origin=${typeof window !== 'undefined' ? window.location.origin : ''}`}
+        title="yt-audio"
+        className="w-0 h-0 absolute opacity-0 pointer-events-none -z-10"
+        allow="autoplay; encrypted-media"
+        aria-hidden="true"
+      />
+    </div>
+  );
+});
+
+/* ---------------- Extract youtube helpers ---------------- */
 function extractYoutubeFromFiles(files: ProductFile[]) {
   for (const f of files) {
     const type = String(f.file_type || '').toLowerCase();
     const meta = parseMaybeJSON(f.meta) || {};
     const url  = String(f.file_url || '');
-
-    const looksLikeYoutube =
-      type.includes('youtube') ||
-      type.includes('video') ||
-      /youtube\.com|youtu\.be/i.test(url) ||
-      String(meta?.provider || '').toLowerCase() === 'youtube';
-
-    if (!looksLikeYoutube) continue;
-
+    const looks = type.includes('youtube') || type.includes('video') ||
+      /youtube\.com|youtu\.be/i.test(url) || String(meta?.provider||'').toLowerCase()==='youtube';
+    if (!looks) continue;
     const vid = meta?.video_id || pickYoutubeId(url) || pickYoutubeId(String(meta?.watch_url || meta?.embed_url || ''));
     if (!vid) continue;
-
     return {
       embed: meta?.embed_url || `https://www.youtube.com/embed/${vid}`,
       watch: meta?.watch_url || `https://www.youtube.com/watch?v=${vid}`,
@@ -130,8 +389,6 @@ function extractYoutubeFromFiles(files: ProductFile[]) {
   }
   return null;
 }
-
-/** Fallback: backend lưu thông tin trong products.metadata */
 function extractYoutubeFromProductMeta(p: Product) {
   const m = parseMaybeJSON(p.metadata) || {};
   const y = m?.youtube || m?.yt || m;
@@ -139,12 +396,10 @@ function extractYoutubeFromProductMeta(p: Product) {
     y?.video_id ||
     (y?.watch_url && pickYoutubeId(String(y.watch_url))) ||
     (y?.embed_url && pickYoutubeId(String(y.embed_url)));
-
   if (!vid && p.thumbnail_url) {
     const m2 = String(p.thumbnail_url).match(/img\.youtube\.com\/vi\/([A-Za-z0-9_-]{11})\//);
     vid = m2?.[1];
   }
-
   if (!vid) return null;
   return {
     embed: y?.embed_url || `https://www.youtube.com/embed/${vid}`,
@@ -153,52 +408,7 @@ function extractYoutubeFromProductMeta(p: Product) {
   };
 }
 
-/** Player YouTube audio-only (ẩn video, điều khiển bằng postMessage) */
-function YoutubeAudio({ embedUrl, cover, title }: { embedUrl: string; cover?: string; title?: string }) {
-  const iframeRef = useRef<HTMLIFrameElement>(null);
-  const [playing, setPlaying] = useState(false);
-
-  const post = (func: 'playVideo' | 'pauseVideo') => {
-    const w = iframeRef.current?.contentWindow;
-    if (!w) return;
-    w.postMessage(JSON.stringify({ event: 'command', func, args: [] }), '*');
-  };
-
-  const toggle = () => {
-    const next = !playing;
-    setPlaying(next);
-    post(next ? 'playVideo' : 'pauseVideo');
-  };
-
-  return (
-    <div className="border rounded-xl p-4 flex items-center gap-4">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={toAbs(cover) || FALLBACK_IMG}
-        alt={title || 'podcast'}
-        className="w-16 h-16 object-cover rounded-md"
-        onError={(e) => { (e.currentTarget as HTMLImageElement).src = FALLBACK_IMG; }}
-      />
-      <button
-        onClick={toggle}
-        className="px-4 py-2 rounded bg-indigo-600 text-white hover:bg-indigo-700"
-        aria-label={playing ? 'Pause' : 'Play podcast'}
-      >
-        {playing ? 'Pause' : 'Play podcast'}
-      </button>
-      <span className="text-sm text-gray-500">{title || 'YouTube'}</span>
-
-      <iframe
-        ref={iframeRef}
-        src={`${embedUrl}?enablejsapi=1&playsinline=1&controls=0&modestbranding=1&rel=0`}
-        title="yt-audio"
-        className="w-0 h-0 border-0"
-        allow="autoplay"
-      />
-    </div>
-  );
-}
-
+/* ============================== PAGE ============================== */
 export default function PodcastDetailPage() {
   const params = useParams();
   const { add } = useCart();
@@ -216,39 +426,30 @@ export default function PodcastDetailPage() {
     return Number.isFinite(n) && n > 0 ? n : null;
   }, [params]);
 
-  const [data, setData] = useState<{ product: Product; files: ProductFile[] } | null>(null);
+  const [data, setData] = useState<{ product: Product; files: ProductFile[]; access?: { can_view?: boolean } } | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [favOn, setFavOn] = useState(false);
   const [canFav, setCanFav] = useState(true);
-  const [related, setRelated] = useState<Array<{ id: number; title: string; thumb: string }>>([]);
-  const relatedRailRef = useRef<HTMLDivElement>(null);
-  const scrollRelated = (delta: number) => relatedRailRef.current?.scrollBy({ left: delta, behavior: 'smooth' });
 
+  // fetch product + favourites
   useEffect(() => {
     if (!id) return;
     const ac = new AbortController();
     (async () => {
       try {
         setLoading(true); setErr(null);
-
         const r = await fetch(`${API_BASE}/v1/catalog/products/${id}`, { signal: ac.signal });
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         const j = await r.json();
         let payload = j?.data || null;
-
         if (isLoggedIn) {
           try {
             const pr = await api.get(`/v1/catalog/products/${id}`, { signal: ac.signal as any });
             if (pr.data?.data) payload = pr.data.data;
-          } catch (e: any) {
-            if (e?.code === 'ERR_CANCELED' || e?.name === 'CanceledError') return;
-
-          }
+          } catch {}
         }
-
         setData(payload);
-
 
         if (isLoggedIn && !isAdmin) {
           try {
@@ -257,148 +458,82 @@ export default function PodcastDetailPage() {
             const ids: number[] = d.product_ids || [];
             setFavOn(ids.includes(id!));
             setCanFav(true);
-          } catch (e: any) {
-            if (e?.response?.status === 401) { setCanFav(false); setFavOn(false); }
-          }
-        } else {
-          setFavOn(false);
-          setCanFav(false);
-
-        }
-
-        try {
-          const base = payload || j?.data || {};
-          const cat = (base?.product?.category || '').trim();
-          const qs = cat ? `type=podcast&per_page=12&category=${encodeURIComponent(cat)}` : `type=podcast&per_page=12`;
-          const rr = await fetch(`${API_BASE}/v1/catalog/products?${qs}`, { signal: ac.signal });
-          if (rr.ok) {
-            const j2 = await rr.json();
-            const items: any[] = j2?.data?.items || [];
-            const mapped = items
-              .filter((it) => Number(it?.id) !== id)
-              .map((it) => ({ id: it.id, title: it.title, thumb: toAbs(it.thumbnail_url) || FALLBACK_IMG, price_cents: Number(it.price_cents || 0) }));
-            setRelated(mapped.slice(0, 9));
-          }
-        } catch {}
+          } catch { setFavOn(false); setCanFav(false); }
+        } else { setFavOn(false); setCanFav(false); }
       } catch (e: any) {
-        if (e?.name === 'AbortError' || e?.name === 'CanceledError' || e?.code === 'ERR_CANCELED') {
-          return;
-        }
-        setErr(e?.message || 'Failed to load data');
-      } finally {
-        setLoading(false);
-      }
+        if (e?.name !== 'AbortError') setErr(e?.message || 'Failed to load data');
+      } finally { setLoading(false); }
     })();
     return () => ac.abort();
   }, [id, isLoggedIn, isAdmin]);
 
-  if (!id)     return <div className="p-6 text-red-600">Invalid URL.</div>;
-  if (loading) return <div className="p-6">Loading…</div>;
-  if (err)     return <div className="p-6 text-red-600">Error: {err}</div>;
-  if (!data)   return <div className="p-6">No data.</div>;
+  const { seconds, setSeconds, duration, setDuration, loaded, save } =
+    useListenContinue(id, isLoggedIn);
+
+  const playerRef = useRef<AudioHandle>(null);
+
+  if (!id) return <div className="p-6 text-red-600">Invalid URL.</div>;
+  if (loading || !loaded) return <div className="p-6">Loading…</div>;
+  if (err) return <div className="p-6 text-red-600">Error: {err}</div>;
+  if (!data) return <div className="p-6">No data.</div>;
 
   const p = data.product;
   const files = data.files || [];
-
   const canView = Boolean((data as any)?.access?.can_view);
+  const priceCents = Number(p?.price_cents || 0);
+  const owned = canView || (priceCents === 0 && isCustomer);
+
   const ytPreviewFile = files.find(f => String(f.file_type).toLowerCase()==='youtube' && (f.is_preview===1 || f.is_preview===true));
   const ytFullFile    = files.find(f => String(f.file_type).toLowerCase()==='youtube' && !(f.is_preview===1 || f.is_preview===true));
   const pickYt = (f?: any) => f ? {
     embed: (parseMaybeJSON(f.meta)?.embed_url) || f.file_url,
     watch: (parseMaybeJSON(f.meta)?.watch_url) || f.file_url,
-    thumb: (parseMaybeJSON(f.meta)?.thumbnail_url) || p.thumbnail_url || FALLBACK_IMG,
+    thumb: (parseMaybeJSON(f.meta)?.thumbnail_url) || p?.thumbnail_url || FALLBACK_IMG,
   } : null;
-  const owned = canView || ((Number(p?.price_cents || 0) === 0) && isCustomer);
-  const yt  = owned ? (pickYt(ytFullFile) || pickYt(ytPreviewFile) || extractYoutubeFromFiles(files) || extractYoutubeFromProductMeta(p))
-                    : (pickYt(ytPreviewFile) || null);
+  const yt  = owned
+    ? (pickYt(ytFullFile) || pickYt(ytPreviewFile) || extractYoutubeFromFiles(files) || extractYoutubeFromProductMeta(p))
+    : (pickYt(ytPreviewFile) || null);
+
   const aud = files.find(f => (f.file_type === 'audio' || /\.mp3(\?|$)/i.test(f.file_url)) && (owned || f.is_preview));
   const cover = toAbs(p.thumbnail_url) || yt?.thumb || FALLBACK_IMG;
-  const priceCents = Number(p.price_cents || 0);
-  
-  // Add free podcast into local library on first play
-  const addToLocalLibrary = () => {
-    try {
-      const entry = {
-        id: p.id,
-        type: 'podcast' as const,
-        title: p.title,
-        price_cents: priceCents,
-        thumbnail_url: p.thumbnail_url || null,
-        category: p.category || null,
-        added_at: Date.now(),
-      };
-      const key = 'my_library_free_v1';
-      const raw = localStorage.getItem(key);
-      const arr = Array.isArray(raw ? JSON.parse(raw) : []) ? JSON.parse(raw as string) : [];
-      const k = (x: any) => `${x.type}:${x.id}`;
-      const map = new Map<string, any>(arr.map((x: any) => [k(x), x]));
-      map.set(k(entry), entry);
-      localStorage.setItem(key, JSON.stringify(Array.from(map.values())));
-    } catch {}
-  };
 
-  const ensureContinue = async () => {
-    try {
-      // Requires auth for per-user tracking; silently ignore if not logged in
-      if (!isLoggedIn) return;
-      await fetch(`${API_BASE}/v1/continues/${p.id}`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ current_time_seconds: 0 }),
-      }).catch(()=>{});
-    } catch {}
-  };
-
-  const onListenNow = async () => {
-    addToLocalLibrary();
-    await ensureContinue();
-    // Scroll to player area
-    const target = document.getElementById('player');
-    if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  };
-
-  // Add to cart + toast (xanh, drop từ trên)
   const onBuy = async () => {
-    if (!isLoggedIn) { alert('Please sign in to purchase.'); return; }
-    if (isAdmin) { alert('Admin accounts cannot purchase.'); return; }
+    if (!isLoggedIn) return alert('Please sign in to purchase.');
+    if (isAdmin) return alert('Admin accounts cannot purchase.');
     try {
       const r = await add(p.id, 1);
-      if ((r as any)?.alreadyInCart) {
-        toast.show('This product is already in your cart');
-      } else {
-        toast.show('Added to cart');
-      }
-    } catch {
-      toast.show('Failed to add to cart. Please try again.');
-    }
+      if ((r as any)?.alreadyInCart) toast.show('This product is already in your cart');
+      else toast.show('Added to cart');
+    } catch { toast.show('Failed to add to cart. Please try again.'); }
   };
 
-  // Toggle favourite
   const toggleFav = async () => {
-    if (!isLoggedIn) { alert('Please sign in to use Favorites.'); return; }
-    if (isAdmin) { alert('Admin accounts cannot use Favorites.'); return; }
-    if (!canFav) { alert('Favorites not available right now.'); return; }
+    if (!isLoggedIn) return alert('Please sign in to use Favorites.');
+    if (isAdmin) return alert('Admin accounts cannot use Favorites.');
+    if (!canFav) return alert('Favorites not available right now.');
     const next = !favOn;
-    setFavOn(next); // optimistic
+    setFavOn(next);
     try {
       if (next) await api.post('/v1/favourites', { product_id: p.id });
-      else      await api.delete(`/v1/favourites/${p.id}`);
-    } catch (e: any) {
-      setFavOn(!next); // revert
-      if (e?.response?.status === 401) {
-        setCanFav(false);
-        alert('Session expired. Please sign in again.');
-      } else {
-        alert('Failed to update Favorites.');
-      }
-    }
+      else await api.delete(`/v1/favourites/${p.id}`);
+    } catch { setFavOn(!next); alert('Failed to update Favorites.'); }
+  };
+
+  const onListenNow = () => {
+    const el = document.getElementById('player');
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    playerRef.current?.play?.();
+  };
+
+  const saveNowEverywhere = async (cur: number, dur?: number) => {
+    await save(cur, dur);
+    toast.show('Đã lưu tiến độ');
   };
 
   return (
     <>
       <div className="relative">
-        {/* Background blur */}
+        {/* BG */}
         <div className="absolute inset-0 -z-10">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={cover} alt="" className="w-full h-full object-cover opacity-10" />
@@ -412,30 +547,31 @@ export default function PodcastDetailPage() {
           <span className="opacity-90 line-clamp-1 align-middle">{p.title}</span>
         </div>
 
-        {/* Two columns: left info, right player */}
+        {/* Two columns */}
         <section className="relative w-screen left-[50%] right-[50%] -ml-[50vw] -mr-[50vw]">
           <div className="grid md:grid-cols-[1fr_1.2fr] gap-6 md:gap-10 p-6 md:p-12">
-            {/* Left: info */}
+            {/* LEFT: Info & CTAs */}
             <div className="max-w-2xl">
               <div className="inline-flex items-center gap-2 text-xs font-bold tracking-wide bg-black/5 backdrop-blur px-3 py-1 rounded-full border border-black/5">
                 <span className="inline-block h-2 w-2 rounded-full bg-indigo-500" />
                 {p.category || 'Podcast'}
               </div>
-              <h1 className="mt-2 text-3xl md:text-4xl font-extrabold leading-tight text-zinc-900 drop-shadow-sm">{p.title}</h1>
+              <h1 className="mt-2 text-3xl md:text-4xl font-extrabold leading-tight text-zinc-900 drop-shadow-sm">
+                {p.title}
+              </h1>
               {p.description && (
-                <p className="mt-2 text-zinc-700 whitespace-pre-wrap">{String(p.description).slice(0, 300)}{String(p.description).length>300?'…':''}</p>
+                <p className="mt-2 text-zinc-700 whitespace-pre-wrap">{String(p.description)}</p>
               )}
 
-              {/* CTAs */}
               <div className="mt-5 flex items-center gap-3">
-                  {owned ? (
-                    <a
-                      href="#player"
-                      className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold px-5 py-2.5 rounded-xl shadow transition"
-                    >
-                      Listen now
-                    </a>
-                  ) : (
+                {owned ? (
+                  <button
+                    onClick={onListenNow}
+                    className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold px-5 py-2.5 rounded-xl shadow transition"
+                  >
+                    Listen now
+                  </button>
+                ) : (
                   priceCents === 0 ? (
                     <button
                       onClick={() => { window.location.href = `/auth/login?next=${encodeURIComponent(window.location.pathname)}`; }}
@@ -455,7 +591,8 @@ export default function PodcastDetailPage() {
                       Buy {priceCents>0 ? `(${formatUSD(priceCents)})` : '(Free)'}
                     </button>
                   )
-                  )}
+                )}
+
                 <button
                   onClick={toggleFav}
                   aria-pressed={favOn}
@@ -471,10 +608,32 @@ export default function PodcastDetailPage() {
                 </button>
               </div>
 
+              {/* progress quick actions */}
+              {isLoggedIn && (
+                <div className="mt-4 flex items-center gap-2 text-sm text-zinc-700">
+                  <span className="px-2 py-1 rounded bg-zinc-100">
+                    Tiến độ: {secToClock(seconds)}{duration ? ` / ${secToClock(duration)}` : ''}
+                  </span>
+                  <button
+                    onClick={() => saveNowEverywhere(seconds, duration)}
+                    className="px-3 py-1 rounded bg-emerald-600 text-white hover:bg-emerald-700"
+                  >
+                    Lưu tiến độ
+                  </button>
+                  {seconds > 0 && (
+                    <button onClick={onListenNow} className="px-3 py-1 rounded border border-zinc-300 hover:bg-zinc-50">
+                      Tiếp tục tại {secToClock(seconds)}
+                    </button>
+                  )}
+                </div>
+              )}
+
               {/* Price card */}
               <div className="mt-6 max-w-sm">
                 <div className="relative rounded-2xl border border-zinc-200 bg-white p-4 shadow-lg">
-                  <div className="absolute -top-3 left-4 text-xs font-bold text-white px-2 py-0.5 rounded-full bg-[color:var(--brand-500)]">One-off</div>
+                  <div className="absolute -top-3 left-4 text-xs font-bold text-white px-2 py-0.5 rounded-full bg-[color:var(--brand-500)]">
+                    One-off
+                  </div>
                   {canView ? (
                     <>
                       <div className="text-3xl font-extrabold text-emerald-700">Owned</div>
@@ -486,142 +645,61 @@ export default function PodcastDetailPage() {
                       <div className="mt-2 text-sm text-zinc-600">Own this podcast forever</div>
                     </>
                   )}
-                  {owned ? (
-                    <button
-                      onClick={onListenNow}
-                      className="mt-4 w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2.5"
-                    >
-                      Listen now
-                    </button>
-                  ) : (
-                    priceCents === 0 ? (
-                      <button
-                        onClick={() => { window.location.href = `/auth/login?next=${encodeURIComponent(window.location.pathname)}`; }}
-                        className={cn('mt-4 w-full rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5')}
-                      >
-                        Sign in to listen
-                      </button>
-                    ) : (
-                      <button
-                        onClick={onBuy}
-                        aria-disabled={!isCustomer}
-                        className={cn(
-                          'mt-4 w-full rounded-xl bg-[color:var(--brand-500)] hover:bg-[color:var(--brand-600)] text-white font-semibold py-2.5',
-                          !isCustomer && 'opacity-70'
-                        )}
-                      >
-                        Buy now
-                      </button>
-                    )
-                  )}
                 </div>
               </div>
             </div>
 
-            {/* Right: player */}
+            {/* RIGHT: Player */}
             <div id="player">
-              {(() => {
-                const yt = canView
-                  ? ( (ytFullFile && pickYt(ytFullFile)) || (ytPreviewFile && pickYt(ytPreviewFile)) || extractYoutubeFromFiles(files) || extractYoutubeFromProductMeta(p) )
-                  : (ytPreviewFile && pickYt(ytPreviewFile)) || null;
-                const audLocal = files.find(f => (f.file_type === 'audio' || /\.mp3(\?|$)/i.test(f.file_url)) && (canView || f.is_preview));
-
-                if (yt) {
-                  return (
-                    <div className="rounded-2xl overflow-hidden shadow-2xl ring-1 ring-black/10 bg-black">
-                      <div className="relative w-full" style={{ paddingTop: '56.25%' }}>
-                        <iframe
-                          src={`${yt.embed}?rel=0&modestbranding=1`}
-                          title={p.title}
-                          className="absolute inset-0 w-full h-full"
-                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                          allowFullScreen
-                        />
-                      </div>
-                    </div>
-                  );
-                }
-                if (audLocal) {
-                  return (
-                    <div className="rounded-2xl overflow-hidden shadow-lg ring-1 ring-black/10 bg-white p-4">
-                      <audio controls className="w-full">
-                        <source src={toAbs(audLocal.file_url)} />
-                      </audio>
-                    </div>
-                  );
-                }
-                return (
-                  <div className="rounded-2xl border p-6 text-zinc-600 bg-white">
-                    {canView ? 'No media available.' : 'Please purchase to watch the full podcast. A demo may be unavailable.'}
+              {yt ? (
+                <YouTubeAudioOnly
+                  ref={playerRef}
+                  embedUrl={yt.embed}
+                  cover={cover}
+                  title={p.title}
+                  resumeAt={seconds}
+                  onProgress={(cur, dur) => { setSeconds(cur); if (dur) setDuration(dur); }}
+                  onSaveClick={(cur, dur) => saveNowEverywhere(cur, dur)}
+                />
+              ) : aud ? (
+                <div className="rounded-2xl overflow-hidden shadow-lg ring-1 ring-black/10 bg-white p-4">
+                  <audio
+                    controls
+                    className="w-full"
+                    src={toAbs(aud.file_url)}
+                    onTimeUpdate={(e) => setSeconds((e.target as HTMLAudioElement).currentTime || 0)}
+                    onDurationChange={(e) => setDuration((e.target as HTMLAudioElement).duration || 0)}
+                    onPause={(e) => {
+                      const el = e.target as HTMLAudioElement;
+                      saveNowEverywhere(el.currentTime || 0, el.duration || 0);
+                    }}
+                    onLoadedMetadata={(e) => {
+                      const el = e.target as HTMLAudioElement;
+                      if (seconds > 0 && Math.abs((el.currentTime||0) - seconds) > 2) {
+                        try { el.currentTime = seconds; } catch {}
+                      }
+                    }}
+                  />
+                  <div className="mt-2 text-sm text-zinc-700">
+                    {secToClock(seconds)}{duration ? ` / ${secToClock(duration)}` : ''}
+                    <button
+                      className="ml-3 px-3 py-1 rounded bg-emerald-600 text-white hover:bg-emerald-700"
+                      onClick={() => saveNowEverywhere(seconds, duration)}
+                    >
+                      Save
+                    </button>
                   </div>
-                );
-              })()}
+                </div>
+              ) : (
+                <div className="rounded-2xl border p-6 text-zinc-600 bg-white">
+                  {canView ? 'No media available.' : 'Please purchase to listen to the full podcast. A demo may be unavailable.'}
+                </div>
+              )}
             </div>
           </div>
         </section>
-
-        {/* Full Description */}
-        {p.description && (
-          <section className="px-6 md:px-12 max-w-4xl mx-auto mt-6">
-            <h2 className="text-xl font-semibold mb-2">Description</h2>
-            <p className="text-zinc-700 whitespace-pre-wrap">{p.description}</p>
-          </section>
-        )}
-
-        {/* You may also like */}
-        {related.length>0 && (
-          <section className="mt-10 mb-16">
-            <h2 className="text-xl font-semibold mb-3 px-6 md:px-12">You may also like</h2>
-            <div className="relative w-screen left-[50%] right-[50%] -ml-[50vw] -mr-[50vw]">
-              <div
-                ref={relatedRailRef}
-                className="flex gap-4 overflow-x-auto scroll-smooth pb-4 px-6 md:px-12 snap-x snap-mandatory [scrollbar-width:thin]"
-              >
-                {related.map(r => (
-                  <Link
-                    key={r.id}
-                    href={`/podcast/${r.id}`}
-                    className="snap-start shrink-0 basis-[calc((100vw-6rem)/1.2)] sm:basis-[calc((100vw-9rem)/2.2)] lg:basis-[calc((100vw-18rem)/3)] xl:basis-[360px] group rounded-xl border overflow-hidden bg-white shadow-sm hover:shadow-md transition"
-                  >
-                    <span className="absolute top-2 right-2 z-20 text-xs font-semibold px-2 py-0.5 rounded-full bg-black/70 text-white">
-                      {Number(r?.price_cents || 0) > 0
-                        ? new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format((r.price_cents||0)/100)
-                        : 'Free'}
-                    </span>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={r.thumb}
-                      alt={r.title}
-                      className="w-full aspect-video object-cover group-hover:scale-[1.02] transition-transform duration-300"
-                    />
-                    <div className="p-3">
-                      <div className="font-medium line-clamp-2 group-hover:text-blue-600 transition-colors">{r.title}</div>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-              <button
-                type="button"
-                aria-label="Scroll left"
-                onClick={() => scrollRelated(-600)}
-                className="hidden md:grid place-items-center absolute left-2 md:left-4 top-1/2 -translate-y-1/2 h-10 w-10 rounded-full bg-white/90 shadow hover:bg-white"
-              >
-                ‹
-              </button>
-              <button
-                type="button"
-                aria-label="Scroll right"
-                onClick={() => scrollRelated(600)}
-                className="hidden md:grid place-items-center absolute right-2 md:right-4 top-1/2 -translate-y-1/2 h-10 w-10 rounded-full bg-white/90 shadow hover:bg-white"
-              >
-                ›
-              </button>
-            </div>
-          </section>
-        )}
       </div>
 
-      {/* Toast (xanh, drop từ trên xuống) */}
       <Toast open={toast.open} msg={toast.msg} onClose={toast.hide} />
     </>
   );

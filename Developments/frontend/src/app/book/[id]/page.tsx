@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import api from '@/lib/api';
@@ -10,7 +10,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { normalizeRole } from '@/lib/role';
 import { cn } from '@/lib/utils';
 
-/* ======== Types ======== */
+/* ========== Types ========== */
 interface Product {
   id: number;
   title: string;
@@ -22,13 +22,15 @@ interface Product {
 }
 interface ProductFile {
   id: number;
-  file_type: string;   // 'image' | 'pdf' | 'txt' | ...
-  file_url: string;    // /storage/... or http(s)://...
+  file_type: string;
+  file_url: string;
   is_preview?: number | boolean;
 }
 
+/* ========== Consts ========== */
 const API_BASE = (process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api').replace(/\/$/, '');
 const ORIGIN = API_BASE.replace(/\/api$/, '');
+const canOpenDirect = (u: string) => /^https?:\/\//i.test(u) || u.startsWith('/');
 
 const FALLBACK_IMG = (() => {
   const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='400' height='560'>
@@ -38,7 +40,6 @@ const FALLBACK_IMG = (() => {
   </svg>`;
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 })();
-
 const toAbs = (u?: string | null) => {
   if (!u) return '';
   const s = u.trim();
@@ -47,21 +48,103 @@ const toAbs = (u?: string | null) => {
   if (s.startsWith('/')) return `${ORIGIN}${s}`;
   return s;
 };
+const formatUSD = (cents?: number | null) =>
+  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(((cents ?? 0) as number) / 100);
 
-const canOpenDirect = (u: string) => /^https?:\/\//i.test(u) || u.startsWith('/');
-const downloadUrl = (productId: number, fileId: number) =>
-  `${API_BASE}/v1/catalog/products/${productId}/files/${fileId}/download`;
+/* ========== Toast ========== */
+function useToast(autoHideMs = 2500) {
+  const [open, setOpen] = useState(false);
+  const [msg, setMsg] = useState('');
+  const timer = useRef<number | null>(null);
+  const show = (text: string) => {
+    setMsg(text);
+    setOpen(true);
+    if (timer.current) window.clearTimeout(timer.current);
+    // @ts-ignore
+    timer.current = window.setTimeout(() => setOpen(false), autoHideMs);
+  };
+  const hide = () => {
+    setOpen(false);
+    if (timer.current) {
+      window.clearTimeout(timer.current);
+      timer.current = null;
+    }
+  };
+  return { open, msg, show, hide };
+}
+function Toast({ open, msg, onClose }: { open: boolean; msg: string; onClose: () => void }) {
+  return (
+    <div
+      className={`fixed z-[1000] left-1/2 -translate-x-1/2 top-0 w-full max-w-md px-3 transition-transform duration-300 ease-out ${
+        open ? 'translate-y-4' : '-translate-y-10 pointer-events-none'
+      }`}
+      role="status"
+      aria-live="polite"
+    >
+      <div className="flex items-center gap-2 rounded-xl bg-emerald-600 text-white px-4 py-2 shadow-xl ring-1 ring-emerald-700/40">
+        {/* Ẩn icon theo yêu cầu */}
+        <span className="text-lg hidden" aria-hidden="true">
+          🛟
+        </span>
+        <span className="text-sm font-medium">{msg}</span>
+        <button onClick={onClose} className="ml-auto text-white/80 hover:text-white text-sm" aria-label="close">
+          ✕
+        </button>
+      </div>
+    </div>
+  );
+}
 
-const formatUSD = (cents: number | null | undefined) =>
-  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format((Number(cents ?? 0) || 0) / 100);
+/* ========== Continues API ========== */
+function useContinue(productId: number | null) {
+  const [progress, setProgress] = useState<any>(null);
 
-/* -------------------------------- Related row -------------------------------- */
+  const load = async () => {
+    if (!productId) return;
+    try {
+      const r = await api.get(`/v1/continues/${productId}`);
+      setProgress(r.data?.data || null);
+    } catch {
+      setProgress(null);
+    }
+  };
+
+  const save = async (p: any) => {
+    if (!productId) return;
+    const payload = {
+      current_chapter: Number((progress && progress.current_chapter) ?? 1),
+      ...p,
+    };
+    const r = await api.post(`/v1/continues/${productId}`, payload);
+    // optimistic update
+    setProgress((prev: any) => ({ ...(prev || {}), ...payload, ...r.data?.data }));
+    return r;
+  };
+
+  return { progress, load, save, setProgress };
+}
+
+/* ========== Local fallback for progress ========== */
+const getLocalContinue = (pid: number | null | undefined) => {
+  if (!pid) return 0;
+  try {
+    return Number(localStorage.getItem(`continue:${pid}`) || 0) || 0;
+  } catch {
+    return 0;
+  }
+};
+const setLocalContinue = (pid: number | null | undefined, page: number) => {
+  if (!pid) return;
+  try {
+    localStorage.setItem(`continue:${pid}`, String(Math.max(1, Number(page || 1))));
+  } catch {}
+};
+
+/* ========== Related row ========== */
 function RelatedRow({ items }: { items: Array<{ id: number; title: string; cover?: string | null }> }) {
   const scrollerRef = useRef<HTMLDivElement>(null);
   const scrollBy = (delta: number) => scrollerRef.current?.scrollBy({ left: delta, behavior: 'smooth' });
-
   if (!items?.length) return null;
-
   return (
     <section className="mt-4 mb-20">
       <h2 className="text-xl font-semibold mb-3 px-6 md:px-12">You may also like</h2>
@@ -98,93 +181,20 @@ function RelatedRow({ items }: { items: Array<{ id: number; title: string; cover
   );
 }
 
-/* ------------------------------- Toast helpers -------------------------------- */
-function useToast(autoHideMs = 2500) {
-  const [open, setOpen] = useState(false);
-  const [msg, setMsg] = useState('');
-  const timer = useRef<number | null>(null);
-
-  const show = (text: string) => {
-    setMsg(text);
-    setOpen(true);
-    if (timer.current) window.clearTimeout(timer.current);
-    // @ts-ignore
-    timer.current = window.setTimeout(() => setOpen(false), autoHideMs);
-  };
-  const hide = () => {
-    setOpen(false);
-    if (timer.current) { window.clearTimeout(timer.current); timer.current = null; }
-  };
-  return { open, msg, show, hide };
-}
-
-function Toast({ open, msg, onClose }: { open: boolean; msg: string; onClose: () => void }) {
-  return (
-    <div
-      className={`fixed z-[1000] left-1/2 -translate-x-1/2 top-0 w-full max-w-md px-3 transition-transform duration-300 ease-out
-        ${open ? 'translate-y-4' : '-translate-y-10 pointer-events-none'}`
-      }
-      role="status"
-      aria-live="polite"
-    >
-      <div className="flex items-center gap-2 rounded-xl bg-emerald-600 text-white px-4 py-2 shadow-xl ring-1 ring-emerald-700/40">
-        <span className="text-lg">🛒</span>
-        <span className="text-sm font-medium">{msg}</span>
-        <button
-          onClick={onClose}
-          className="ml-auto text-white/80 hover:text-white text-sm"
-          aria-label="Đóng thông báo"
-        >
-          ✕
-        </button>
-      </div>
-    </div>
-  );
-}
-
-/** Reading progress via lightweight endpoints */
-function useContinue(productId: number | null) {
-  const [progress, setProgress] = useState<any>(null);
-  const [loading, setLoading] = useState(false);
-
-  const load = async () => {
-    if (!productId) return;
-    setLoading(true);
-    try {
-      const r = await fetch(`${API_BASE}/v1/continues/${productId}`, { credentials: 'include' });
-      if (r.status === 401 || r.status === 403) { setProgress(null); return; }
-      const j = await r.json();
-      setProgress(j?.data || null);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const save = async (p: any) => {
-    if (!productId) return;
-    const res = await fetch(`${API_BASE}/v1/continues/${productId}`, {
-      method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(p)
-    });
-    if (!res.ok) {
-      const msg = await res.text().catch(() => '');
-      throw new Error(`Save failed: ${res.status} ${msg}`);
-    }
-    await load();
-  };
-  return { progress, loading, load, save };
-}
-
-/* ================================== Page ================================== */
+/* ===================================================================== */
 export default function BookDetail() {
+  /* ------- contexts & params ------- */
   const params = useParams();
   const { add } = useCart();
-  const toast = useToast();
   const { user } = useAuth();
+  const toast = useToast();
+
   const role = normalizeRole(user);
   const isLoggedIn = Boolean(user);
   const isAdmin = role === 'admin';
   const isCustomer = isLoggedIn && !isAdmin;
 
+  /* ------- derived id ------- */
   const id = useMemo(() => {
     const raw = (params as any)?.id;
     const s = Array.isArray(raw) ? raw[0] : raw;
@@ -192,29 +202,90 @@ export default function BookDetail() {
     return Number.isFinite(n) && n > 0 ? n : null;
   }, [params]);
 
-  const [data, setData] = useState<{ product: Product; files: ProductFile[]; access?: { can_view?: boolean } } | null>(null);
+  /* ------- ALL HOOKS live here (before any conditional return) ------- */
+  const [data, setData] = useState<{ product: Product; files: ProductFile[]; access?: { can_view?: boolean } } | null>(
+    null
+  );
   const [err, setErr] = useState<string | null>(null);
   const { progress, load, save } = useContinue(id);
-  const [page, setPage] = useState<number>(0);
-  const [favOn, setFavOn] = useState(false);
-  const [canFav, setCanFav] = useState(true);
-  const [related, setRelated] = useState<any[]>([]);
 
-  // Inline PDF viewer state (declare before any early returns)
+  const [page, setPage] = useState<number>(0);
+
+  // Reader overlay
   const [pdfUrl, setPdfUrl] = useState<string>('');
   const [pdfTitle, setPdfTitle] = useState<string>('');
+  const [readingPage, setReadingPage] = useState<number>(1);
+  const [isReading, setIsReading] = useState<boolean>(false);
+  const [lastSavedPage, setLastSavedPage] = useState<number>(0);
+  const [savingPage, setSavingPage] = useState(false);
+
+  // Favorites (CHỈ 1 BLOCK)
+  const [favOn, setFavOn] = useState<boolean>(false);
+  const [canFav, setCanFav] = useState<boolean>(true);
+
+  // Related
+  const [related, setRelated] = useState<any[]>([]);
+
+  /* ------- effects (still hooks; above any return) ------- */
+
+  // disable scroll + cleanup blob
   useEffect(() => {
-    if (pdfUrl) {
-      const prev = document.body.style.overflow;
-      document.body.style.overflow = 'hidden';
-      return () => {
-        document.body.style.overflow = prev;
+    if (!pdfUrl) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+      try {
         if (pdfUrl) URL.revokeObjectURL(pdfUrl);
-      };
-    }
-    return () => {};
+      } catch {}
+    };
   }, [pdfUrl]);
 
+  // keepalive on abrupt close
+  const saveKeepalive = (pageVal: number) => {
+    if (!id) return;
+    try {
+      const payload = {
+        current_chapter: Number(progress?.current_chapter ?? 1),
+        current_page: Math.max(1, Number(pageVal || 1)),
+      };
+      // @ts-ignore
+      fetch(`${API_BASE}/v1/continues/${id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(payload),
+        keepalive: true,
+      }).catch(() => {});
+    } catch {}
+  };
+  const isDirty = isReading && Number(readingPage) !== Number(lastSavedPage);
+
+  useEffect(() => {
+    const beforeUnload = (e: BeforeUnloadEvent) => {
+      if (isDirty && isLoggedIn) {
+        saveKeepalive(readingPage);
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    const onPageHide = () => {
+      if (isDirty && isLoggedIn) saveKeepalive(readingPage);
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden' && isDirty && isLoggedIn) saveKeepalive(readingPage);
+    };
+    window.addEventListener('beforeunload', beforeUnload);
+    window.addEventListener('pagehide', onPageHide);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.removeEventListener('beforeunload', beforeUnload);
+      window.removeEventListener('pagehide', onPageHide);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [isDirty, isLoggedIn, readingPage]);
+
+  // load product + progress
   useEffect(() => {
     if (!id) return;
     const ac = new AbortController();
@@ -230,74 +301,123 @@ export default function BookDetail() {
           try {
             const ar = await api.get(`/v1/catalog/products/${id}`, { signal: ac.signal as any });
             if (ar.data?.data) payload = ar.data.data;
-          } catch (e: any) {
-            if (e?.code === 'ERR_CANCELED' || e?.name === 'CanceledError') return;
-          }
+          } catch {}
         }
-
         setData(payload);
 
-        if (isLoggedIn) {
-          await load();
-        }
-
-        if (isLoggedIn && !isAdmin) {
-          try {
-            const rf = await api.get('/v1/favourites', { signal: ac.signal as any });
-            const d = rf.data?.data || rf.data || {};
-            const ids: number[] = d.product_ids || [];
-            setFavOn(ids.includes(id!));
-            setCanFav(true);
-          } catch (e: any) {
-            if (e?.response?.status === 401) { setCanFav(false); setFavOn(false); }
-          }
-        } else {
-          setFavOn(false);
-          setCanFav(false);
-        }
-
-        try {
-          const cat = (j?.data?.product?.category || '').trim();
-          const qs = cat ? `type=ebook&per_page=12&category=${encodeURIComponent(cat)}` : `type=ebook&per_page=12`;
-          const rr = await fetch(`${API_BASE}/v1/catalog/products?${qs}`, { signal: ac.signal });
-          if (rr.ok) {
-            const j2 = await rr.json();
-            const items: any[] = j2?.data?.items || [];
-            const mapped = items
-              .filter((it) => Number(it?.id) !== id)
-              .map((it) => ({ id: it.id, title: it.title, cover: toAbs(it.thumbnail_url) || FALLBACK_IMG }));
-            setRelated(mapped.slice(0, 8));
-          }
-        } catch {}
+        if (isLoggedIn) await load();
       } catch (e: any) {
         if (e?.name !== 'AbortError') setErr(e?.message || 'Failed to load data');
       }
     })();
     return () => ac.abort();
+  }, [id, isLoggedIn]);
+
+  // sync page outside when server progress changes + store to local
+  useEffect(() => {
+    const cur = Math.max(0, Number(progress?.current_page || 0));
+    setPage(cur);
+    setLocalContinue(id, cur);
+    if (isReading) setLastSavedPage(cur || 1);
+  }, [progress?.current_page, isReading, id]);
+
+  // NEW: when progress comes later, sync readingPage in overlay as well
+  useEffect(() => {
+    const cur = Number(progress?.current_page || 0);
+    if (isReading && cur > 0) {
+      setReadingPage(cur);
+      setLastSavedPage(cur);
+    }
+  }, [progress?.current_page, isReading]);
+
+  // while reading, keep outer UI number in sync (UI only)
+  useEffect(() => {
+    if (isReading) setPage(readingPage);
+  }, [readingPage, isReading]);
+
+  // favorites
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!id) return;
+      if (!isLoggedIn || isAdmin) {
+        if (!cancelled) {
+          setFavOn(false);
+        }
+        setCanFav(false);
+        return;
+      }
+      try {
+        const rf = await api.get('/v1/favourites');
+        if (cancelled) return;
+        const d = rf.data?.data || rf.data || {};
+        const ids: number[] = d.product_ids || [];
+        setFavOn(ids.includes(id));
+        setCanFav(true);
+      } catch {
+        if (!cancelled) {
+          setFavOn(false);
+          setCanFav(false);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [id, isLoggedIn, isAdmin]);
 
-  if (!id) return <div className="p-6 text-red-600">Invalid URL (missing id).</div>;
-  if (err) return <div className="p-6 text-red-600">Error: {err}</div>;
-  if (!data) return <div className="p-6">Loading…</div>;
+  // related
+  useEffect(() => {
+    (async () => {
+      try {
+        const cat = (data?.product?.category || '').trim();
+        const qs = cat ? `type=ebook&per_page=12&category=${encodeURIComponent(cat)}` : `type=ebook&per_page=12`;
+        const rr = await fetch(`${API_BASE}/v1/catalog/products?${qs}`);
+        if (rr.ok) {
+          const j2 = await rr.json();
+          const items: any[] = j2?.data?.items || [];
+          const mapped = items
+            .filter((it) => Number(it?.id) !== id)
+            .map((it) => ({ id: it.id, title: it.title, cover: toAbs(it.thumbnail_url) || FALLBACK_IMG }));
+          setRelated(mapped.slice(0, 8));
+        }
+      } catch {}
+    })();
+  }, [id, data?.product?.category]);
 
-  const p = data.product;
-  const files = data.files || [];
-  const canView = Boolean((data as any)?.access?.can_view);
-  const preview = files.find(f => !!f.is_preview && f.file_type === 'pdf' && canOpenDirect(f.file_url)) || null;
-  const fullPdf = files.find(f => f.file_type === 'pdf' && !f.is_preview) || null;
-  const coverSrc = toAbs(p.thumbnail_url) || FALLBACK_IMG;
+  /* ------- helper actions (no hooks below this line) ------- */
+  const applyAndSavePage = async (next: number) => {
+    const nextPage = Math.max(1, Number(next || 1));
+    setReadingPage(nextPage);
+    setSavingPage(true);
+    try {
+      await save({ current_page: nextPage });
+      setLastSavedPage(nextPage);
+      setPage(nextPage);
+      setLocalContinue(id, nextPage);
+      toast.show('Saved your progress');
+    } catch (e: any) {
+      alert(e?.message || 'Fail to save your progress');
+    } finally {
+      setSavingPage(false);
+    }
+  };
 
-  const meta = (() => {
-    const m = typeof p.metadata === 'string' ? (() => { try { return JSON.parse(p.metadata); } catch { return {}; } })() : (p.metadata || {});
-    return m || {};
-  })();
-  const author = meta.author || meta.writer || meta.creator || '-';
-  const publisher = meta.publisher || '-';
-  const released = meta.release_date || meta.published_at || (meta.created_at || '-') ;
-  const rating = Number(meta.rating ?? 5);
-  const reviews = Number(meta.reviews ?? 1);
-  const compareAt = Number(meta.compare_at_cents ?? 0);
-  const priceCents = Number(p.price_cents ?? 0);
+  const promptSaveThenClose = async () => {
+    if (!pdfUrl) return;
+    if (isLoggedIn && Number(readingPage) !== Number(lastSavedPage)) {
+      const ok = window.confirm(`Saving to page ${readingPage}?`);
+      if (ok) {
+        try {
+          await applyAndSavePage(readingPage);
+        } catch {
+          saveKeepalive(readingPage);
+        }
+      }
+    }
+    setPdfUrl('');
+    setIsReading(false);
+  };
 
   const openPdfInline = async (productId: number, fileId: number, title: string) => {
     try {
@@ -307,79 +427,76 @@ export default function BookDetail() {
       if (pdfUrl) URL.revokeObjectURL(pdfUrl);
       setPdfUrl(url);
       setPdfTitle(title);
-    } catch (e) {
+
+      // Ưu tiên server; nếu chưa kịp, dùng localStorage; cuối cùng mặc định 1
+      const local = getLocalContinue(productId);
+      const start = Math.max(1, Number(progress?.current_page ?? local ?? 1));
+
+      setReadingPage(start);
+      setLastSavedPage(start);
+      setIsReading(true);
+    } catch {
       alert('Unable to load PDF. Please ensure you are logged in and have purchased.');
     }
   };
 
-  // Add free product into local library on first open
-  const addToLocalLibrary = () => {
-    try {
-      const entry = {
-        id: p.id,
-        type: 'ebook' as const,
-        title: p.title,
-        price_cents: priceCents,
-        thumbnail_url: p.thumbnail_url || null,
-        category: p.category || null,
-        added_at: Date.now(),
-      };
-      const key = 'my_library_free_v1';
-      const raw = localStorage.getItem(key);
-      const arr = Array.isArray(raw ? JSON.parse(raw) : []) ? JSON.parse(raw as string) : [];
-      const k = (x: any) => `${x.type}:${x.id}`;
-      const map = new Map<string, any>(arr.map((x: any) => [k(x), x]));
-      map.set(k(entry), entry);
-      localStorage.setItem(key, JSON.stringify(Array.from(map.values())));
-    } catch {}
-  };
+  const { product: productOrNull, files: filesOrEmpty } = data || ({} as any);
+  const p: Product | undefined = productOrNull;
+  const files: ProductFile[] = filesOrEmpty || [];
+  const canView = Boolean((data as any)?.access?.can_view);
+  const priceCents = Number(p?.price_cents ?? 0);
+  const owned = canView || (priceCents === 0 && isCustomer);
+  const preview = files.find((f) => !!f.is_preview && f.file_type === 'pdf' && canOpenDirect(f.file_url)) || null;
+  const fullPdf = files.find((f) => f.file_type === 'pdf' && !f.is_preview) || null;
+  const coverSrc = toAbs(p?.thumbnail_url) || FALLBACK_IMG;
+
+  const meta =
+    typeof p?.metadata === 'string'
+      ? (() => {
+          try {
+            return JSON.parse(p!.metadata as any);
+          } catch {
+            return {};
+          }
+        })()
+      : p?.metadata || {};
+  const author = meta?.author || meta?.writer || meta?.creator || '-';
+  const publisher = meta?.publisher || '-';
+  const released = meta?.release_date || meta?.published_at || meta?.created_at || '-';
+  const rating = Number(meta?.rating ?? 5);
+  const reviews = Number(meta?.reviews ?? 1);
 
   const onRead = () => {
-    const previewFile = files.find(f => !!f.is_preview && f.file_type === 'pdf');
-    if (!previewFile) { alert('No preview available.'); return; }
-    openPdfInline(p.id, previewFile.id, `${p.title} — Preview`);
-    // Save a continues entry and add to local library (non-destructive)
-    try {
-      if (isLoggedIn) save({ current_page: Math.max(1, Number(progress?.current_page || 0)) }).catch(()=>{});
-      addToLocalLibrary();
-    } catch {}
+    const previewFile = files.find((f) => !!f.is_preview && f.file_type === 'pdf');
+    if (!previewFile) return alert('No preview available.');
+    openPdfInline(p!.id, previewFile.id, `${p!.title} — Preview`);
   };
-
   const onReadFull = () => {
-    const owned = canView || (priceCents === 0 && isCustomer);
     if (!fullPdf) return;
     if (!owned) return;
-    // Require login for full content; if free but not logged in, redirect to login
     if (!isLoggedIn) {
       const next = encodeURIComponent(window.location.pathname);
       window.location.href = `/auth/login?next=${next}`;
       return;
     }
-    openPdfInline(p.id, fullPdf.id, p.title);
-    try {
-      save({ current_page: Math.max(1, Number(progress?.current_page || 0)) }).catch(()=>{});
-      addToLocalLibrary();
-    } catch {}
+    openPdfInline(p!.id, fullPdf.id, p!.title);
   };
-  const downloadFullPdf = async () => {
-    if (!fullPdf) return;
+
+  const { show } = toast;
+  const onBuy = async () => {
+    if (!p) return;
+    if (!isLoggedIn) return alert('Please sign in to purchase.');
+    if (isAdmin) return alert('Admin accounts cannot purchase.');
     try {
-      const res = await api.get(`/v1/catalog/products/${p.id}/files/${fullPdf.id}/download`, { responseType: 'blob' });
-      const headers: any = res.headers || {};
-      const cd = headers['content-disposition'] || headers['Content-Disposition'] || '';
-      let filename = `${p.title}.pdf`.replace(/[\\/:*?"<>|]+/g, '_');
-      const m = /filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i.exec(cd);
-      if (m) filename = decodeURIComponent(m[1] || m[2]);
-      const blob = new Blob([res.data], { type: headers['content-type'] || 'application/pdf' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 5000);
-    } catch (e) {
-      alert('Download failed. Please ensure you are logged in and own this title.');
+      const r = await add(p.id, 1);
+      if ((r as any)?.alreadyInCart) show('This product is already in your cart');
+      else show('Added to cart');
+    } catch {
+      show('Failed to add to cart. Please try again.');
     }
   };
   const onShare = async () => {
+    if (!p) return;
     try {
       const shareData = { title: p.title, text: p.description || p.title, url: window.location.href };
       // @ts-ignore
@@ -387,41 +504,26 @@ export default function BookDetail() {
       else await navigator.clipboard.writeText(window.location.href);
     } catch {}
   };
-  const onBuy = async () => {
-    if (!isLoggedIn) { alert('Please sign in to purchase.'); return; }
-    if (isAdmin) { alert('Admin accounts cannot purchase.'); return; }
-    try {
-      const r = await add(p.id, 1);
-      if ((r as any)?.alreadyInCart) {
-        toast.show('This product is already in your cart');
-      } else {
-        toast.show('Added to cart');
-      }
-    } catch {
-      toast.show('Failed to add to cart. Please try again.');
-    }
-  };
-
   const toggleFav = async () => {
-    if (!isLoggedIn) { alert('Please sign in to use Favorites.'); return; }
-    if (isAdmin) { alert('Admin accounts cannot use Favorites.'); return; }
-    if (!canFav) { alert('Favorites not available right now.'); return; }
+    if (!p) return;
+    if (!isLoggedIn) return alert('Please sign in to use Favorites.');
+    if (isAdmin) return alert('Admin accounts cannot use Favorites.');
+    if (!canFav) return alert('Favorites not available right now.');
     const next = !favOn;
-    setFavOn(next); // optimistic
+    setFavOn(next);
     try {
       if (next) await api.post('/v1/favourites', { product_id: p.id });
-      else      await api.delete(`/v1/favourites/${p.id}`);
-    } catch (e: any) {
-      setFavOn(!next); // revert
-      if (e?.response?.status === 401) {
-        alert('Session expired. Please sign in again.');
-      } else {
-        alert('Failed to update Favorites.');
-      }
+      else await api.delete(`/v1/favourites/${p.id}`);
+    } catch {
+      setFavOn(!next);
+      alert('Failed to update Favorites.');
     }
   };
 
-  const owned = canView || (priceCents === 0 && isCustomer);
+  /* ------------------ Render ------------------ */
+  if (!id) return <div className="p-6 text-red-600">Invalid URL (missing id).</div>;
+  if (err) return <div className="p-6 text-red-600">Error: {err}</div>;
+  if (!p) return <div className="p-6">Loading…</div>;
 
   return (
     <>
@@ -435,15 +537,17 @@ export default function BookDetail() {
 
         {/* Breadcrumb */}
         <div className="container mx-auto px-6 md:px-12 pt-6 text-sm text-zinc-800">
-          <Link href="/" className="hover:underline">Home</Link>
+          <Link href="/" className="hover:underline">
+            Home
+          </Link>
           <span className="px-2">›</span>
           <span className="opacity-90 line-clamp-1 align-middle">{p.title}</span>
         </div>
 
-        {/* Main two columns */}
+        {/* Main */}
         <section className="relative w-screen left-[50%] right-[50%] -ml-[50vw] -mr-[50vw]">
           <div className="grid md:grid-cols-[380px_1fr] gap-8 md:gap-12 p-6 md:p-12 min-h-[70vh]">
-            {/* Left: Cover + price badge */}
+            {/* Left */}
             <div className="relative mx-auto md:mx-0 w-[300px] md:w-[360px]">
               <article className="rounded-2xl overflow-hidden shadow-2xl ring-1 ring-black/10 bg-white transition hover:-translate-y-1">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -451,7 +555,9 @@ export default function BookDetail() {
                   src={coverSrc}
                   alt={p.title}
                   className="w-full h-[480px] object-cover"
-                  onError={(e)=>{(e.currentTarget as HTMLImageElement).src = FALLBACK_IMG;}}
+                  onError={(e) => {
+                    (e.currentTarget as HTMLImageElement).src = FALLBACK_IMG;
+                  }}
                 />
               </article>
               <div className="absolute top-3 right-3">
@@ -461,9 +567,8 @@ export default function BookDetail() {
               </div>
             </div>
 
-            {/* Right: detail (Description/Attachments/Progress at left, CTAs/Price at right) */}
+            {/* Right */}
             <div className="text-zinc-900 bg-white/80 backdrop-blur rounded-2xl p-6 ring-1 ring-black/5 shadow-sm">
-              {/* Title + rating */}
               <h1 className="text-3xl md:text-5xl font-extrabold leading-tight">{p.title}</h1>
               <div className="mt-2 flex items-center gap-2 text-sm text-zinc-600">
                 <span className="font-semibold">{rating.toFixed(1)}</span>
@@ -494,25 +599,7 @@ export default function BookDetail() {
                 </div>
               </div>
 
-              {/* Options */}
-              <div className="mt-6 space-y-3 border-t border-zinc-2 00 pt-6">
-                <div className="text-zinc-600 text-sm">Choose type</div>
-                <div className="flex gap-2 flex-wrap">
-                  <button className="px-3 py-1.5 rounded-full bg-zinc-900 text-white font-medium text-sm">Ebook</button>
-                  <button className="px-3 py-1.5 rounded-full bg-zinc-100 text-zinc-400 text-sm" disabled>Audiobook</button>
-                  <button className="px-3 py-1.5 rounded-full bg-zinc-100 text-zinc-400 text-sm" disabled>Print</button>
-                </div>
-
-                <div className="text-zinc-600 text-sm mt-4">Content</div>
-                <div className="flex gap-2">
-                  <button className="px-3 py-1.5 rounded-full bg-zinc-900 text-white font-medium text-sm">Full</button>
-                  <button className="px-3 py-1.5 rounded-full bg-zinc-100 text-zinc-400 text-sm" disabled>Summary</button>
-                </div>
-              </div>
-
-              {/* Fullscreen reader overlay is rendered at the end of the page */}
-
-              {/* Description (always visible) under Content, left area */}
+              {/* Description + Progress */}
               <div className="mt-6 space-y-6">
                 {p.description && (
                   <div>
@@ -520,33 +607,54 @@ export default function BookDetail() {
                     <p className="text-sm text-zinc-700 whitespace-pre-wrap leading-relaxed">{p.description}</p>
                   </div>
                 )}
-                {/* Attachments list removed; we provide a single Download PDF button in the purchase card */}
-                {owned && (
+                {(canView || (priceCents === 0 && isCustomer)) && (
                   <div>
                     <h2 className="text-lg font-semibold mb-2">Reading Progress</h2>
-                    <div className="text-sm text-gray-600">Current page: {progress?.current_page ?? 0}</div>
-                    <div className="mt-3 flex items-center gap-2">
+                    <div className="text-sm text-gray-600">Current page: {page ?? 0}</div>
+                    <div className="mt-3 flex items-center gap-2 flex-wrap">
                       <input
                         type="number"
                         min={0}
                         value={page}
-                        onChange={(e)=>setPage(Number(e.target.value))}
-                        disabled={!owned || !isCustomer}
+                        onChange={(e) => setPage(Number(e.target.value))}
+                        disabled={!(canView || (priceCents === 0 && isCustomer)) || !isCustomer}
                         className="border rounded px-2 py-1 w-24 disabled:bg-zinc-100 disabled:cursor-not-allowed"
                       />
                       <button
-                        onClick={()=>save({ current_page: page })}
-                        disabled={!owned || !isCustomer}
+                        onClick={() => applyAndSavePage(page)}
+                        disabled={!(canView || (priceCents === 0 && isCustomer)) || !isCustomer || savingPage}
                         className="px-3 py-1 rounded bg-green-600 text-white disabled:opacity-60 disabled:cursor-not-allowed"
                       >
-                        Save progress
+                        {savingPage ? 'Saving…' : 'Save progress'}
+                      </button>
+                      <button
+                        onClick={() => {
+                          const previewFile = files.find((f) => !!f.is_preview && f.file_type === 'pdf');
+                          const target = fullPdf || previewFile;
+                          if (!target) return alert('Không có file PDF khả dụng.');
+                          if (target === fullPdf) {
+                            if (!(canView || (priceCents === 0 && isCustomer))) return;
+                            if (!isLoggedIn) {
+                              const next = encodeURIComponent(window.location.pathname);
+                              window.location.href = `/auth/login?next=${next}`;
+                              return;
+                            }
+                            openPdfInline(p.id, fullPdf!.id, p.title);
+                          } else {
+                            openPdfInline(p.id, previewFile!.id, `${p.title} — Preview`);
+                          }
+                        }}
+                        disabled={!(canView || (priceCents === 0 && isCustomer)) && !preview}
+                        className="px-3 py-1 rounded bg-zinc-800 text-white disabled:opacity-50"
+                      >
+                        Tiếp tục đọc
                       </button>
                     </div>
                   </div>
                 )}
               </div>
 
-              {/* Rail: hành động mua ở bên phải */}
+              {/* Rail */}
               <aside className="mt-6 w-full lg:max-w-sm xl:max-w-md space-y-4 lg:ml-auto">
                 <div className="flex items-center gap-3 flex-wrap">
                   <button
@@ -556,7 +664,6 @@ export default function BookDetail() {
                   >
                     Read Preview
                   </button>
-                  {/* Removed duplicate Read Full button here */}
                   <button
                     onClick={toggleFav}
                     aria-pressed={favOn}
@@ -570,14 +677,20 @@ export default function BookDetail() {
                     <span className="text-lg">{favOn ? '♥' : '♡'}</span>
                     <span className="text-sm hidden sm:inline">{favOn ? 'Unfavorite' : 'Favorite'}</span>
                   </button>
-                  <button onClick={onShare} className="h-10 w-10 grid place-items-center rounded-full border border-zinc-300 hover:bg-zinc-50" aria-label="Share">
+                  <button
+                    onClick={onShare}
+                    className="h-10 w-10 grid place-items-center rounded-full border border-zinc-300 hover:bg-zinc-50"
+                    aria-label="Share"
+                  >
                     <span className="text-lg">⇪</span>
                   </button>
                 </div>
 
                 <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-lg">
                   <div className="relative">
-                    <div className="absolute -top-3 left-0 text-xs font-bold text-white px-2 py-0.5 rounded-full bg-[color:var(--brand-500)]">One-off</div>
+                    <div className="absolute -top-3 left-0 text-xs font-bold text-white px-2 py-0.5 rounded-full bg-[color:var(--brand-500)]">
+                      One-off
+                    </div>
                   </div>
                   {canView ? (
                     <>
@@ -589,14 +702,20 @@ export default function BookDetail() {
                   ) : (
                     <>
                       <div className="flex items-end gap-3 mt-1">
-                        {compareAt > 0 && <div className="text-zinc-500 line-through text-lg">{formatUSD(compareAt)}</div>}
-                        <div className="text-3xl font-extrabold text-zinc-900">{priceCents > 0 ? formatUSD(priceCents) : 'Free'}</div>
+                        {Number(meta?.compare_at_cents ?? 0) > 0 && (
+                          <div className="text-zinc-500 line-through text-lg">
+                            {formatUSD(Number(meta?.compare_at_cents ?? 0))}
+                          </div>
+                        )}
+                        <div className="text-3xl font-extrabold text-zinc-900">
+                          {priceCents > 0 ? formatUSD(priceCents) : 'Free'}
+                        </div>
                       </div>
                       <div className="mt-2 text-emerald-600 text-sm font-semibold">Own this ebook forever</div>
                     </>
                   )}
 
-                  {(canView || (priceCents === 0)) ? (
+                  {canView || priceCents === 0 ? (
                     <button
                       onClick={onReadFull}
                       disabled={!fullPdf}
@@ -612,47 +731,73 @@ export default function BookDetail() {
                       Buy now
                     </button>
                   )}
-                  {(canView || (priceCents === 0 && isLoggedIn)) && fullPdf && (
-                    <button
-                      onClick={downloadFullPdf}
-                      className="mt-3 w-full rounded-xl border border-zinc-300 hover:bg-zinc-50 text-zinc-800 font-semibold py-2.5"
-                    >
-                      Download PDF
-                    </button>
-                  )}
                 </div>
-
-                {/* Removed purchase overlay and duplicate content section */}
               </aside>
             </div>
           </div>
         </section>
 
-      {/* Related books */}
-      {related.length > 0 && <RelatedRow items={related} />}
-    </div>
-
-    {/* Fullscreen PDF reader overlay */}
-    {pdfUrl && (
-      <div className="fixed inset-0 z-[1000] bg-black/90">
-        <div className="h-12 px-4 flex items-center justify-between text-white">
-          <div className="truncate pr-3">{pdfTitle}</div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setPdfUrl('')}
-              className="px-3 py-1 rounded bg-white/10 hover:bg-white/20"
-            >
-              Close
-            </button>
-          </div>
-        </div>
-        <iframe
-          src={pdfUrl + '#view=FitH'}
-          title={pdfTitle}
-          className="w-full h-[calc(100vh-48px)] bg-white"
-        />
+        {/* Related */}
+        {related.length > 0 && <RelatedRow items={related} />}
       </div>
-    )}
+
+      {/* Fullscreen Reader */}
+      {pdfUrl && (
+        <div
+          className="fixed inset-0 z-[1000] bg-black/90"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) promptSaveThenClose();
+          }}
+        >
+          <div className="h-12 px-4 flex items-center justify-between text-white">
+            <div className="truncate pr-3">
+              {p.title} — {pdfTitle}
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-sm opacity-90">Trang</label>
+              <div className="flex items-center gap-1">
+                <button
+                  className="px-2 py-0.5 rounded bg-white/10 hover:bg-white/20"
+                  onClick={() => setReadingPage((v) => Math.max(1, Number(v || 1) - 1))}
+                >
+                  −
+                </button>
+                <input
+                  type="number"
+                  min={1}
+                  value={readingPage || 1}
+                  onChange={(e) => setReadingPage(Math.max(1, Number(e.target.value || 1)))}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') applyAndSavePage(readingPage);
+                  }}
+                  className="w-20 rounded px-2 py-0.5 text-black"
+                />
+                <button
+                  className="px-2 py-0.5 rounded bg-white/10 hover:bg-white/20"
+                  onClick={() => setReadingPage((v) => Math.max(1, Number(v || 1) + 1))}
+                >
+                  +
+                </button>
+              </div>
+              <button
+                onClick={() => applyAndSavePage(readingPage)}
+                disabled={savingPage}
+                className="px-3 py-1 rounded bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60"
+              >
+                {savingPage ? 'Saving your progress' : 'Save your progress'}
+              </button>
+              <button onClick={promptSaveThenClose} className="px-3 py-1 rounded bg-white/10 hover:bg-white/20">
+                Close
+              </button>
+            </div>
+          </div>
+          <iframe
+            src={pdfUrl + '#view=FitH&page=' + Math.max(1, Number(readingPage || 1))}
+            title={pdfTitle}
+            className="w-full h-[calc(100vh-48px)] bg-white"
+          />
+        </div>
+      )}
 
       {/* Toast */}
       <Toast open={toast.open} msg={toast.msg} onClose={toast.hide} />

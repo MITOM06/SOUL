@@ -33,6 +33,7 @@ class CreateContinuesTable extends Migration
             // Index để query nhanh
             $table->index('user_id', 'idx_continues_user');
             $table->index('product_id', 'idx_continues_product');
+            $table->unique(['user_id', 'product_id'], 'continues_user_product_unique');
         });
     }
 
