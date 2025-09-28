@@ -257,3 +257,16 @@ export const adminPaymentsAPI = {
   getById: (id: number) => api.get(`/v1/admin/payments/${id}`),
   delete: (id: number) => api.delete(`/v1/admin/payments/${id}`),
 };
+
+// ======================= NOTIFICATIONS =======================
+export const notificationsAPI = {
+  inbox: (params?: { page?: number; per_page?: number }) =>
+    api.get('/v1/notifications', { params }),
+};
+
+export const adminNotificationsAPI = {
+  broadcast: (payload: { target: 'all'|'users'|'admins'; title: string; message?: string; product_id?: number }) =>
+    api.post('/v1/admin/notifications/broadcast', payload),
+  individual: (payload: { user_id: number; title: string; message?: string; product_id?: number }) =>
+    api.post('/v1/admin/notifications/individual', payload),
+};
