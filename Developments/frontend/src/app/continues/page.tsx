@@ -1,4 +1,5 @@
-// Continues page.  Shows books and podcasts that the user has started but not finished.
+// Continues page. Shows books and podcasts the user has started but not finished.
+// "Remove" deletes progress in DB with robust fallbacks and clears local caches.
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
@@ -12,16 +13,17 @@ import api from '@/lib/api';
 /* ---------- Types ---------- */
 interface ContinueItem {
   product_id: number;
-  type?: string;            // 'ebook' | 'podcast' | ...
+  type?: string;              // 'ebook' | 'podcast' | ...
   current_page?: number;
   current_chapter?: number;
+  current_time_seconds?: number;
+  duration_seconds?: number;
 }
 interface BookLike {
   id: number;
   title: string;
   cover?: string | null;
   category?: string | null;
-  // kèm theo progress để hiển thị phụ nếu muốn
   __progress?: { current_page?: number; current_chapter?: number };
 }
 interface PodcastLike {
@@ -29,6 +31,7 @@ interface PodcastLike {
   title: string;
   image?: string | null;
   description?: string | null;
+  __progress?: { current_time_seconds?: number; duration_seconds?: number };
 }
 
 /* ---------- Helpers ---------- */
@@ -50,9 +53,23 @@ const FALLBACK_IMG = (() => {
   </svg>`;
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 })();
+const FALLBACK_PODCAST = (() => {
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='600' height='340'>
+    <rect width='100%' height='100%' fill='#eef2ff'/>
+    <text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle'
+      font-family='sans-serif' font-size='20' fill='#6366f1'>Podcast</text>
+  </svg>`;
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+})();
+const secToClock = (s?: number) => {
+  const t = Math.max(0, Math.floor(Number(s || 0)));
+  const m = Math.floor(t / 60);
+  const ss = t % 60;
+  return `${m}:${String(ss).padStart(2, '0')}`;
+};
 
-// Lấy continues từ localStorage (fallback khi không có API list)
-function readLocalContinues(): ContinueItem[] {
+/* ---------- Local fallback readers ---------- */
+function readLocalBookContinues(): ContinueItem[] {
   try {
     const out: ContinueItem[] = [];
     for (let i = 0; i < localStorage.length; i += 1) {
@@ -65,45 +82,73 @@ function readLocalContinues(): ContinueItem[] {
       }
     }
     return out;
-  } catch {
-    return [];
-  }
+  } catch { return []; }
+}
+function readLocalPodcastContinues(): ContinueItem[] {
+  try {
+    const out: ContinueItem[] = [];
+    for (let i = 0; i < localStorage.length; i += 1) {
+      const key = localStorage.key(i) || '';
+      if (key.startsWith('continue_podcast_')) {
+        const id = Number(key.replace('continue_podcast_', ''));
+        const raw = localStorage.getItem(key);
+        if (!raw) continue;
+        try {
+          const j = JSON.parse(raw);
+          const s = Number(j?.s || 0);
+          const d = Number(j?.d || 0);
+          if (s > 0 || d > 0) out.push({ product_id: id, type: 'podcast', current_time_seconds: s, duration_seconds: d });
+        } catch {}
+      }
+      if (key.startsWith('continue:podcast:')) {
+        const id = Number(key.split(':')[2] || 0);
+        const sec = Number(localStorage.getItem(key) || 0);
+        if (sec > 0) out.push({ product_id: id, type: 'podcast', current_time_seconds: sec, duration_seconds: 0 });
+      }
+    }
+    return out;
+  } catch { return []; }
+}
+function removeLocalProgress(productId: number, type: 'ebook' | 'podcast') {
+  try {
+    if (type === 'ebook') {
+      localStorage.removeItem(`continue:${productId}`);
+    } else {
+      localStorage.removeItem(`continue_podcast_${productId}`);
+      localStorage.removeItem(`continue:podcast:${productId}`);
+    }
+  } catch {}
 }
 
+/* ---------- Page ---------- */
 export default function ContinuesPage() {
   const [books, setBooks] = useState<BookLike[]>([]);
   const [podcasts, setPodcasts] = useState<PodcastLike[]>([]);
   const [loading, setLoading] = useState(true);
+  const [removing, setRemoving] = useState<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
 
     async function fetchFromServerList(): Promise<ContinueItem[]> {
+      // Nếu backend không có list, yên lặng trả rỗng
       try {
-        const resp = await api.get('/v1/continues'); // nếu có endpoint list
+        const resp = await api.get('/v1/continues');
         const arr = resp?.data?.data || resp?.data || [];
         if (Array.isArray(arr)) return arr as ContinueItem[];
-      } catch {
-        // ignore
-      }
+      } catch {}
       return [];
     }
 
     async function fetchProductMeta(pid: number) {
-      // ưu tiên endpoint có auth; fallback public
       try {
         const r1 = await api.get(`/v1/catalog/products/${pid}`);
         return r1?.data?.data || r1?.data;
       } catch {
         try {
           const r2 = await fetch(`${API_BASE}/v1/catalog/products/${pid}`);
-          if (r2.ok) {
-            const j = await r2.json();
-            return j?.data || j;
-          }
-        } catch {
-          // ignore
-        }
+          if (r2.ok) return (await r2.json())?.data || null;
+        } catch {}
       }
       return null;
     }
@@ -111,112 +156,201 @@ export default function ContinuesPage() {
     async function run() {
       setLoading(true);
 
-      // 1) Lấy danh sách tiếp tục từ server; nếu rỗng => dùng localStorage
       const serverContinues = await fetchFromServerList();
-      const localContinues = readLocalContinues();
+      const localBooks = readLocalBookContinues();
+      const localPods  = readLocalPodcastContinues();
 
-      // Merge theo product_id (server ưu tiên)
       const map = new Map<number, ContinueItem>();
-      for (const c of localContinues) map.set(c.product_id, c);
+      for (const c of [...localBooks, ...localPods]) map.set(c.product_id, c);
       for (const c of serverContinues) map.set(c.product_id, c);
 
       const all = Array.from(map.values());
-      const bookIds = all
-        .filter((c) => (c.type || 'ebook').toLowerCase() === 'ebook')
-        .map((c) => c.product_id);
+      const bookIds = all.filter(c => (c.type || 'ebook').toLowerCase() === 'ebook').map(c => c.product_id);
+      const podIds  = all.filter(c => (c.type || '').toLowerCase() === 'podcast').map(c => c.product_id);
 
-      // 2) Lấy meta từng product
-      const metas = await Promise.all(
-        bookIds.map(async (pid) => {
-          const meta = await fetchProductMeta(pid);
-          return { pid, meta };
-        })
-      );
-
+      const bookMetas = await Promise.all(bookIds.map(async pid => ({ pid, meta: await fetchProductMeta(pid) })));
       if (cancelled) return;
 
-      // 3) Map sang dữ liệu BookCard
-      const bookList: BookLike[] = metas
-        .filter((m) => !!m.meta)
-        .map(({ pid, meta }) => {
-          // cấu trúc product của backend hiện tại
-          const product = meta?.product || meta; // phòng khi API bọc trong {product, files}
-          const files = meta?.files || [];
-          const cover = toAbs(product?.thumbnail_url) || FALLBACK_IMG;
+      setBooks(bookMetas.filter(m => m.meta).map(({ pid, meta }) => {
+        const product = meta?.product || meta;
+        const cover = toAbs(product?.thumbnail_url) || FALLBACK_IMG;
+        const prog = map.get(pid);
+        return {
+          id: product?.id ?? pid,
+          title: product?.title ?? 'Untitled',
+          cover,
+          category: product?.category || null,
+          __progress: { current_page: prog?.current_page, current_chapter: prog?.current_chapter },
+        } as BookLike;
+      }));
 
-          const prog = map.get(pid);
-          return {
-            id: product?.id ?? pid,
-            title: product?.title ?? 'Untitled',
-            cover,
-            category: product?.category || null,
-            __progress: { current_page: prog?.current_page, current_chapter: prog?.current_chapter },
-          } as BookLike;
-        });
+      const podMetas = await Promise.all(podIds.map(async pid => ({ pid, meta: await fetchProductMeta(pid) })));
+      if (cancelled) return;
 
-      setBooks(bookList);
+      const pods = podMetas.filter(m => m.meta).map(({ pid, meta }) => {
+        const product = meta?.product || meta;
+        const image = toAbs(product?.thumbnail_url) || FALLBACK_PODCAST;
+        const prog = map.get(pid);
+        return {
+          id: product?.id ?? pid,
+          title: product?.title ?? 'Untitled',
+          image,
+          description: product?.description || null,
+          __progress: { current_time_seconds: prog?.current_time_seconds, duration_seconds: prog?.duration_seconds },
+        } as PodcastLike;
+      });
 
-      // 4) Podcasts: nếu API chưa hỗ trợ, dùng demo
-      setPodcasts(demoPodcasts.slice(0, 6) as any);
-
+      setPodcasts(pods.length ? pods : (demoPodcasts.slice(0, 6) as any));
       setLoading(false);
     }
 
     run();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, []);
 
   const bookItems = useMemo(() => {
     if (books.length) return books;
-    return demoBooks.slice(3, 6).map((b) => ({
-      id: (b as any).id,
-      title: (b as any).title,
-      cover: (b as any).cover,
-    })) as BookLike[];
+    return demoBooks.slice(3, 6).map(b => ({ id: (b as any).id, title: (b as any).title, cover: (b as any).cover })) as BookLike[];
   }, [books]);
 
-  const podcastItems = podcasts.length ? podcasts : (demoPodcasts.slice(3, 6) as any as PodcastLike[]);
+  const podcastItems = useMemo(() => {
+    if (podcasts.length) return podcasts;
+    return demoPodcasts.slice(3, 6) as any as PodcastLike[];
+  }, [podcasts]);
+
+  // ---- HARD DELETE with aggressive fallbacks (handles podcast) ----
+  const removeProgress = async (productId: number, type: 'ebook' | 'podcast') => {
+    if (!productId) return;
+    if (!window.confirm('Remove progress permanently for this item? This cannot be undone.')) return;
+
+    setRemoving(productId);
+    const prevBooks = books, prevPods = podcasts;
+
+    // optimistic UI
+    if (type === 'ebook') setBooks(prev => prev.filter(b => b.id !== productId));
+    else setPodcasts(prev => prev.filter(p => p.id !== productId));
+
+    // clear local cache now
+    removeLocalProgress(productId, type);
+
+    // payloads thử theo nhiều “dialect” của backend
+    const payloads: any[] = [
+      // Podcast chuẩn
+      { current_time_seconds: 0, duration_seconds: 0 },
+      // Book dialect (nhiều API dùng chung)
+      { current_page: 0, current_chapter: 1 },
+      // Hợp nhất 4 trường (đảm bảo reset)
+      { current_time_seconds: 0, duration_seconds: 0, current_page: 0, current_chapter: 1 },
+      // Một số backend có cờ reset
+      { reset: true },
+    ];
+
+    const tryFetch = async (method: 'POST'|'PUT'|'PATCH', body: any) => {
+      const r = await fetch(`${API_BASE}/v1/continues/${productId}`, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(body),
+      });
+      return r.ok;
+    };
+
+    try {
+      // 1) DELETE nếu backend hỗ trợ
+      await api.delete(`/v1/continues/${productId}`);
+      setRemoving(null);
+      return;
+    } catch {}
+
+    // 2) Fallback POST/PUT/PATCH với nhiều payload
+    for (const body of payloads) {
+      try { if (await tryFetch('POST', body)) { setRemoving(null); return; } } catch {}
+    }
+    for (const body of payloads) {
+      try { if (await tryFetch('PUT', body))  { setRemoving(null); return; } } catch {}
+    }
+    for (const body of payloads) {
+      try { if (await tryFetch('PATCH', body)) { setRemoving(null); return; } } catch {}
+    }
+
+    // Revert nếu tất cả fail
+    setBooks(prevBooks);
+    setPodcasts(prevPods);
+    setRemoving(null);
+    alert('Failed to remove progress.');
+  };
 
   return (
     <UserPanelLayout>
       <div className="space-y-6">
         <h1 className="text-2xl font-bold">Continues</h1>
 
+        {/* Books */}
         <div className="space-y-3">
           <div className="flex items-baseline justify-between">
             <h2 className="text-xl font-semibold">In-progress Books</h2>
             {loading && <span className="text-sm text-zinc-500">Loading…</span>}
           </div>
+
           {bookItems.length === 0 ? (
             <div className="text-sm text-zinc-600">No books in progress.</div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {bookItems.map((b) => (
-                <div key={b.id} className="relative">
+                <div key={b.id} className="relative group">
                   <BookCard book={{ id: b.id, title: b.title, cover: b.cover } as any} />
-                  {/* hiển thị progress nhẹ (tùy chọn) */}
                   {b.__progress?.current_page ? (
-                    <div className="absolute left-2 bottom-2 rounded-md bg-black/60 text-white text-xs px-2 py-0.5">
+                    <div className="absolute left-2 bottom-2 rounded-md bg-black/65 text-white text-xs px-2 py-0.5">
                       Page {b.__progress.current_page}
                     </div>
                   ) : null}
+                  <button
+                    disabled={removing === b.id}
+                    onClick={() => removeProgress(b.id, 'ebook')}
+                    className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity
+                               text-xs px-2 py-1 rounded bg-rose-600 text-white hover:bg-rose-700 disabled:opacity-60"
+                  >
+                    {removing === b.id ? 'Removing…' : 'Remove'}
+                  </button>
                 </div>
               ))}
             </div>
           )}
         </div>
 
+        {/* Podcasts */}
         <div className="space-y-3">
-          <h2 className="text-xl font-semibold">In-progress Podcasts</h2>
+          <div className="flex items-baseline justify-between">
+            <h2 className="text-xl font-semibold">In-progress Podcasts</h2>
+            {loading && <span className="text-sm text-zinc-500">Loading…</span>}
+          </div>
+
           {podcastItems.length === 0 ? (
             <div className="text-sm text-zinc-600">No podcasts in progress.</div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {podcastItems.map((p) => (
-                <PodcastCard key={p.id} podcast={p as any} />
-              ))}
+              {podcastItems.map((p) => {
+                const cur = (p as any).__progress?.current_time_seconds as number | undefined;
+                const dur = (p as any).__progress?.duration_seconds as number | undefined;
+                return (
+                  <div key={p.id} className="relative group">
+                    <PodcastCard podcast={{ id: p.id, title: p.title, image: p.image, description: p.description } as any} />
+                    {(cur || 0) > 0 || (dur || 0) > 0 ? (
+                      <div className="absolute left-2 bottom-2 rounded-md bg-black/65 text-white text-xs px-2 py-0.5">
+                        {secToClock(cur)}{(dur || 0) > 0 ? ` / ${secToClock(dur)}` : ''}
+                      </div>
+                    ) : null}
+                    <button
+                      disabled={removing === p.id}
+                      onClick={() => removeProgress(p.id, 'podcast')}
+                      className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity
+                                 text-xs px-2 py-1 rounded bg-rose-600 text-white hover:bg-rose-700 disabled:opacity-60"
+                    >
+                      {removing === p.id ? 'Removing…' : 'Remove'}
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
