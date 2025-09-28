@@ -28,6 +28,7 @@ export default function UpgradePage() {
   const isLoggedIn = Boolean(user);
   const isAdmin = role === 'admin';
 
+
   const visiblePlans = useMemo(() => {
     if (subscriptionLevel === 'vip') return [];
     if (subscriptionLevel === 'premium') return plans.filter(p => p.key === 'vip');
@@ -82,6 +83,9 @@ export default function UpgradePage() {
               <p className="text-3xl font-extrabold mt-2">{plan.price}</p>
               <p className="text-sm text-zinc-700 mt-2">{plan.description}</p>
               <button onClick={() => choosePlan(plan)} className="mt-4 btn w-full">Choose VIP</button>
+              <div className="mt-3 text-center">
+                <a href="/upgrade/vip" className="text-sm text-[color:var(--brand-600)] hover:underline">View VIP details</a>
+              </div>
             </div>
           ))}
         </div>
@@ -140,6 +144,13 @@ export default function UpgradePage() {
             <button onClick={() => choosePlan(plan)} className="mt-6 btn w-full">
               Choose {plan.name}
             </button>
+            {plan.key !== 'basic' && (
+              <div className="mt-3">
+                <a href={`/upgrade/${plan.key}`} className="text-sm text-[color:var(--brand-600)] hover:underline">
+                  View details
+                </a>
+              </div>
+            )}
           </div>
         ))}
       </div>

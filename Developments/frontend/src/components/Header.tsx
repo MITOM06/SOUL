@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { normalizeRole } from "@/lib/role";
 import { ShoppingCartIcon, BellIcon } from "@heroicons/react/24/outline";
 import { useCart } from "@/contexts/CartContext";
+import { notificationsAPI } from "@/lib/api";
 
 /* ========= Small helpers ========= */
 function useClickOutside<T extends HTMLElement>(open: boolean, onClose: () => void) {
@@ -112,6 +113,38 @@ export default function Header() {
     return () => clearTimeout(t);
   }, [count]);
 
+  // Unread notifications dot
+  const [unread, setUnread] = useState(0);
+  const [hasNew, setHasNew] = useState(false);
+  const fetchUnread = async () => {
+    try {
+      const res = await notificationsAPI.unreadCount();
+      const n = Number(res.data?.data?.unread || 0);
+      if (!Number.isNaN(n)) setUnread(n);
+      // also check latest notification vs last seen timestamp
+      const latestRes = await notificationsAPI.inbox({ page: 1, per_page: 1 });
+      const items = latestRes.data?.data?.items || latestRes.data?.data || [];
+      const latest = items[0]?.created_at;
+      const who = user?.id ? `${user.id}_${role}` : `guest_${role}`;
+      const key = `notif_seen_${who}`;
+      const seen = (typeof window !== 'undefined') ? localStorage.getItem(key) : null;
+      if (latest) {
+        const latestTs = new Date(latest).getTime();
+        const seenTs = seen ? new Date(seen).getTime() : 0;
+        setHasNew(latestTs > seenTs);
+      }
+    } catch {
+      // ignore
+    }
+  };
+  useEffect(() => {
+    fetchUnread();
+    const id = setInterval(fetchUnread, 30000);
+    const handler = () => fetchUnread();
+    window.addEventListener('notifications-updated', handler as any);
+    return () => { clearInterval(id); window.removeEventListener('notifications-updated', handler as any); };
+  }, []);
+
   const nav = [
     { href: "/", label: "(SOUL) Stories Online, Unified Library" },
     { href: "/hot", label: "Hot" },
@@ -178,25 +211,30 @@ export default function Header() {
                 title="Notifications"
               >
                 <BellIcon className="h-6 w-6 text-zinc-700" />
+                {(unread > 0 || hasNew) && (
+                  <span className="absolute top-1.5 right-1.5 block h-2.5 w-2.5 rounded-full bg-rose-500 ring-2 ring-white" />
+                )}
               </Link>
 
-              {/* Cart (guests can view) */}
-              <Link
-                href="/orders"
-                className={cn(
-                  "relative p-2 rounded-lg hover:bg-gray-100 transition",
-                  bump && "animate-[cartbump_.3s_ease-out]"
-                )}
-                aria-label="Open cart"
-                title="Cart"
-              >
-                <ShoppingCartIcon className="h-6 w-6 text-zinc-700" />
-                {count > 0 && (
-                  <span className="absolute -top-1 -right-1 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full grid place-items-center min-w-5 h-5 bg-[color:var(--brand-500,#111)]">
-                    {count}
-                  </span>
-                )}
-              </Link>
+              {/* Cart – hidden for admins */}
+              {role !== "admin" && (
+                <Link
+                  href="/orders"
+                  className={cn(
+                    "relative p-2 rounded-lg hover:bg-gray-100 transition",
+                    bump && "animate-[cartbump_.3s_ease-out]"
+                  )}
+                  aria-label="Open cart"
+                  title="Cart"
+                >
+                  <ShoppingCartIcon className="h-6 w-6 text-zinc-700" />
+                  {count > 0 && (
+                    <span className="absolute -top-1 -right-1 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full grid place-items-center min-w-5 h-5 bg-[color:var(--brand-500,#111)]">
+                      {count}
+                    </span>
+                  )}
+                </Link>
+              )}
 
               {/* Auth area */}
               {isLoading ? (

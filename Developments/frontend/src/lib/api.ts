@@ -262,6 +262,8 @@ export const adminPaymentsAPI = {
 export const notificationsAPI = {
   inbox: (params?: { page?: number; per_page?: number }) =>
     api.get('/v1/notifications', { params }),
+  unreadCount: () => api.get('/v1/notifications/unread-count'),
+  markRead: (ids?: number[]) => api.post('/v1/notifications/mark-read', ids && ids.length ? { ids } : {}),
 };
 
 export const adminNotificationsAPI = {
@@ -269,4 +271,10 @@ export const adminNotificationsAPI = {
     api.post('/v1/admin/notifications/broadcast', payload),
   individual: (payload: { user_id: number; title: string; message?: string; product_id?: number }) =>
     api.post('/v1/admin/notifications/individual', payload),
+};
+
+/* ======================= SUBSCRIPTION CATALOG (PUBLIC) ======================= */
+export const subscriptionCatalogAPI = {
+  details: (plan?: 'premium'|'vip') =>
+    api.get('/v1/subscriptions/plan-details', { params: plan ? { plan } : {} }),
 };

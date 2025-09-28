@@ -30,6 +30,7 @@ use App\Http\Controllers\Api\V1\Admin\NotificationController as AdminNotificatio
 // ➕ Users Subscriptions (thêm mới)
 use App\Http\Controllers\Api\V1\Users\UserSubscriptionController as UserSubController;
 use App\Http\Controllers\Api\V1\Admin\UserSubscriptionController  as AdminUserSubController;
+use App\Http\Controllers\Api\V1\Users\PlanCatalogController;
 
 Route::get('/health', fn() => response()->json(['ok' => true, 'ts' => now()->toISOString()]));
 
@@ -45,6 +46,9 @@ Route::prefix('v1')->group(function () {
     // ---------------- Public Products ----------------
     Route::get('products',           [ProductController::class, 'index']);
     Route::get('products/{product}', [ProductController::class, 'show']);
+
+    // Subscriptions plan details (public)
+    Route::get('subscriptions/plan-details', [PlanCatalogController::class, 'details']);
 
 
     // =====================================================
@@ -99,6 +103,8 @@ Route::prefix('v1')->group(function () {
 
         // Notifications (User inbox)
         Route::get('notifications', [UserNotificationController::class, 'index']);
+        Route::get('notifications/unread-count', [UserNotificationController::class, 'unreadCount']);
+        Route::post('notifications/mark-read',   [UserNotificationController::class, 'markRead']);
 
 
         // ---------------- Payment public ----------------
