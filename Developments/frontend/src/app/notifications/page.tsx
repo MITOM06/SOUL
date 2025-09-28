@@ -1,24 +1,44 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import UserPanelLayout from "@/components/UserPanelLayout";
+import api from "@/lib/api";
 
-type Note = { id: number; from: string; subject: string; body: string; date: string };
-
-const demo: Note[] = [
-  { id: 1, from: 'Admin', subject: 'Welcome to SOUL', body: 'Thanks for joining. Enjoy reading and listening!', date: new Date().toLocaleString() },
-  { id: 2, from: 'Admin', subject: 'New books this week', body: 'We added 10 new educational titles.', date: new Date().toLocaleString() },
-];
+type InboxItem = {
+  id: number;
+  to_role: 'user' | 'admin' | null;
+  to_user_id?: number | null;
+  from_user_id?: number | null;
+  title: string;
+  body?: string | null;
+  payload?: any;
+  created_at: string;
+};
 
 export default function NotificationsPage() {
-  const [items, setItems] = useState<Note[]>(demo);
-  const [active, setActive] = useState<Note | null>(items[0] || null);
-  const [reply, setReply] = useState('');
+  const [items, setItems] = useState<InboxItem[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string|null>(null);
+  const [activeId, setActiveId] = useState<number | null>(null);
+  const active = useMemo(() => items.find(i => i.id === activeId) || items[0] || null, [items, activeId]);
 
-  const sendReply = () => {
-    // demo only
-    setReply('');
-  };
+  useEffect(() => {
+    const ac = new AbortController();
+    (async () => {
+      try {
+        setLoading(true); setError(null);
+        const res = await api.get('/v1/notifications', { signal: ac.signal as any });
+        const arr: InboxItem[] = res.data?.data?.items || [];
+        setItems(arr);
+        if (arr.length > 0) setActiveId(arr[0].id);
+      } catch (e: any) {
+        setError(e?.message || 'Failed to load inbox');
+      } finally {
+        setLoading(false);
+      }
+    })();
+    return () => ac.abort();
+  }, []);
 
   return (
     <UserPanelLayout>
@@ -26,29 +46,37 @@ export default function NotificationsPage() {
         {/* list */}
         <div className="border-r bg-white">
           <div className="p-3 font-semibold">Inbox</div>
+          {loading && <div className="p-3 text-sm text-zinc-500">Loading…</div>}
+          {error && <div className="p-3 text-sm text-red-600">{error}</div>}
           <div className="divide-y">
             {items.map(n => (
-              <button key={n.id} className={`w-full text-left p-3 hover:bg-gray-50 ${active?.id===n.id?'bg-gray-50':''}`} onClick={()=>setActive(n)}>
-                <div className="text-sm font-medium">{n.subject}</div>
-                <div className="text-xs text-zinc-600">{n.from} · {n.date}</div>
+              <button key={n.id} className={`w-full text-left p-3 hover:bg-gray-50 ${active?.id===n.id?'bg-gray-50':''}`} onClick={()=>setActiveId(n.id)}>
+                <div className="text-sm font-medium line-clamp-1">{n.title}</div>
+                <div className="text-xs text-zinc-600">{new Date(n.created_at).toLocaleString()}</div>
               </button>
             ))}
+            {!loading && items.length === 0 && (
+              <div className="p-3 text-sm text-zinc-500">No notifications</div>
+            )}
           </div>
         </div>
         {/* detail */}
         <div className="bg-white p-4 grid content-start gap-3">
           {active ? (
             <>
-              <div className="text-lg font-semibold">{active.subject}</div>
-              <div className="text-sm text-zinc-600">From {active.from} · {active.date}</div>
-              <div className="mt-2 text-sm">{active.body}</div>
-              <div className="mt-4 border-t pt-3">
-                <label className="text-sm text-zinc-600">Reply</label>
-                <textarea value={reply} onChange={e=>setReply(e.target.value)} className="mt-1 w-full border rounded px-3 py-2 h-28" placeholder="Write your reply..." />
-                <div className="mt-2 flex justify-end">
-                  <button onClick={sendReply} className="px-4 py-2 bg-blue-600 text-white rounded">Send</button>
+              <div className="text-lg font-semibold">{active.title}</div>
+              <div className="text-xs text-zinc-500">{new Date(active.created_at).toLocaleString()}</div>
+              {active.payload?.product && (
+                <div className="mt-1 flex items-center gap-3 p-2 border rounded">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={active.payload.product.thumbnail_url || ''} alt="" className="h-16 w-12 object-cover rounded" />
+                  <div className="text-sm">
+                    <div className="font-medium">{active.payload.product.title}</div>
+                    <div className="text-xs text-zinc-500">{active.payload.product.type} · {active.payload.product.category || '—'}</div>
+                  </div>
                 </div>
-              </div>
+              )}
+              <div className="mt-2 text-sm whitespace-pre-wrap">{active.body || ''}</div>
             </>
           ) : (
             <div className="text-zinc-600">Select a notification</div>

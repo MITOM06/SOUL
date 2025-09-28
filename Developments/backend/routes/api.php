@@ -24,6 +24,8 @@ use App\Http\Controllers\Api\V1\Catalog\ProductWriteController;
 use App\Http\Controllers\Api\V1\Library\ContinueLiteController;
 use App\Http\Controllers\Api\V1\Library\LibraryController;
 use App\Http\Controllers\Api\V1\Media\YoutubeController;
+use App\Http\Controllers\Api\V1\NotificationController as UserNotificationController;
+use App\Http\Controllers\Api\V1\Admin\NotificationController as AdminNotificationController;
 
 // ➕ Users Subscriptions (thêm mới)
 use App\Http\Controllers\Api\V1\Users\UserSubscriptionController as UserSubController;
@@ -95,6 +97,9 @@ Route::prefix('v1')->group(function () {
         Route::post('subscriptions',          [UserSubController::class, 'store']);
         Route::delete('subscriptions/{id}',   [UserSubController::class, 'destroy']);
 
+        // Notifications (User inbox)
+        Route::get('notifications', [UserNotificationController::class, 'index']);
+
 
         // ---------------- Payment public ----------------
         Route::post('payment/checkout', [PaymentController::class, 'checkout']);
@@ -140,6 +145,10 @@ Route::prefix('v1')->group(function () {
         Route::get('payments', [PaymentController::class, 'adminIndex']);
         Route::get('payments/history', [PaymentController::class, 'adminHistory']);
         Route::delete('payments/{id}', [PaymentController::class, 'adminDelete']);
+
+        // Notifications (Admin send)
+        Route::post('notifications/broadcast',  [AdminNotificationController::class, 'broadcast']);
+        Route::post('notifications/individual', [AdminNotificationController::class, 'individual']);
     });
 
     // =====================================================
