@@ -6,8 +6,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import UserPanelLayout from '@/components/UserPanelLayout';
 import BookCard from '@/components/BookCard';
 import PodcastCard from '@/components/PodcastCard';
-import { demoBooks } from '@/data/demoBooks';
-import { demoPodcasts } from '@/data/demoPodcasts';
+// No demo fallbacks here; only real user progress should show
 import api from '@/lib/api';
 
 /* ---------- Types ---------- */
@@ -29,7 +28,7 @@ interface BookLike {
 interface PodcastLike {
   id: number;
   title: string;
-  image?: string | null;
+  cover?: string | null;
   description?: string | null;
   __progress?: { current_time_seconds?: number; duration_seconds?: number };
 }
@@ -165,8 +164,23 @@ export default function ContinuesPage() {
       for (const c of serverContinues) map.set(c.product_id, c);
 
       const all = Array.from(map.values());
-      const bookIds = all.filter(c => (c.type || 'ebook').toLowerCase() === 'ebook').map(c => c.product_id);
-      const podIds  = all.filter(c => (c.type || '').toLowerCase() === 'podcast').map(c => c.product_id);
+      // Classify each continue item ONCE with clear precedence:
+      // 1) If has time > 0 -> podcast
+      // 2) Else if has page > 0 -> ebook
+      // 3) Else use provided type
+      const types = new Map<number, 'ebook' | 'podcast'>();
+      for (const c of all) {
+        const t = String(c.type || '').toLowerCase();
+        if ((c.current_time_seconds || 0) > 0) {
+          types.set(c.product_id, 'podcast');
+        } else if ((c.current_page || 0) > 0) {
+          types.set(c.product_id, 'ebook');
+        } else if (t === 'podcast' || t === 'ebook') {
+          types.set(c.product_id, t as any);
+        }
+      }
+      const bookIds = Array.from(types.entries()).filter(([,k]) => k==='ebook').map(([id]) => id);
+      const podIds  = Array.from(types.entries()).filter(([,k]) => k==='podcast').map(([id]) => id);
 
       const bookMetas = await Promise.all(bookIds.map(async pid => ({ pid, meta: await fetchProductMeta(pid) })));
       if (cancelled) return;
@@ -189,18 +203,18 @@ export default function ContinuesPage() {
 
       const pods = podMetas.filter(m => m.meta).map(({ pid, meta }) => {
         const product = meta?.product || meta;
-        const image = toAbs(product?.thumbnail_url) || FALLBACK_PODCAST;
+        const cover = toAbs(product?.thumbnail_url) || FALLBACK_PODCAST;
         const prog = map.get(pid);
         return {
           id: product?.id ?? pid,
           title: product?.title ?? 'Untitled',
-          image,
+          cover,
           description: product?.description || null,
           __progress: { current_time_seconds: prog?.current_time_seconds, duration_seconds: prog?.duration_seconds },
         } as PodcastLike;
       });
 
-      setPodcasts(pods.length ? pods : (demoPodcasts.slice(0, 6) as any));
+      setPodcasts(pods);
       setLoading(false);
     }
 
@@ -208,15 +222,9 @@ export default function ContinuesPage() {
     return () => { cancelled = true; };
   }, []);
 
-  const bookItems = useMemo(() => {
-    if (books.length) return books;
-    return demoBooks.slice(3, 6).map(b => ({ id: (b as any).id, title: (b as any).title, cover: (b as any).cover })) as BookLike[];
-  }, [books]);
+  const bookItems = useMemo(() => books, [books]);
 
-  const podcastItems = useMemo(() => {
-    if (podcasts.length) return podcasts;
-    return demoPodcasts.slice(3, 6) as any as PodcastLike[];
-  }, [podcasts]);
+  const podcastItems = useMemo(() => podcasts, [podcasts]);
 
   // ---- HARD DELETE with aggressive fallbacks (handles podcast) ----
   const removeProgress = async (productId: number, type: 'ebook' | 'podcast') => {
@@ -328,13 +336,13 @@ export default function ContinuesPage() {
           {podcastItems.length === 0 ? (
             <div className="text-sm text-zinc-600">No podcasts in progress.</div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
               {podcastItems.map((p) => {
                 const cur = (p as any).__progress?.current_time_seconds as number | undefined;
                 const dur = (p as any).__progress?.duration_seconds as number | undefined;
                 return (
                   <div key={p.id} className="relative group">
-                    <PodcastCard podcast={{ id: p.id, title: p.title, image: p.image, description: p.description } as any} />
+                    <PodcastCard podcast={{ id: p.id, title: p.title, cover: p.cover, description: p.description } as any} variant="wide" />
                     {(cur || 0) > 0 || (dur || 0) > 0 ? (
                       <div className="absolute left-2 bottom-2 rounded-md bg-black/65 text-white text-xs px-2 py-0.5">
                         {secToClock(cur)}{(dur || 0) > 0 ? ` / ${secToClock(dur)}` : ''}

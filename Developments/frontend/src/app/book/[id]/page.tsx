@@ -313,12 +313,15 @@ export default function BookDetail() {
     return () => ac.abort();
   }, [id, isLoggedIn]);
 
-  // sync page outside when server progress changes + store to local
+  // sync page outside when server progress changes + store to local (only when > 0)
   useEffect(() => {
     const cur = Math.max(0, Number(progress?.current_page || 0));
     setPage(cur);
-    setLocalContinue(id, cur);
-    if (isReading) setLastSavedPage(cur || 1);
+    try {
+      if (cur > 0) setLocalContinue(id, cur);
+      else if (id) localStorage.removeItem(`continue:${id}`);
+    } catch {}
+    if (isReading && cur > 0) setLastSavedPage(cur);
   }, [progress?.current_page, isReading, id]);
 
   // NEW: when progress comes later, sync readingPage in overlay as well
@@ -405,14 +408,13 @@ export default function BookDetail() {
 
   const promptSaveThenClose = async () => {
     if (!pdfUrl) return;
-    if (isLoggedIn && Number(readingPage) !== Number(lastSavedPage)) {
-      const ok = window.confirm(`Saving to page ${readingPage}?`);
-      if (ok) {
-        try {
-          await applyAndSavePage(readingPage);
-        } catch {
-          saveKeepalive(readingPage);
-        }
+    // Auto-save without prompting
+    if (Number(readingPage) !== Number(lastSavedPage)) {
+      try {
+        await applyAndSavePage(readingPage);
+      } catch {
+        if (isLoggedIn) saveKeepalive(readingPage);
+        else setLocalContinue(id, readingPage);
       }
     }
     setPdfUrl('');
@@ -630,10 +632,10 @@ export default function BookDetail() {
                       <button
                         onClick={() => {
                           const previewFile = files.find((f) => !!f.is_preview && f.file_type === 'pdf');
-                          const target = fullPdf || previewFile;
-                          if (!target) return alert('Không có file PDF khả dụng.');
+                          const allowedFull = (canView || (priceCents === 0 && isCustomer));
+                          const target = (allowedFull ? fullPdf : null) || previewFile;
+                          if (!target) return alert('No PDF available.');
                           if (target === fullPdf) {
-                            if (!(canView || (priceCents === 0 && isCustomer))) return;
                             if (!isLoggedIn) {
                               const next = encodeURIComponent(window.location.pathname);
                               window.location.href = `/auth/login?next=${next}`;
@@ -644,10 +646,10 @@ export default function BookDetail() {
                             openPdfInline(p.id, previewFile!.id, `${p.title} — Preview`);
                           }
                         }}
-                        disabled={!(canView || (priceCents === 0 && isCustomer)) && !preview}
+                        disabled={!preview && !(canView || (priceCents === 0 && isCustomer))}
                         className="px-3 py-1 rounded bg-zinc-800 text-white disabled:opacity-50"
                       >
-                        Tiếp tục đọc
+                        Continue reading
                       </button>
                     </div>
                   </div>
@@ -754,7 +756,7 @@ export default function BookDetail() {
               {p.title} — {pdfTitle}
             </div>
             <div className="flex items-center gap-2">
-              <label className="text-sm opacity-90">Trang</label>
+              <label className="text-sm opacity-90">Page</label>
               <div className="flex items-center gap-1">
                 <button
                   className="px-2 py-0.5 rounded bg-white/10 hover:bg-white/20"
