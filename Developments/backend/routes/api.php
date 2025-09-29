@@ -173,8 +173,10 @@ Route::prefix('v1')->group(function () {
     Route::get('catalog/products/{product}/files/{file}/download', [ProductWriteController::class, 'downloadFile']);
 
     // Continue progress
-    Route::get('continues/{product}', [ContinueLiteController::class, 'show']);
+    Route::get('continues',            [ContinueLiteController::class, 'index']);
+    Route::get('continues/{product}',  [ContinueLiteController::class, 'show']);
     Route::post('continues/{product}', [ContinueLiteController::class, 'store']);
+    Route::delete('continues/{product}', [ContinueLiteController::class, 'destroy']);
 
     // Youtube
     Route::get('youtube/lookup', [YoutubeController::class, 'lookup']);
