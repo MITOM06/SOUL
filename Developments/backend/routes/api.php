@@ -13,6 +13,7 @@ use App\Http\Controllers\Api\V1\Commerce\PaymentController;
 use App\Http\Controllers\Api\V1\Users\UserController;
 
 use App\Http\Controllers\Api\V1\Admin\DashboardController as AdminDashboardController;
+use App\Http\Controllers\Api\V1\PublicStatsController;
 use App\Http\Controllers\Api\V1\Admin\AdminOrderController;
 use App\Http\Controllers\Api\V1\Admin\AdminOrderItemController;
 use App\Http\Controllers\Api\V1\Admin\SubscriptionController;
@@ -24,10 +25,13 @@ use App\Http\Controllers\Api\V1\Catalog\ProductWriteController;
 use App\Http\Controllers\Api\V1\Library\ContinueLiteController;
 use App\Http\Controllers\Api\V1\Library\LibraryController;
 use App\Http\Controllers\Api\V1\Media\YoutubeController;
+use App\Http\Controllers\Api\V1\NotificationController as UserNotificationController;
+use App\Http\Controllers\Api\V1\Admin\NotificationController as AdminNotificationController;
 
 // ➕ Users Subscriptions (thêm mới)
 use App\Http\Controllers\Api\V1\Users\UserSubscriptionController as UserSubController;
 use App\Http\Controllers\Api\V1\Admin\UserSubscriptionController  as AdminUserSubController;
+use App\Http\Controllers\Api\V1\Users\PlanCatalogController;
 
 Route::get('/health', fn() => response()->json(['ok' => true, 'ts' => now()->toISOString()]));
 
@@ -43,6 +47,14 @@ Route::prefix('v1')->group(function () {
     // ---------------- Public Products ----------------
     Route::get('products',           [ProductController::class, 'index']);
     Route::get('products/{product}', [ProductController::class, 'show']);
+
+
+    // Subscriptions plan details (public)
+    Route::get('subscriptions/plan-details', [PlanCatalogController::class, 'details']);
+
+    // Public aggregated stats (safe, no auth)
+    Route::get('public/stats', [PublicStatsController::class, 'counts']);
+
 
     // =====================================================
     // 🔹 Routes cần login
@@ -94,9 +106,15 @@ Route::prefix('v1')->group(function () {
         Route::get('library', [LibraryController::class, 'index']);
 
         // ➕ Users Subscriptions (USER)
-        Route::get('subscriptions',         [UserSubController::class, 'index']);
-        Route::post('subscriptions',        [UserSubController::class, 'store']);
-        Route::delete('subscriptions/{id}', [UserSubController::class, 'destroy']);
+        Route::get('subscriptions',           [UserSubController::class, 'index']);
+        Route::post('subscriptions',          [UserSubController::class, 'store']);
+        Route::delete('subscriptions/{id}',   [UserSubController::class, 'destroy']);
+
+        // Notifications (User inbox)
+        Route::get('notifications', [UserNotificationController::class, 'index']);
+        Route::get('notifications/unread-count', [UserNotificationController::class, 'unreadCount']);
+        Route::post('notifications/mark-read',   [UserNotificationController::class, 'markRead']);
+
 
         // ---------------- Payment public ----------------
         Route::post('payment/checkout', [PaymentController::class, 'checkout']);
@@ -136,10 +154,15 @@ Route::prefix('v1')->group(function () {
         // ➕ Users Subscriptions (ADMIN CRUD)
         Route::apiResource('users-sub', AdminUserSubController::class);
 
-        // Payments (admin)
-        Route::get('payments',           [PaymentController::class, 'adminIndex']);
-        Route::get('payments/history',   [PaymentController::class, 'adminHistory']);
-        Route::delete('payments/{id}',   [PaymentController::class, 'adminDelete']);
+        // Payment History
+        // Admin Payments
+        Route::get('payments', [PaymentController::class, 'adminIndex']);
+        Route::get('payments/history', [PaymentController::class, 'adminHistory']);
+        Route::delete('payments/{id}', [PaymentController::class, 'adminDelete']);
+
+        // Notifications (Admin send)
+        Route::post('notifications/broadcast',  [AdminNotificationController::class, 'broadcast']);
+        Route::post('notifications/individual', [AdminNotificationController::class, 'individual']);
     });
 
     // =====================================================
@@ -158,8 +181,10 @@ Route::prefix('v1')->group(function () {
     Route::get('catalog/products/{product}/files/{file}/download', [ProductWriteController::class, 'downloadFile']);
 
     // Continue progress
+    Route::get('continues',            [ContinueLiteController::class, 'index']);
     Route::get('continues/{product}',  [ContinueLiteController::class, 'show']);
     Route::post('continues/{product}', [ContinueLiteController::class, 'store']);
+    Route::delete('continues/{product}', [ContinueLiteController::class, 'destroy']);
 
     // Youtube
     Route::get('youtube/lookup', [YoutubeController::class, 'lookup']);

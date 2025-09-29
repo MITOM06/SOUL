@@ -6,11 +6,22 @@ import { ordersAPI } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 import UserPanelLayout from '@/components/UserPanelLayout';
 import{ useCart } from '@/contexts/CartContext';  
+// Helpers for absolute URLs
+const API_BASE = (process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api').replace(/\/$/, '');
+const ORIGIN = API_BASE.replace(/\/api$/, '');
+const toAbs = (u?: string | null) => {
+  if (!u) return '';
+  const s = u.trim();
+  if (s.startsWith('http://') || s.startsWith('https://')) return s;
+  if (s.startsWith('/')) return `${ORIGIN}${s}`;
+  return s;
+}
 // --- Interfaces ---
 interface Product {
   id: number;
   title: string;
   price_cents: number;
+  thumbnail_url?: string | null;
 }
 
 interface OrderItem {
@@ -116,8 +127,18 @@ export default function OrdersPage() {
             >
               {/* Left: Info */}
               <div className="flex items-center gap-4">
-                <div className="w-20 h-20 bg-gray-200 flex items-center justify-center rounded">
-                  <span className="text-xs text-gray-500">Image</span>
+                <div className="w-20 h-20 bg-gray-100 overflow-hidden rounded">
+                  {item.product?.thumbnail_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={toAbs(item.product.thumbnail_url)}
+                      alt={item.product.title}
+                      className="w-full h-full object-cover"
+                      loading="lazy"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-xs text-gray-500">No image</div>
+                  )}
                 </div>
                 <div>
                   <h2 className="font-semibold">{item.product?.title}</h2>

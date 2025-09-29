@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useAuth } from "@/contexts/AuthContext";
+import { normalizeRole } from "@/lib/role";
 import { useParams, useRouter } from "next/navigation";
 
 type ProductFile = {
@@ -13,6 +15,8 @@ type ProductFile = {
 const API_BASE = (process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api').replace(/\/$/, '');
 
 export default function EbookPreviewPage() {
+  const { user } = useAuth();
+  const role = normalizeRole(user);
   const router = useRouter();
   const params = useParams();
   const id = useMemo(() => {
@@ -28,6 +32,7 @@ export default function EbookPreviewPage() {
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
+    if (role === 'admin') return; // block fetch for admin
     if (!id) return;
     const ac = new AbortController();
     (async () => {
@@ -63,13 +68,19 @@ export default function EbookPreviewPage() {
       }
     })();
     return () => ac.abort();
-  }, [id]);
+  }, [id, role]);
 
   useEffect(() => () => {
     if (blobUrl) URL.revokeObjectURL(blobUrl);
   }, [blobUrl]);
 
   if (!id) return <div className="p-6 text-red-600">Invalid URL</div>;
+  if (role === 'admin') return (
+    <div className="p-6">
+      <div className="text-red-600 mb-2">Admin accounts cannot read previews.</div>
+      <button onClick={()=>router.back()} className="px-3 py-1 rounded border">Go back</button>
+    </div>
+  );
   if (loading) return <div className="p-6">Loading preview…</div>;
   if (err) return (
     <div className="p-6">
@@ -94,4 +105,3 @@ export default function EbookPreviewPage() {
     </div>
   );
 }
-

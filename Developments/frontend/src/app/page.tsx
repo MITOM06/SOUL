@@ -22,6 +22,29 @@ function Stat({ value, label }: { value: string; label: string }) {
   );
 }
 
+/** SVG placeholder tươi sáng (data URL) */
+const brightSVG = (w: number, h: number, from: string, to: string, label: string) =>
+  `data:image/svg+xml;utf8,${encodeURIComponent(
+    `<svg xmlns='http://www.w3.org/2000/svg' width='${w}' height='${h}'>
+      <defs>
+        <linearGradient id='g' x1='0' x2='1' y1='0' y2='1'>
+          <stop offset='0%' stop-color='${from}'/><stop offset='100%' stop-color='${to}'/>
+        </linearGradient>
+      </defs>
+      <rect width='100%' height='100%' rx='24' fill='url(#g)'/>
+      <circle cx='85%' cy='18%' r='40' fill='rgba(255,255,255,0.28)' />
+      <circle cx='12%' cy='82%' r='28' fill='rgba(255,255,255,0.18)' />
+      <text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle'
+        font-family='Inter, system-ui, sans-serif' font-size='22' fill='rgba(255,255,255,0.85)'>${label}</text>
+    </svg>`
+  )}`;
+
+const IMG_CIRCLE = brightSVG(900, 900, "#a78bfa", "#f0abfc", "SOUL");
+const IMG_SQUARE = brightSVG(900, 900, "#60a5fa", "#34d399", "Square");
+const IMG_RECT1  = brightSVG(1200, 800, "#f59e0b", "#ef4444", "Story");
+const IMG_RECT2  = brightSVG(1200, 800, "#22d3ee", "#8b5cf6", "Listen");
+const IMG_RECT3  = brightSVG(1200, 800, "#fb7185", "#f97316", "Flow");
+
 /** ================ Page ================ */
 export default function LandingHome() {
   /** Search state (home quick search) */
@@ -41,6 +64,33 @@ export default function LandingHome() {
   const [category, setCategory] = useState("");
   const [results, setResults] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+
+  // Public stats (real DB): users, podcasts, books, members (VIP+Premium)
+  type PublicStats = { total_users: number; total_podcasts: number; total_ebooks: number; total_members: number };
+  const [stats, setStats] = useState<PublicStats>({ total_users: 0, total_podcasts: 0, total_ebooks: 0, total_members: 0 });
+  const [statsLoading, setStatsLoading] = useState(true);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setStatsLoading(true);
+      try {
+        const r = await fetch(`${API_BASE}/v1/public/stats`);
+        if (r.ok) {
+          const j = await r.json();
+          const d = j?.data || j;
+          if (!cancelled && d) setStats({
+            total_users: Number(d.total_users || 0),
+            total_podcasts: Number(d.total_podcasts || 0),
+            total_ebooks: Number(d.total_ebooks || 0),
+            total_members: Number(d.total_members || 0),
+          });
+        }
+      } catch {}
+      if (!cancelled) setStatsLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, []);
+  const fmt = (n: number) => new Intl.NumberFormat('en-US').format(n || 0);
 
   const FALLBACK_IMG = `data:image/svg+xml;utf8,${encodeURIComponent(
     `<svg xmlns='http://www.w3.org/2000/svg' width='600' height='800'>
@@ -99,30 +149,44 @@ export default function LandingHome() {
     return () => window.removeEventListener("mousemove", onMove);
   }, []);
 
+  // 5 images in public/home␠ (note: folder name ends with a space)
+  // Use a trailing slash when joining and encode URI to preserve the space.
+  const HOME_DIR = '/home ';
+  const homeImages = useMemo(
+    () => [
+      '—Pngtree—gilded microphone a conceptual 3d_6299480.jpg',
+      '—Pngtree—modern podcast studio with neon_15937169.jpg',
+      'download.jpeg',
+      'download (1).jpeg',
+      '2e46dca2-8bc4-47a7-9afd-db1f3341f883.jpeg',
+    ],
+    []
+  );
+
   return (
     <div className={`space-y-20 ${mounted ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2"} transition-all duration-700 ease-out`}>
       {/* ===================== HERO ===================== */}
       <section className="relative w-screen left-[50%] right-[50%] -ml-[50vw] -mr-[50vw] overflow-hidden">
-        <div className="relative min-h-[84vh] sm:min-h-[90vh] flex items-center">
+        <div className="relative min-h-screen flex items-center">
           {/* Neon orbs */}
           <NeonOrb className="w-[52vw] h-[52vw] -left-20 -top-20 bg-[radial-gradient(circle_at_center,rgba(99,102,241,.22),transparent_60%)]" />
           <NeonOrb className="w-[48vw] h-[48vw] right-[-12vw] top-28 bg-[radial-gradient(circle_at_center,rgba(217,70,239,.20),transparent_60%)]" />
           <NeonOrb className="w-[60vw] h-[60vw] left-1/4 bottom-[-20vw] bg-[radial-gradient(circle_at_center,rgba(244,63,94,.16),transparent_60%)]" />
 
-          <div className="relative z-10 w-full px-6 md:px-12 grid lg:grid-cols-2 items-center gap-10">
+          <div className="relative z-10 w-full px-6 md:px-12 grid grid-cols-1 lg:grid-cols-2 items-center gap-12">
             {/* Left copy */}
             <div className="space-y-6">
               <div className="inline-flex items-center gap-2 bg-white/80 backdrop-blur px-3 py-1 rounded-full ring-1 ring-zinc-200 text-xs font-semibold text-zinc-700 shadow-sm">
                 <span className="inline-block h-2 w-2 rounded-full bg-[color:var(--brand-500)]" />
                 Welcome to SOUL
               </div>
-              <h1 className="text-4xl md:text-6xl font-extrabold leading-tight tracking-tight text-zinc-900">
+              <h1 className="text-5xl md:text-7xl font-extrabold leading-tight tracking-tight text-zinc-900">
                 Stories Online,
                 <span className="block text-transparent bg-clip-text bg-gradient-to-tr from-indigo-500 via-fuchsia-500 to-rose-500">
                   Unified Library
                 </span>
               </h1>
-              <p className="text-zinc-700 max-w-xl">
+              <p className="text-lg md:text-xl text-zinc-700">
                 A vibrant home for ebooks and podcasts—with a neon heartbeat.
                 Read, listen, and collect—your journey begins here.
               </p>
@@ -142,28 +206,53 @@ export default function LandingHome() {
                 </Link>
               </div>
 
-              {/* Stats */}
+              {/* Stats (real DB) */}
               <div className="mt-6 flex flex-wrap gap-3">
-                <Stat value="25k+" label="Titles" />
-                <Stat value="48k+" label="Listeners" />
-                <Stat value="1.2M" label="Pages read" />
-                <Stat value="4.8★" label="Avg. rating" />
+                <Stat value={statsLoading ? '…' : fmt(stats.total_users)} label="Users" />
+                <Stat value={statsLoading ? '…' : fmt(stats.total_podcasts)} label="Podcasts" />
+                <Stat value={statsLoading ? '…' : fmt(stats.total_ebooks)} label="Books" />
+                <Stat value={statsLoading ? '…' : fmt(stats.total_members)} label="Members (VIP+Premium)" />
               </div>
             </div>
 
-            {/* Right art panel */}
+            {/* Art panel (mosaic) – artistic collage using 5 images from public/home␠ */}
             <div
               ref={artRef}
-              className="relative h-[360px] md:h-[520px] [transform:perspective(1200px)_rotateX(var(--rx,0deg))_rotateY(var(--ry,0deg))] transition-transform duration-200 ease-out will-change-transform"
+              className="relative w-full h-[60vh] md:h-[72vh] [transform:perspective(1200px)_rotateX(var(--rx,0deg))_rotateY(var(--ry,0deg))] transition-transform duration-200 ease-out will-change-transform"
             >
-              <div className="absolute inset-0 rounded-3xl bg-white/70 backdrop-blur ring-1 ring-zinc-200 shadow-xl" />
-              {/* floating tiles */}
-              <div className="absolute inset-0">
-                <div className="absolute left-6 top-6 h-28 w-40 rounded-2xl bg-gradient-to-br from-indigo-500/70 to-fuchsia-500/70 shadow-lg rotate-[-6deg] [transform:translate3d(var(--tx,0),var(--ty,0),0)] transition-transform duration-200" />
-                <div className="absolute right-8 top-10 h-36 w-36 rounded-full bg-gradient-to-tr from-fuchsia-500/70 to-rose-500/70 shadow-lg [transform:translate3d(calc(var(--tx,0)*0.6),calc(var(--ty,0)*0.6),0)] transition-transform duration-200" />
-                <div className="absolute left-1/2 -translate-x-1/2 top-24 h-44 w-72 rounded-3xl bg-gradient-to-br from-white/90 to-white/70 ring-1 ring-zinc-200 shadow-lg [transform:translate3d(calc(var(--tx,0)*0.3),calc(var(--ty,0)*0.3),0)] transition-transform duration-200" />
-                <div className="absolute left-8 bottom-10 h-24 w-24 rounded-xl bg-gradient-to-br from-rose-500/70 to-indigo-500/70 shadow-lg rotate-[8deg] [transform:translate3d(calc(var(--tx,0)*0.8),calc(var(--ty,0)*0.8),0)] transition-transform duration-200" />
-                <div className="absolute right-6 bottom-6 h-40 w-64 rounded-3xl bg-gradient-to-br from-white/90 to-white/60 ring-1 ring-zinc-200 shadow-lg [transform:translate3d(calc(var(--tx,0)*0.45),calc(var(--ty,0)*0.45),0)] transition-transform duration-200" />
+              <div className="relative h-full rounded-3xl bg-white/80 backdrop-blur ring-1 ring-zinc-200 shadow-xl p-4 md:p-6">
+                <div className="grid grid-rows-6 grid-cols-6 gap-4 h-full">
+                  {homeImages.map((name, idx) => {
+                    // Hand-crafted mosaic positions for 5 tiles
+                    const pos = [
+                      'row-span-4 col-span-3', // 0 big left
+                      'row-span-2 col-span-3', // 1 top right
+                      'row-span-2 col-span-2', // 2 bottom left
+                      'row-span-3 col-span-2', // 3 bottom middle
+                      'row-span-3 col-span-2', // 4 bottom right
+                    ][idx] || 'row-span-2 col-span-2';
+                    const tilt = ['-rotate-1','rotate-1','-rotate-[0.5deg]','rotate-[0.5deg]','-rotate-1'][idx] || '';
+                    return (
+                      <figure
+                        key={idx}
+                        className={`relative overflow-hidden rounded-2xl bg-zinc-100 ${pos} group`}
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={encodeURI(`${HOME_DIR}/${name}`)}
+                          alt={name}
+                          className={`w-full h-full object-cover ${tilt} transition-transform duration-500 group-hover:scale-[1.03]`}
+                          onError={(e) => {
+                            // graceful fallback to bright SVGs
+                            (e.currentTarget as HTMLImageElement).src = IMG_RECT1;
+                          }}
+                        />
+                        {/* Soft inner glow */}
+                        <span className="pointer-events-none absolute inset-0 ring-1 ring-white/40" />
+                      </figure>
+                    );
+                  })}
+                </div>
               </div>
             </div>
           </div>
@@ -256,43 +345,7 @@ export default function LandingHome() {
         </div>
       </section>
 
-      {/* ===================== Curated vignette ===================== */}
-      <section className="relative w-screen left-[50%] right-[50%] -ml-[50vw] -mr-[50vw]">
-        <div className="px-6 md:px-12 py-16 grid md:grid-cols-3 gap-6">
-          {[0, 1, 2].map((i) => (
-            <article
-              key={i}
-              className="relative overflow-hidden rounded-3xl group ring-1 ring-zinc-800/20"
-            >
-              <div className="absolute inset-0 bg-gradient-to-br from-zinc-900 to-zinc-800" />
-              <div className="relative h-64">
-                <div className="absolute inset-0 opacity-30 group-hover:opacity-40 transition">
-                  <div className="absolute -left-10 -top-10 w-72 h-72 rounded-full bg-[radial-gradient(circle_at_center,rgba(99,102,241,.35),transparent_60%)]" />
-                  <div className="absolute right-[-30px] bottom-[-30px] w-64 h-64 rounded-full bg-[radial-gradient(circle_at_center,rgba(217,70,239,.30),transparent_60%)]" />
-                </div>
-                <div className="absolute inset-0 grid place-items-center text-center px-8">
-                  <h3 className="text-white text-2xl font-bold tracking-tight transition-transform duration-300 group-hover:-translate-y-0.5">
-                    {i === 0
-                      ? "Read. Listen. Flow."
-                      : i === 1
-                      ? "Neon nights, bright stories."
-                      : "From page to sound."}
-                  </h3>
-                  <p className="mt-2 text-white/80 text-sm max-w-sm">
-                    {i === 0
-                      ? "Lose yourself in pages and episodes crafted for modern readers."
-                      : i === 1
-                      ? "A visual rhythm for a library that moves with you."
-                      : "Your narratives, your pace—carry them anywhere."}
-                  </p>
-                </div>
-              </div>
-              {/* subtle top border glow */}
-              <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-fuchsia-500/0 via-fuchsia-500/40 to-fuchsia-500/0" />
-            </article>
-          ))}
-        </div>
-      </section>
+      {/* Removed geometric image strip section as requested */}
 
       {/* ===================== CTA ===================== */}
       <section className="relative w-screen left-[50%] right-[50%] -ml-[50vw] -mr-[50vw]">
@@ -326,15 +379,7 @@ export default function LandingHome() {
         </div>
       </section>
 
-      {/* Local CSS for a soft diagonal shine sweep on cards (no Tailwind config needed) */}
-      <style jsx>{`
-        /* Optional: enable reduced motion respect automatically via OS settings */
-        @media (prefers-reduced-motion: reduce) {
-          .motion-safe\\:animate-pulse {
-            animation: none;
-          }
-        }
-      `}</style>
+      {/* Removed styled-jsx to avoid nested tags; motion-safe already respects reduced motion */}
     </div>
   );
 }

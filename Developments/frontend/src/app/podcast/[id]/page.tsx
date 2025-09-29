@@ -10,6 +10,7 @@ import React, {
 } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
+import PodcastCard from '@/components/PodcastCard';
 import api from '@/lib/api';
 import { useCart } from '@/contexts/CartContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -162,7 +163,6 @@ function useListenContinue(productId: number | null, enabled: boolean) {
     const variants: any[] = [
       { type: 'podcast', current_time_seconds: now, duration_seconds: total || undefined },
       { type: 'podcast', progress_seconds: now,       total_seconds: total || undefined },
-      { type: 'podcast', current_chapter: 1, current_page: Math.max(1, now || 1), total_pages: Math.max(1, total || 1) },
     ];
 
     let ok = false, lastErr: any = null;
@@ -188,34 +188,28 @@ function useListenContinue(productId: number | null, enabled: boolean) {
     }
   };
 
-  // Autosave on close/hidden
+  // Warn on close/hidden (no silent autosave; just set local cache)
   useEffect(() => {
     if (!enabled) return;
-    const handler = () => {
-      if (Math.abs(seconds - lastSaved.current) < 1) return;
-      try { if (lsKey) localStorage.setItem(lsKey, JSON.stringify({ s: Math.floor(seconds) })); } catch {}
-      fetch(`${API_BASE}/v1/continues/${productId}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          type: 'podcast',
-          current_time_seconds: Math.floor(seconds),
-          duration_seconds: Math.floor(duration || 0),
-        }),
-        keepalive: true,
-      }).catch(()=>{});
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (Math.abs(seconds - lastSaved.current) >= 1) {
+        try { if (lsKey) localStorage.setItem(lsKey, JSON.stringify({ s: Math.floor(seconds) })); } catch {}
+        e.preventDefault();
+        e.returnValue = '';
+      }
     };
-    window.addEventListener('beforeunload', handler);
-    window.addEventListener('pagehide', handler);
-    const vis = () => { if (document.visibilityState === 'hidden') handler(); };
-    document.addEventListener('visibilitychange', vis);
+    const onPageHide = () => {
+      if (Math.abs(seconds - lastSaved.current) >= 1) {
+        try { if (lsKey) localStorage.setItem(lsKey, JSON.stringify({ s: Math.floor(seconds) })); } catch {}
+      }
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    window.addEventListener('pagehide', onPageHide);
     return () => {
-      window.removeEventListener('beforeunload', handler);
-      window.removeEventListener('pagehide', handler);
-      document.removeEventListener('visibilitychange', vis);
+      window.removeEventListener('beforeunload', onBeforeUnload);
+      window.removeEventListener('pagehide', onPageHide);
     };
-  }, [enabled, seconds, duration, productId, lsKey]);
+  }, [enabled, seconds, productId, lsKey]);
 
   return { seconds, setSeconds, duration, setDuration, loaded, save };
 }
@@ -320,6 +314,16 @@ const YouTubeAudioOnly = forwardRef(function _YouTubeAudioOnly(
       handshakeId.current = null;
     };
   }, [resumeAt, dur, onProgress]);
+
+  // If saved resumeAt arrives after ready, seek to it
+  useEffect(() => {
+    const target = Math.max(0, Math.floor(resumeAt || 0));
+    if (!readyRef.current || target <= 0) return;
+    if (Math.abs((cur || 0) - target) > 1) {
+      post('seekTo', [target, true]);
+      setCur(target);
+    }
+  }, [resumeAt]);
 
   const play  = () => { setPlaying(true);  post('playVideo'); };
   const pause = () => { setPlaying(false); post('pauseVideo'); onSaveClick(cur, dur); };
@@ -431,6 +435,7 @@ export default function PodcastDetailPage() {
   const [loading, setLoading] = useState(true);
   const [favOn, setFavOn] = useState(false);
   const [canFav, setCanFav] = useState(true);
+  const [related, setRelated] = useState<any[]>([]);
 
   // fetch product + favourites
   useEffect(() => {
@@ -468,9 +473,66 @@ export default function PodcastDetailPage() {
   }, [id, isLoggedIn, isAdmin]);
 
   const { seconds, setSeconds, duration, setDuration, loaded, save } =
-    useListenContinue(id, isLoggedIn);
+    useListenContinue(id, isCustomer);
 
   const playerRef = useRef<AudioHandle>(null);
+  const [savedSec, setSavedSec] = useState(0);
+  const [leaveOpen, setLeaveOpen] = useState(false);
+  const [pendingUrl, setPendingUrl] = useState<string | 'back' | null>(null);
+
+  // After initial load, take current seconds as saved baseline
+  useEffect(() => { if (loaded) setSavedSec(seconds); }, [loaded]);
+  const hasUnsaved = Math.abs(Math.floor(seconds) - Math.floor(savedSec || 0)) >= 1;
+
+  // Intercept link clicks to confirm saving
+  useEffect(() => {
+    const onClick = (e: MouseEvent) => {
+      if (!hasUnsaved) return;
+      const target = e.target as Element | null;
+      if (!target) return;
+      const a = target.closest('a') as HTMLAnchorElement | null;
+      if (!a) return;
+      const href = a.getAttribute('href');
+      if (!href || href.startsWith('#')) return;
+      if (a.target === '_blank' || (e as any).metaKey || (e as any).ctrlKey || (e as any).shiftKey || (e as any).altKey) return;
+      e.preventDefault(); e.stopPropagation();
+      setPendingUrl(a.href);
+      setLeaveOpen(true);
+    };
+    document.addEventListener('click', onClick, true);
+    return () => document.removeEventListener('click', onClick, true);
+  }, [hasUnsaved]);
+
+  // Guard back/forward navigation
+  useEffect(() => {
+    const onPop = () => {
+      if (!hasUnsaved) return;
+      history.pushState(null, '', location.href);
+      setPendingUrl('back');
+      setLeaveOpen(true);
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, [hasUnsaved]);
+
+  // Load related podcasts (same category), ~7 items — keep this before any early return (Rules of Hooks)
+  useEffect(() => {
+    const cat = (data as any)?.product?.category as string | undefined;
+    const pid = (data as any)?.product?.id as number | undefined;
+    if (!cat || !pid) { setRelated([]); return; }
+    const ac = new AbortController();
+    (async () => {
+      try {
+        const params = new URLSearchParams({ type: 'podcast', per_page: '14', category: String(cat) });
+        const res = await fetch(`${API_BASE}/v1/catalog/products?${params.toString()}`, { signal: ac.signal });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const j = await res.json();
+        const items = (j?.data?.items || []).filter((it: any) => Number(it.id) !== Number(pid));
+        setRelated(items.slice(0, 7));
+      } catch { setRelated([]); }
+    })();
+    return () => ac.abort();
+  }, [data]);
 
   if (!id) return <div className="p-6 text-red-600">Invalid URL.</div>;
   if (loading || !loaded) return <div className="p-6">Loading…</div>;
@@ -481,7 +543,8 @@ export default function PodcastDetailPage() {
   const files = data.files || [];
   const canView = Boolean((data as any)?.access?.can_view);
   const priceCents = Number(p?.price_cents || 0);
-  const owned = canView || (priceCents === 0 && isCustomer);
+  // Align with book: only customers can listen; admin is blocked even if can_view
+  const owned = isCustomer && (canView || priceCents === 0);
 
   const ytPreviewFile = files.find(f => String(f.file_type).toLowerCase()==='youtube' && (f.is_preview===1 || f.is_preview===true));
   const ytFullFile    = files.find(f => String(f.file_type).toLowerCase()==='youtube' && !(f.is_preview===1 || f.is_preview===true));
@@ -490,11 +553,12 @@ export default function PodcastDetailPage() {
     watch: (parseMaybeJSON(f.meta)?.watch_url) || f.file_url,
     thumb: (parseMaybeJSON(f.meta)?.thumbnail_url) || p?.thumbnail_url || FALLBACK_IMG,
   } : null;
+  // Only allow media when owned; previews are disabled per requirement
   const yt  = owned
     ? (pickYt(ytFullFile) || pickYt(ytPreviewFile) || extractYoutubeFromFiles(files) || extractYoutubeFromProductMeta(p))
-    : (pickYt(ytPreviewFile) || null);
+    : null;
 
-  const aud = files.find(f => (f.file_type === 'audio' || /\.mp3(\?|$)/i.test(f.file_url)) && (owned || f.is_preview));
+  const aud = owned ? files.find(f => (f.file_type === 'audio' || /\.mp3(\?|$)/i.test(f.file_url))) : undefined;
   const cover = toAbs(p.thumbnail_url) || yt?.thumb || FALLBACK_IMG;
 
   const onBuy = async () => {
@@ -527,8 +591,25 @@ export default function PodcastDetailPage() {
 
   const saveNowEverywhere = async (cur: number, dur?: number) => {
     await save(cur, dur);
-    toast.show('Đã lưu tiến độ');
+    setSavedSec(Math.floor(cur || 0));
+    toast.show('Progress saved');
   };
+
+  const confirmLeave = async (saveIt: boolean) => {
+    const dest = pendingUrl;
+    setLeaveOpen(false);
+    if (saveIt) {
+      await saveNowEverywhere(seconds, duration);
+    }
+    if (dest === 'back') {
+      window.history.back();
+    } else if (typeof dest === 'string' && dest) {
+      window.location.href = dest;
+    }
+    setPendingUrl(null);
+  };
+
+  
 
   return (
     <>
@@ -571,6 +652,14 @@ export default function PodcastDetailPage() {
                   >
                     Listen now
                   </button>
+                ) : isAdmin ? (
+                  <button
+                    aria-disabled
+                    className="inline-flex items-center gap-2 bg-zinc-300 text-white opacity-60 cursor-not-allowed font-semibold px-5 py-2.5 rounded-xl shadow transition"
+                    title="Admins cannot listen"
+                  >
+                    Listen (Locked)
+                  </button>
                 ) : (
                   priceCents === 0 ? (
                     <button
@@ -608,21 +697,21 @@ export default function PodcastDetailPage() {
                 </button>
               </div>
 
-              {/* progress quick actions */}
-              {isLoggedIn && (
+              {/* progress quick actions (hide when not owned) */}
+              {isLoggedIn && owned && (
                 <div className="mt-4 flex items-center gap-2 text-sm text-zinc-700">
                   <span className="px-2 py-1 rounded bg-zinc-100">
-                    Tiến độ: {secToClock(seconds)}{duration ? ` / ${secToClock(duration)}` : ''}
+                    Progress: {secToClock(seconds)}{duration ? ` / ${secToClock(duration)}` : ''}
                   </span>
                   <button
                     onClick={() => saveNowEverywhere(seconds, duration)}
                     className="px-3 py-1 rounded bg-emerald-600 text-white hover:bg-emerald-700"
                   >
-                    Lưu tiến độ
+                    Save progress
                   </button>
                   {seconds > 0 && (
                     <button onClick={onListenNow} className="px-3 py-1 rounded border border-zinc-300 hover:bg-zinc-50">
-                      Tiếp tục tại {secToClock(seconds)}
+                      Continue at {secToClock(seconds)}
                     </button>
                   )}
                 </div>
@@ -651,48 +740,74 @@ export default function PodcastDetailPage() {
 
             {/* RIGHT: Player */}
             <div id="player">
-              {yt ? (
-                <YouTubeAudioOnly
-                  ref={playerRef}
-                  embedUrl={yt.embed}
-                  cover={cover}
-                  title={p.title}
-                  resumeAt={seconds}
-                  onProgress={(cur, dur) => { setSeconds(cur); if (dur) setDuration(dur); }}
-                  onSaveClick={(cur, dur) => saveNowEverywhere(cur, dur)}
-                />
-              ) : aud ? (
-                <div className="rounded-2xl overflow-hidden shadow-lg ring-1 ring-black/10 bg-white p-4">
-                  <audio
-                    controls
-                    className="w-full"
-                    src={toAbs(aud.file_url)}
-                    onTimeUpdate={(e) => setSeconds((e.target as HTMLAudioElement).currentTime || 0)}
-                    onDurationChange={(e) => setDuration((e.target as HTMLAudioElement).duration || 0)}
-                    onPause={(e) => {
-                      const el = e.target as HTMLAudioElement;
-                      saveNowEverywhere(el.currentTime || 0, el.duration || 0);
-                    }}
-                    onLoadedMetadata={(e) => {
-                      const el = e.target as HTMLAudioElement;
-                      if (seconds > 0 && Math.abs((el.currentTime||0) - seconds) > 2) {
-                        try { el.currentTime = seconds; } catch {}
-                      }
-                    }}
+              {owned ? (
+                yt ? (
+                  <YouTubeAudioOnly
+                    ref={playerRef}
+                    embedUrl={yt.embed}
+                    cover={cover}
+                    title={p.title}
+                    resumeAt={seconds}
+                    onProgress={(cur, dur) => { setSeconds(cur); if (dur) setDuration(dur); }}
+                    onSaveClick={(cur, dur) => saveNowEverywhere(cur, dur)}
                   />
-                  <div className="mt-2 text-sm text-zinc-700">
-                    {secToClock(seconds)}{duration ? ` / ${secToClock(duration)}` : ''}
-                    <button
-                      className="ml-3 px-3 py-1 rounded bg-emerald-600 text-white hover:bg-emerald-700"
-                      onClick={() => saveNowEverywhere(seconds, duration)}
-                    >
-                      Save
-                    </button>
+                ) : aud ? (
+                  <div className="rounded-2xl overflow-hidden shadow-lg ring-1 ring-black/10 bg-white p-4">
+                    <audio
+                      controls
+                      className="w-full"
+                      src={toAbs(aud.file_url)}
+                      onTimeUpdate={(e) => setSeconds((e.target as HTMLAudioElement).currentTime || 0)}
+                      onDurationChange={(e) => setDuration((e.target as HTMLAudioElement).duration || 0)}
+                      onPause={(e) => {
+                        const el = e.target as HTMLAudioElement;
+                        saveNowEverywhere(el.currentTime || 0, el.duration || 0);
+                      }}
+                      onLoadedMetadata={(e) => {
+                        const el = e.target as HTMLAudioElement;
+                        if (seconds > 0 && Math.abs((el.currentTime||0) - seconds) > 2) {
+                          try { el.currentTime = seconds; } catch {}
+                        }
+                      }}
+                    />
+                    <div className="mt-2 text-sm text-zinc-700">
+                      {secToClock(seconds)}{duration ? ` / ${secToClock(duration)}` : ''}
+                      <button
+                        className="ml-3 px-3 py-1 rounded bg-emerald-600 text-white hover:bg-emerald-700"
+                        onClick={() => saveNowEverywhere(seconds, duration)}
+                      >
+                        Save
+                      </button>
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="rounded-2xl border p-6 text-zinc-600 bg-white">
+                    {canView ? 'No media available.' : 'Please purchase to listen to the full podcast.'}
+                  </div>
+                )
               ) : (
-                <div className="rounded-2xl border p-6 text-zinc-600 bg-white">
-                  {canView ? 'No media available.' : 'Please purchase to listen to the full podcast. A demo may be unavailable.'}
+                <div className="rounded-2xl overflow-hidden ring-1 ring-black/10 bg-white p-4 shadow-lg">
+                  <div className="flex items-center gap-4">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={cover}
+                      alt={p.title}
+                      className="w-16 h-16 object-cover rounded-md"
+                      onError={(e)=>{ (e.currentTarget as HTMLImageElement).src = FALLBACK_IMG; }}
+                    />
+                    <button
+                      disabled
+                      aria-disabled="true"
+                      className="px-4 py-2 rounded bg-zinc-300 text-white opacity-60 cursor-not-allowed"
+                      title="Locked — purchase to listen"
+                    >
+                      Play
+                    </button>
+                    <div className="text-sm text-zinc-500">00:00 / --:--</div>
+                  </div>
+                  <div className="mt-3 text-sm text-zinc-600">
+                    Please purchase to listen to the full podcast.
+                  </div>
                 </div>
               )}
             </div>
@@ -701,6 +816,53 @@ export default function PodcastDetailPage() {
       </div>
 
       <Toast open={toast.open} msg={toast.msg} onClose={toast.hide} />
+
+      {/* Leave confirm modal */}
+      {leaveOpen && (
+        <div className="fixed inset-0 z-[1100] bg-black/50 flex items-center justify-center p-4">
+          <div className="max-w-md w-full rounded-xl bg-white shadow-xl p-5">
+            <h3 className="text-lg font-semibold mb-2">Save progress?</h3>
+            <p className="text-sm text-zinc-700">You have unsaved listening progress. Do you want to save it before leaving?</p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button onClick={() => confirmLeave(false)} className="px-3 py-1 rounded border border-zinc-300 hover:bg-zinc-50">Don’t save</button>
+              <button onClick={() => confirmLeave(true)} className="px-3 py-1 rounded bg-emerald-600 text-white hover:bg-emerald-700">Save and leave</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Related podcasts */}
+      {related.length > 0 && (
+        <section className="mt-6 mb-16">
+          <div className="px-4 md:px-8">
+            <h2 className="text-xl font-semibold">You may also like</h2>
+          </div>
+          <div className="relative w-screen left-[50%] right-[50%] -ml-[50vw] -mr-[50vw]">
+            <RelatedRowPodcasts items={related} />
+          </div>
+        </section>
+      )}
     </>
+  );
+}
+
+function RelatedRowPodcasts({ items }: { items: any[] }) {
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  const scrollBy = (delta: number) => scrollerRef.current?.scrollBy({ left: delta, behavior: 'smooth' });
+
+  return (
+    <div className="px-4 md:px-8">
+      <div className="relative">
+        <div ref={scrollerRef} className="flex gap-4 overflow-x-auto scroll-smooth pb-3 [scrollbar-width:thin] snap-x snap-mandatory">
+          {items.map((p: any) => (
+            <div key={p.id} className="snap-start shrink-0 basis-[calc((100vw-8rem)/1.2)] sm:basis-[calc((100vw-10rem)/1.6)] md:basis-[calc((100vw-14rem)/3)]">
+              <PodcastCard podcast={{ id: p.id, title: p.title, cover: toAbs(p.thumbnail_url || ''), price_cents: p.price_cents }} variant="wide" />
+            </div>
+          ))}
+        </div>
+        <button aria-label="left" onClick={()=>scrollBy(-600)} className="hidden md:grid place-items-center absolute left-2 top-1/2 -translate-y-1/2 h-10 w-10 rounded-full bg-white/90 shadow hover:bg-white">‹</button>
+        <button aria-label="right" onClick={()=>scrollBy(600)} className="hidden md:grid place-items-center absolute right-2 top-1/2 -translate-y-1/2 h-10 w-10 rounded-full bg-white/90 shadow hover:bg-white">›</button>
+      </div>
+    </div>
   );
 }

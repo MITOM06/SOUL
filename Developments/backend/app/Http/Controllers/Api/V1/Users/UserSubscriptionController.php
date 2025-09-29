@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;
 use App\Models\UserSubscription;
 use Carbon\Carbon;
+use App\Services\PlanInclusions;
 
 class UserSubscriptionController extends Controller
 {
@@ -61,6 +62,11 @@ class UserSubscriptionController extends Controller
             'price_cents' => $pricing[$planKey] ?? 0,
             'payment_id'  => null,
         ]);
+
+        // Grant included products to user's library (as a paid subscription order)
+        if (in_array($planKey, ['premium','vip'], true)) {
+            try { PlanInclusions::grantToUser($user->id, $planKey); } catch (\Throwable $e) { /* log & continue */ }
+        }
 
         return response()->json([
             'success' => true,

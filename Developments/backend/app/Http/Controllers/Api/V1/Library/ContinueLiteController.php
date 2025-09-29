@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1\Library;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
+use Laravel\Sanctum\PersonalAccessToken;
 
 class ContinueLiteController extends Controller
 {
@@ -11,6 +12,12 @@ class ContinueLiteController extends Controller
     private function currentUserId(Request $r): int
     {
         if (auth()->check()) return (int) auth()->id();
+        // Try Bearer token (when route is public but FE sends token)
+        $token = $r->bearerToken();
+        if ($token) {
+            $pat = PersonalAccessToken::findToken($token);
+            if ($pat && $pat->tokenable) return (int) $pat->tokenable->id;
+        }
         $h = (int) $r->header('X-User-Id', 0);
         return $h > 0 ? $h : 1; // fallback demo = 1
     }
@@ -83,5 +90,21 @@ class ContinueLiteController extends Controller
             ->first();
 
         return response()->json(['data' => $row, 'message' => 'Progress saved'], 200);
+    }
+
+    /** DELETE /api/v1/continues/{productId} -> xoá tiến độ của 1 product */
+    public function destroy(Request $r, int $product)
+    {
+        $userId = $this->currentUserId($r);
+        $deleted = DB::table('continues')
+            ->where('user_id', $userId)
+            ->where('product_id', $product)
+            ->delete();
+
+        return response()->json([
+            'success' => true,
+            'deleted' => $deleted > 0,
+            'message' => $deleted > 0 ? 'Progress removed' : 'No progress to remove',
+        ], 200);
     }
 }
