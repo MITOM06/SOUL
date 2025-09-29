@@ -13,6 +13,7 @@ use App\Http\Controllers\Api\V1\Commerce\PaymentController;
 use App\Http\Controllers\Api\V1\Users\UserController;
 
 use App\Http\Controllers\Api\V1\Admin\DashboardController as AdminDashboardController;
+use App\Http\Controllers\Api\V1\PublicStatsController;
 use App\Http\Controllers\Api\V1\Admin\AdminOrderController;
 use App\Http\Controllers\Api\V1\Admin\AdminOrderItemController;
 use App\Http\Controllers\Api\V1\Admin\SubscriptionController;
@@ -49,6 +50,9 @@ Route::prefix('v1')->group(function () {
 
     // Subscriptions plan details (public)
     Route::get('subscriptions/plan-details', [PlanCatalogController::class, 'details']);
+
+    // Public aggregated stats (safe, no auth)
+    Route::get('public/stats', [PublicStatsController::class, 'counts']);
 
 
     // =====================================================

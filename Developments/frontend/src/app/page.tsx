@@ -65,6 +65,33 @@ export default function LandingHome() {
   const [results, setResults] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
+  // Public stats (real DB): users, podcasts, books, members (VIP+Premium)
+  type PublicStats = { total_users: number; total_podcasts: number; total_ebooks: number; total_members: number };
+  const [stats, setStats] = useState<PublicStats>({ total_users: 0, total_podcasts: 0, total_ebooks: 0, total_members: 0 });
+  const [statsLoading, setStatsLoading] = useState(true);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setStatsLoading(true);
+      try {
+        const r = await fetch(`${API_BASE}/v1/public/stats`);
+        if (r.ok) {
+          const j = await r.json();
+          const d = j?.data || j;
+          if (!cancelled && d) setStats({
+            total_users: Number(d.total_users || 0),
+            total_podcasts: Number(d.total_podcasts || 0),
+            total_ebooks: Number(d.total_ebooks || 0),
+            total_members: Number(d.total_members || 0),
+          });
+        }
+      } catch {}
+      if (!cancelled) setStatsLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, []);
+  const fmt = (n: number) => new Intl.NumberFormat('en-US').format(n || 0);
+
   const FALLBACK_IMG = `data:image/svg+xml;utf8,${encodeURIComponent(
     `<svg xmlns='http://www.w3.org/2000/svg' width='600' height='800'>
        <defs>
@@ -179,12 +206,12 @@ export default function LandingHome() {
                 </Link>
               </div>
 
-              {/* Stats */}
+              {/* Stats (real DB) */}
               <div className="mt-6 flex flex-wrap gap-3">
-                <Stat value="25k+" label="Titles" />
-                <Stat value="48k+" label="Listeners" />
-                <Stat value="1.2M" label="Pages read" />
-                <Stat value="4.8★" label="Avg. rating" />
+                <Stat value={statsLoading ? '…' : fmt(stats.total_users)} label="Users" />
+                <Stat value={statsLoading ? '…' : fmt(stats.total_podcasts)} label="Podcasts" />
+                <Stat value={statsLoading ? '…' : fmt(stats.total_ebooks)} label="Books" />
+                <Stat value={statsLoading ? '…' : fmt(stats.total_members)} label="Members (VIP+Premium)" />
               </div>
             </div>
 
