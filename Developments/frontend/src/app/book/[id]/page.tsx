@@ -487,7 +487,12 @@ export default function BookDetail() {
   const { show } = toast;
   const onBuy = async () => {
     if (!p) return;
-    if (!isLoggedIn) return alert('Please sign in to purchase.');
+    if (!isLoggedIn) {
+      alert('Please sign in to purchase.');
+      const next = encodeURIComponent(window.location.pathname + window.location.search);
+      window.location.href = `/auth/login?next=${next}`;
+      return;
+    }
     if (isAdmin) return alert('Admin accounts cannot purchase.');
     try {
       const r = await add(p.id, 1);
@@ -508,9 +513,19 @@ export default function BookDetail() {
   };
   const toggleFav = async () => {
     if (!p) return;
-    if (!isLoggedIn) return alert('Please sign in to use Favorites.');
+    if (!isLoggedIn) {
+      alert('Please sign in to use Favorites.');
+      const next = encodeURIComponent(window.location.pathname + window.location.search);
+      window.location.href = `/auth/login?next=${next}`;
+      return;
+    }
     if (isAdmin) return alert('Admin accounts cannot use Favorites.');
-    if (!canFav) return alert('Favorites not available right now.');
+    if (!canFav) {
+      alert('Favorites not available right now.');
+      const next = encodeURIComponent(window.location.pathname + window.location.search);
+      window.location.href = `/auth/login?next=${next}`;
+      return;
+    }
     const next = !favOn;
     setFavOn(next);
     try {

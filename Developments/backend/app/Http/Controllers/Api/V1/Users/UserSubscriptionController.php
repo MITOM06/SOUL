@@ -9,6 +9,8 @@ use Illuminate\Validation\Rule;
 use App\Models\UserSubscription;
 use Carbon\Carbon;
 use App\Services\PlanInclusions;
+use Illuminate\Support\Facades\Mail;
+use App\Mail\SubscriptionSuccessMail;
 
 class UserSubscriptionController extends Controller
 {
@@ -66,6 +68,12 @@ class UserSubscriptionController extends Controller
         // Grant included products to user's library (as a paid subscription order)
         if (in_array($planKey, ['premium','vip'], true)) {
             try { PlanInclusions::grantToUser($user->id, $planKey); } catch (\Throwable $e) { /* log & continue */ }
+            // Send subscription confirmation email
+            try {
+                if ($user && $user->email) {
+                    Mail::to($user->email)->send(new SubscriptionSuccessMail($user, $planKey, $sub));
+                }
+            } catch (\Throwable $e) { /* ignore */ }
         }
 
         return response()->json([

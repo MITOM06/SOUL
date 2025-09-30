@@ -6,6 +6,7 @@ use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use App\Models\User;
+use Carbon\Carbon;
 
 class UsersSeeder extends Seeder
 {
@@ -46,8 +47,34 @@ class UsersSeeder extends Seeder
                 }
             }
 
-            // 3) Create 200 regular users with meaningful English names
-            User::factory()->count(200)->create(['role' => 'user']);
+            // 3) Create 500 regular users.  Generate all users first, then
+            // randomise their created_at/updated_at timestamps to fall within
+            // the range 2024‑01‑01 to now.  Using Carbon ensures proper
+            // handling of timezones and date arithmetic.
+            $users = User::factory()->count(500)->create(['role' => 'user']);
+
+            $start = Carbon::create(2024, 1, 1, 0, 0, 0);
+            $end   = Carbon::now();
+            foreach ($users as $u) {
+                $random = $this->randomDateBetween($start, $end);
+                $u->update([
+                    'created_at' => $random,
+                    'updated_at' => $random,
+                ]);
+            }
         });
+    }
+
+    /**
+     * Generate a random Carbon instance between two dates.  This helper uses
+     * PHP's random_int on the unix timestamp range to ensure uniform
+     * distribution.  Both start and end must be Carbon instances.
+     */
+    private function randomDateBetween(Carbon $start, Carbon $end): Carbon
+    {
+        $min = $start->getTimestamp();
+        $max = $end->getTimestamp();
+        $timestamp = random_int($min, $max);
+        return Carbon::createFromTimestamp($timestamp);
     }
 }

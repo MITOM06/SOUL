@@ -13,12 +13,28 @@ class ProductFactory extends Factory
 
     public function definition(): array
     {
-        // 1) Chọn loại
-        $type  = $this->faker->randomElement(['ebook', 'podcast']);
-        $title = $this->faker->sentence(4, true);
+        // 1) Determine the type (ebook or podcast) and choose a category.  The
+        // category influences both the title and the metadata to provide
+        // meaningful, domain‑appropriate names rather than filler text.
+        $type     = $this->faker->randomElement(['ebook', 'podcast']);
+        $category = $this->faker->randomElement([
+            'Programming','Design','Business','Marketing','Health','Education'
+        ]);
+        // Construct a human‑readable title based on the type and category.
+        if ($type === 'ebook') {
+            $modifier  = $this->faker->randomElement(['Essentials','Basics','Guide','Handbook','Principles']);
+            $title     = ucfirst($category) . ' ' . $modifier . ': ' . $this->faker->catchPhrase();
+        } else {
+            $titleOptions = [
+                'The ' . ucfirst($category) . ' Podcast',
+                'Exploring ' . ucfirst($category),
+                ucfirst($category) . ' Conversations',
+            ];
+            $title = $this->faker->randomElement($titleOptions);
+        }
 
-        // 2) Map type -> ĐÚNG thư mục trong public/
-        //    Bạn đang để ảnh tại public/books/thumbnail và public/podcasts/thumbnail
+        // 2) Map type -> correct directory under public for thumbnails.  You have
+        // stored covers in public/books/thumbnail and public/podcasts/thumbnail.
         $dirMap = [
             'ebook'   => 'books/thumbnail',
             'podcast' => 'podcasts/thumbnail',
@@ -61,10 +77,15 @@ class ProductFactory extends Factory
         return [
             'type'          => $type,
             'title'         => $title,
-            'description'   => $this->faker->paragraph(3, true),
-            'price_cents'   => $this->faker->numberBetween(0, 20000), // 0..200 USD
-            'thumbnail_url' => $coverUrl, // trỏ đúng public/books/thumbnail | public/podcasts/thumbnail
-            'category'      => $this->faker->randomElement(['Programming','Design','Business','Marketing','Health','Education']),
+            // Provide a richer description with two paragraphs to better simulate
+            // content you would see on a real e‑commerce site.  The true
+            // parameter concatenates the paragraphs into a single string.
+            'description'   => $this->faker->paragraphs(2, true),
+            // Price ranges from free (0) up to $200.  Some items will be free in
+            // the seeder by explicit override.
+            'price_cents'   => $this->faker->numberBetween(0, 20000),
+            'thumbnail_url' => $coverUrl,
+            'category'      => $category,
             'slug'          => Str::slug($title) . '-' . Str::random(5),
             'metadata'      => json_encode($metadata),
             'is_active'     => true,

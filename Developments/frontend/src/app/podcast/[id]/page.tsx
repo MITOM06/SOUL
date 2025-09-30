@@ -562,7 +562,12 @@ export default function PodcastDetailPage() {
   const cover = toAbs(p.thumbnail_url) || yt?.thumb || FALLBACK_IMG;
 
   const onBuy = async () => {
-    if (!isLoggedIn) return alert('Please sign in to purchase.');
+    if (!isLoggedIn) {
+      alert('Please sign in to purchase.');
+      const next = encodeURIComponent(window.location.pathname + window.location.search);
+      window.location.href = `/auth/login?next=${next}`;
+      return;
+    }
     if (isAdmin) return alert('Admin accounts cannot purchase.');
     try {
       const r = await add(p.id, 1);
@@ -572,9 +577,19 @@ export default function PodcastDetailPage() {
   };
 
   const toggleFav = async () => {
-    if (!isLoggedIn) return alert('Please sign in to use Favorites.');
+    if (!isLoggedIn) {
+      alert('Please sign in to use Favorites.');
+      const next = encodeURIComponent(window.location.pathname + window.location.search);
+      window.location.href = `/auth/login?next=${next}`;
+      return;
+    }
     if (isAdmin) return alert('Admin accounts cannot use Favorites.');
-    if (!canFav) return alert('Favorites not available right now.');
+    if (!canFav) {
+      alert('Favorites not available right now.');
+      const next = encodeURIComponent(window.location.pathname + window.location.search);
+      window.location.href = `/auth/login?next=${next}`;
+      return;
+    }
     const next = !favOn;
     setFavOn(next);
     try {

@@ -25,11 +25,27 @@ class UserFactory extends Factory
      */
     public function definition(): array
     {
+        /*
+         * Generate a more meaningful user profile.  Each user has a realistic
+         * full name and a Gmail address derived from their name.  Using
+         * slugification (dots between names) ensures readability while
+         * preserving uniqueness.  The password is constant across fake
+         * accounts for simplicity.
+         */
+        $fullName = $this->faker->name();
+        // Slugify the name into a lowercase email‑friendly format. Replace
+        // non‑letters with dots and trim off stray dots on both ends.
+        $slug = strtolower(preg_replace('/[^a-zA-Z]+/', '.', $fullName));
+        $emailBase = trim($slug, '.');
+        // Compose the Gmail address using the slug base.  Should uniqueness
+        // conflict arise, Laravel's unique constraint on email along with
+        // seeder loops will handle collisions gracefully.
+        $email = $emailBase . '@gmail.com';
         return [
-            'email'         => $this->faker->unique()->safeEmail(),
+            'email'         => $email,
             'password_hash' => Hash::make('Password123!'),
             'role'          => 'user',
-            'name'          => $this->faker->name(),
+            'name'          => $fullName,
             'is_active'     => true,
         ];
     }
