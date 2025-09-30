@@ -8,6 +8,8 @@ use App\Models\Order;
 use App\Models\Payment;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
+use App\Mail\OrderSuccessMail;
 
 class PaymentController extends Controller
 {
@@ -166,6 +168,15 @@ class PaymentController extends Controller
                 // nên chúng ta KHÔNG xoá order nữa. Order giữ status='paid'.
             }
         });
+
+        // Send order confirmation email (non-blocking best-effort)
+        try {
+            if ($user && $user->email) {
+                Mail::to($user->email)->send(new OrderSuccessMail($user, $order, $payment));
+            }
+        } catch (\Throwable $e) {
+            // swallow to avoid breaking API response
+        }
 
         return response()->json([
             'success' => true,

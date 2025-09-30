@@ -29,23 +29,22 @@ export default function UpgradePage() {
   const isAdmin = role === 'admin';
 
 
-  const visiblePlans = useMemo(() => {
-    if (subscriptionLevel === 'vip') return [];
-    if (subscriptionLevel === 'premium') return plans.filter(p => p.key === 'vip');
-    return plans;
-  }, [subscriptionLevel]);
+  const currentPlanKey: 'basic'|'premium'|'vip' = (subscriptionLevel === 'vip' || subscriptionLevel === 'premium')
+    ? (subscriptionLevel as 'premium'|'vip')
+    : 'basic';
 
   const choosePlan = async (plan: Plan) => {
     if (!isLoggedIn) {
-      toast.error('Vui lòng đăng nhập để mua gói.');
+      toast.error('Please sign in to subscribe.');
       const next = encodeURIComponent('/upgrade');
       router.push(`/auth/login?next=${next}`);
       return;
     }
     if (isAdmin) {
-      toast.error('Tài khoản admin không thể mua gói dịch vụ.');
+      toast.error('Admin accounts cannot purchase subscriptions.');
       return;
     }
+    if (plan.key === currentPlanKey) return; // no-op
     try {
       // Free plan: subscribe immediately; paid: go to lightweight subscription checkout (no backend payment record)
       if (plan.key === 'basic') {
@@ -71,51 +70,6 @@ export default function UpgradePage() {
     }
   };
 
-  if (subscriptionLevel === 'premium') {
-    return (
-      <section className="space-y-6">
-        <h1 className="text-3xl font-bold">Your Plan</h1>
-        <p className="text-zinc-700">You are on <strong>PREMIUM</strong>. Only VIP remains available.</p>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {plans.filter(p => p.key === 'vip').map((plan) => (
-            <div key={plan.key} className={`rounded-2xl p-6 border bg-gradient-to-br ${plan.color}`}>
-              <h2 className="text-2xl font-bold">{plan.name}</h2>
-              <p className="text-3xl font-extrabold mt-2">{plan.price}</p>
-              <p className="text-sm text-zinc-700 mt-2">{plan.description}</p>
-              <button onClick={() => choosePlan(plan)} className="mt-4 btn w-full">Choose VIP</button>
-              <div className="mt-3 text-center">
-                <a href="/upgrade/vip" className="text-sm text-[color:var(--brand-600)] hover:underline">View VIP details</a>
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-    );
-  }
-
-  if (subscriptionLevel === 'vip') {
-    return (
-      <section className="space-y-6 text-center">
-        <h1 className="text-3xl font-extrabold">Congratulations! 🎉</h1>
-        <p className="text-zinc-700">You are on the highest plan: <strong>VIP</strong>.</p>
-        <div className="mx-auto max-w-2xl mt-4 p-8 rounded-2xl border bg-gradient-to-br from-amber-100 to-yellow-50">
-          <div className="text-6xl">🏆</div>
-          <p className="mt-2 text-lg font-semibold">Thank you for supporting us!</p>
-        </div>
-        <button className="btn" onClick={() => router.replace('/my-package')}>Go to My Package</button>
-      </section>
-    );
-  }
-
-  if (isAdmin) {
-    return (
-      <section className="space-y-6 text-center">
-        <h1 className="text-3xl font-bold">Quản trị viên</h1>
-        <p className="text-zinc-600">Tài khoản admin không thể đăng ký các gói dịch vụ người dùng.</p>
-      </section>
-    );
-  }
-
   return (
     <section className="space-y-8 full-bleed">
       <h1 className="text-3xl font-bold">Choose Your Plan</h1>
@@ -123,36 +77,44 @@ export default function UpgradePage() {
         Support our platform by subscribing to a paid plan. You can upgrade, downgrade or cancel at any time.
       </p>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {visiblePlans.map((plan, idx) => (
-          <div
-            key={plan.key}
-            className={`rounded-2xl p-6 border shadow-sm bg-gradient-to-br ${plan.color} hover:shadow-md transition hover:-translate-y-0.5`}
-          >
-            <div className="flex items-center justify-between">
-              <h2 className="text-2xl font-bold">{plan.name}</h2>
-              {plan.key === 'vip' && (
-                <span className="px-2 py-0.5 text-xs rounded bg-amber-400 text-white animate-pulse">Popular</span>
+        {plans.map((plan) => {
+          const isCurrent = plan.key === currentPlanKey;
+          return (
+            <div
+              key={plan.key}
+              className={`relative rounded-2xl p-6 border shadow-sm bg-gradient-to-br ${plan.color} transition ${isCurrent ? 'opacity-60 pointer-events-none' : 'hover:shadow-md hover:-translate-y-0.5'}`}
+            >
+              <div className="flex items-center justify-between">
+                <h2 className="text-2xl font-bold">{plan.name}</h2>
+                {plan.key === 'vip' && (
+                  <span className="px-2 py-0.5 text-xs rounded bg-amber-400 text-white">Popular</span>
+                )}
+              </div>
+              <p className="text-3xl font-extrabold mt-2">{plan.price}</p>
+              <p className="text-sm text-zinc-700 mt-2 min-h-[3rem]">{plan.description}</p>
+              <ul className="mt-4 text-sm space-y-1 text-zinc-700">
+                <li>• Access to exclusive content</li>
+                <li>• Priority support</li>
+                <li>• Cancel anytime</li>
+              </ul>
+              <button
+                onClick={() => choosePlan(plan)}
+                className={`mt-6 btn w-full ${isCurrent ? 'cursor-not-allowed' : ''}`}
+                disabled={isCurrent}
+                aria-disabled={isCurrent}
+              >
+                {isCurrent ? 'Your current plan' : `Choose ${plan.name}`}
+              </button>
+              {plan.key !== 'basic' && (
+                <div className="mt-3">
+                  <a href={`/upgrade/${plan.key}`} className="text-sm text-[color:var(--brand-600)] hover:underline">
+                    View details
+                  </a>
+                </div>
               )}
             </div>
-            <p className="text-3xl font-extrabold mt-2">{plan.price}</p>
-            <p className="text-sm text-zinc-700 mt-2 min-h-[3rem]">{plan.description}</p>
-            <ul className="mt-4 text-sm space-y-1 text-zinc-700">
-              <li>• Access to exclusive content</li>
-              <li>• Priority support</li>
-              <li>• Cancel anytime</li>
-            </ul>
-            <button onClick={() => choosePlan(plan)} className="mt-6 btn w-full">
-              Choose {plan.name}
-            </button>
-            {plan.key !== 'basic' && (
-              <div className="mt-3">
-                <a href={`/upgrade/${plan.key}`} className="text-sm text-[color:var(--brand-600)] hover:underline">
-                  View details
-                </a>
-              </div>
-            )}
-          </div>
-        ))}
+          );
+        })}
       </div>
     </section>
   );

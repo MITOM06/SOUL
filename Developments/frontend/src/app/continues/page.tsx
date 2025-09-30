@@ -8,6 +8,7 @@ import BookCard from '@/components/BookCard';
 import PodcastCard from '@/components/PodcastCard';
 // No demo fallbacks here; only real user progress should show
 import api from '@/lib/api';
+import { useAuth } from '@/contexts/AuthContext';
 
 /* ---------- Types ---------- */
 interface ContinueItem {
@@ -121,6 +122,7 @@ function removeLocalProgress(productId: number, type: 'ebook' | 'podcast') {
 
 /* ---------- Page ---------- */
 export default function ContinuesPage() {
+  const { user } = useAuth();
   const [books, setBooks] = useState<BookLike[]>([]);
   const [podcasts, setPodcasts] = useState<PodcastLike[]>([]);
   const [loading, setLoading] = useState(true);
@@ -156,8 +158,11 @@ export default function ContinuesPage() {
       setLoading(true);
 
       const serverContinues = await fetchFromServerList();
-      const localBooks = readLocalBookContinues();
-      const localPods  = readLocalPodcastContinues();
+      // IMPORTANT: When a user is logged in, ignore local fallback progresses to prevent
+      // showing stale items from a different account on the same browser.
+      const useLocalFallback = !user; // only when not logged in
+      const localBooks = useLocalFallback ? readLocalBookContinues() : [];
+      const localPods  = useLocalFallback ? readLocalPodcastContinues() : [];
 
       const map = new Map<number, ContinueItem>();
       for (const c of [...localBooks, ...localPods]) map.set(c.product_id, c);

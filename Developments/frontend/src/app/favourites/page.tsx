@@ -37,11 +37,11 @@ export default function FavouritesPage() {
       setLoading(true);
       setErr(null);
       try {
-        // 1) Thử gọi endpoint favourites (dùng wrapper để chấp nhận nhiều shape)
+        // 1) Load favourites via API (supports multiple shapes)
         const favRes = await favouritesAPI.getAll(); // GET /v1/favourites
         const raw = favRes?.data?.data ?? favRes?.data ?? {};
 
-        // CASE A: BE trả sẵn 2 danh sách books/podcasts
+        // CASE A: backend returns arrays books/podcasts directly
         if (Array.isArray(raw.books) || Array.isArray(raw.podcasts)) {
           const bs = (raw.books ?? []) as Product[];
           const ps = (raw.podcasts ?? []) as Product[];
@@ -50,7 +50,7 @@ export default function FavouritesPage() {
           return;
         }
 
-        // CASE B: BE trả product_ids => ta fetch chi tiết từng product
+        // CASE B: backend returns product_ids => fetch each product detail
         const ids: number[] = Array.isArray(raw.product_ids) ? raw.product_ids : [];
         if (!ids.length) {
           setBooks([]);
@@ -67,14 +67,14 @@ export default function FavouritesPage() {
         const results = await Promise.all(ids.map(fetchOne));
         const products = (results.filter(Boolean) as Product[]).map((p) => ({
           ...p,
-          // Chuẩn hoá type
+          // Normalize type
           type: String(p.type) === 'podcast' ? 'podcast' : 'ebook',
         }));
 
         setBooks(products.filter((p) => p.type === 'ebook'));
         setPodcasts(products.filter((p) => p.type === 'podcast'));
       } catch (e: any) {
-        setErr(e?.response?.data?.message || 'Không tải được danh sách yêu thích.');
+        setErr(e?.response?.data?.message || 'Failed to load favorites.');
         setBooks([]);
         setPodcasts([]);
       } finally {
@@ -92,9 +92,9 @@ export default function FavouritesPage() {
     setPodcasts((prev) => prev.filter((p) => p.id !== productId));
     try {
       await favouritesAPI.remove(productId); // DELETE /v1/favourites/{productId}
-      toast.success('Đã xoá khỏi Yêu thích');
+      toast.success('Removed from Favorites');
     } catch (e: any) {
-      toast.error(e?.response?.data?.message || 'Xoá thất bại');
+      toast.error(e?.response?.data?.message || 'Failed to remove');
       // rollback đơn giản: reload
       setTimeout(() => location.reload(), 600);
     }
@@ -107,7 +107,7 @@ export default function FavouritesPage() {
   return (
     <UserPanelLayout>
       <div className="space-y-6">
-        <h1 className="text-2xl font-bold">Favourites</h1>
+        <h1 className="text-2xl font-bold">Favorites</h1>
 
         {isAdmin && (
           <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800">
@@ -124,7 +124,7 @@ export default function FavouritesPage() {
         {/* Books */}
         {!isAdmin && (
         <section className="space-y-3">
-          <h2 className="text-xl font-semibold">Favourite Books</h2>
+          <h2 className="text-xl font-semibold">Favorite Books</h2>
           {loading ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {Array.from({ length: 6 }).map((_, i) => (
@@ -132,7 +132,7 @@ export default function FavouritesPage() {
               ))}
             </div>
           ) : books.length === 0 ? (
-            <Empty text="Bạn chưa lưu sách nào." />
+            <Empty text="You have no favorite books yet." />
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {books.map((b) => (
@@ -155,7 +155,7 @@ export default function FavouritesPage() {
         {/* Podcasts */}
         {!isAdmin && (
         <section className="space-y-3">
-          <h2 className="text-xl font-semibold">Favourite Podcasts</h2>
+          <h2 className="text-xl font-semibold">Favorite Podcasts</h2>
           {loading ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {Array.from({ length: 6 }).map((_, i) => (
@@ -163,13 +163,13 @@ export default function FavouritesPage() {
               ))}
             </div>
           ) : podcasts.length === 0 ? (
-            <Empty text="Bạn chưa lưu podcast nào." />
+            <Empty text="You have no favorite podcasts yet." />
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {podcasts.map((p) => (
                 <div key={p.id} className="relative group">
-                  {/* PodcastCard của bạn có thể dùng prop khác; map image <- thumbnail_url */}
-                  <PodcastCard podcast={{ ...p, image: p.thumbnail_url } as any} />
+                  {/* PodcastCard wide style for better look like Continues */}
+                  <PodcastCard podcast={{ ...p, cover: p.thumbnail_url } as any} variant="wide" />
                   <button
                     onClick={() => onRemove(p.id)}
                     className="hidden group-hover:inline-flex absolute top-2 right-2 text-xs px-2 py-1 rounded bg-red-600 text-white"

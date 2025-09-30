@@ -55,7 +55,12 @@ function useFavourites() {
   };
 
   const toggle = async (productId: number) => {
-    if (!canFav) { alert('Please sign in to use Favorites'); return; }
+    if (!canFav) {
+      alert('Please sign in to use Favorites');
+      const next = encodeURIComponent(window.location.pathname + window.location.search);
+      window.location.href = `/auth/login?next=${next}`;
+      return;
+    }
     const willAdd = !favIds.has(productId);
     const optimistic = new Set(favIds);
     if (willAdd) optimistic.add(productId); else optimistic.delete(productId);
@@ -72,6 +77,8 @@ function useFavourites() {
       if (e?.response?.status === 401) {
         setCanFav(false);
         alert('Session expired. Please sign in again.');
+        const next = encodeURIComponent(window.location.pathname + window.location.search);
+        window.location.href = `/auth/login?next=${next}`;
       } else {
         alert('Failed to update Favorites.');
       }

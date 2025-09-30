@@ -64,6 +64,8 @@ function useFavourites() {
   const toggle = async (productId: number) => {
     if (!canFav) {
       alert('Please sign in to use Favorites');
+      const next = encodeURIComponent(window.location.pathname + window.location.search);
+      window.location.href = `/auth/login?next=${next}`;
       return;
     }
     const next = new Set(favIds);
@@ -83,6 +85,8 @@ function useFavourites() {
       if (e?.response?.status === 401) {
         setCanFav(false);
         alert('Session expired. Please sign in again.');
+        const next = encodeURIComponent(window.location.pathname + window.location.search);
+        window.location.href = `/auth/login?next=${next}`;
       } else {
         alert('Failed to update Favorites.');
       }

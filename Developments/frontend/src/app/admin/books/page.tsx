@@ -480,8 +480,8 @@ export default function AdminProductsV2() {
 
             {/* Upload từ máy – dùng cho cả tạo mới & sửa (sau khi có ID) */}
             <div className="border rounded p-3">
-              <div className="font-medium mb-2">Upload từ máy (PDF/ảnh)</div>
-              <input type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" multiple onChange={handlePickLocal} />
+              <div className="font-medium mb-2">Upload từ máy (PDF/Tài liệu/Ảnh)</div>
+              <input type="file" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.webp" multiple onChange={handlePickLocal} />
               {localQueue.length > 0 && (
                 <div className="mt-2 space-y-2">
                   {localQueue.map((q, i) => (
