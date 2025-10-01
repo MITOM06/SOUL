@@ -8,7 +8,7 @@ type Sub = {
   id: number;
   user_id: number;
   plan: "basic" | "premium" | "vip";
-  status: "active" | "canceled" | "expired";
+  status: "active" | "canceled" | "expired" | "pending";
   start_date?: string | null;
   end_date?: string | null;
   price_cents?: number | null;
@@ -25,7 +25,7 @@ export default function AdminUserSubsPage() {
   const [page, setPage] = useState(1);
   const perPage = 15;
   const [planFilter, setPlanFilter] = useState<"all"|"basic"|"premium"|"vip">('all');
-  const [statusFilter, setStatusFilter] = useState<"all"|"active"|"canceled"|"expired"|"pending">('all');
+  const [statusFilter, setStatusFilter] = useState<"all"|"active"|"canceled"|"expired"|"pending">('active');
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [meta, setMeta] = useState<any>(null);
 
@@ -169,12 +169,12 @@ export default function AdminUserSubsPage() {
             value={statusFilter}
             onChange={(e)=>{ setStatusFilter(e.target.value as any); setPage(1); }}
             className="px-3 py-2 border rounded-lg"
-          >
-            <option value="all">All status</option>
+          >       
             <option value="active">Active</option>
             <option value="canceled">Canceled</option>
             <option value="expired">Expired</option>
             <option value="pending">Pending</option>
+            <option value="all">All status</option>
           </select>
           <select
             value={planFilter}

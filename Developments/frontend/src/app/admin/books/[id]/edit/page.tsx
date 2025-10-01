@@ -114,7 +114,7 @@ export default function EditBookPage() {
           </div>
           <div>
             <label className="block text-sm text-gray-600">Cover image</label>
-            <input type="file" accept="image/*" onChange={(e)=>{
+            <input type="file" accept="image/*,.avif,.heic,.heif,.tif,.tiff" onChange={(e)=>{
               const f = e.target.files?.[0] || null;
               setCoverFile(f);
               if (f) {

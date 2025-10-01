@@ -558,7 +558,8 @@ export default function PodcastDetailPage() {
     ? (pickYt(ytFullFile) || pickYt(ytPreviewFile) || extractYoutubeFromFiles(files) || extractYoutubeFromProductMeta(p))
     : null;
 
-  const aud = owned ? files.find(f => (f.file_type === 'audio' || /\.mp3(\?|$)/i.test(f.file_url))) : undefined;
+  const aud = owned ? files.find(f => (f.file_type === 'audio' || /\.(mp3|m4a|wav)(\?|$)/i.test(f.file_url))) : undefined;
+  const vid = owned ? files.find(f => (f.file_type === 'video' || /\.mp4(\?|$)/i.test(f.file_url))) : undefined;
   const cover = toAbs(p.thumbnail_url) || yt?.thumb || FALLBACK_IMG;
 
   const onBuy = async () => {
@@ -783,6 +784,35 @@ export default function PodcastDetailPage() {
                         if (seconds > 0 && Math.abs((el.currentTime||0) - seconds) > 2) {
                           try { el.currentTime = seconds; } catch {}
                         }
+                      }}
+                    />
+                    <div className="mt-2 text-sm text-zinc-700">
+                      {secToClock(seconds)}{duration ? ` / ${secToClock(duration)}` : ''}
+                      <button
+                        className="ml-3 px-3 py-1 rounded bg-emerald-600 text-white hover:bg-emerald-700"
+                        onClick={() => saveNowEverywhere(seconds, duration)}
+                      >
+                        Save
+                      </button>
+                    </div>
+                  </div>
+                ) : vid ? (
+                  <div className="rounded-2xl overflow-hidden shadow-lg ring-1 ring-black/10 bg-white p-4">
+                    <video
+                      controls
+                      className="w-full"
+                      src={toAbs(vid.file_url)}
+                      onTimeUpdate={(e) => setSeconds((e.target as HTMLVideoElement).currentTime || 0)}
+                      onLoadedMetadata={(e) => {
+                        const el = e.target as HTMLVideoElement;
+                        setDuration(el.duration || 0);
+                        if (seconds > 0 && Math.abs((el.currentTime||0) - seconds) > 2) {
+                          try { el.currentTime = seconds; } catch {}
+                        }
+                      }}
+                      onPause={(e) => {
+                        const el = e.target as HTMLVideoElement;
+                        saveNowEverywhere(el.currentTime || 0, el.duration || 0);
                       }}
                     />
                     <div className="mt-2 text-sm text-zinc-700">

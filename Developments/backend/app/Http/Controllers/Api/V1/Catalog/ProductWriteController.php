@@ -16,28 +16,42 @@ class ProductWriteController extends Controller
     /**
      * POST /api/v1/catalog/products
      * Body JSON: { type,title,description,price_cents,thumbnail_url?,category?,slug?,metadata?,is_active?, files?[] }
+     *
+     * Chính sách an toàn ảnh bìa:
+     * - Luôn chuẩn hoá ảnh bìa vào /storage/products/{id}/cover.ext
+     * - Cấm ebook dùng thumbnail YouTube
+     * - Không tự động lấy ảnh từ product_files làm bìa
      */
     public function store(Request $r)
     {
         $data = $r->all();
-        $v = Validator()->make($data, [
+
+        $v = Validator::make($data, [
             'type'           => 'required|in:ebook,podcast',
             'title'          => 'required|string|max:300',
             'description'    => 'nullable|string',
             'price_cents'    => 'required|integer|min:0',
-            'thumbnail_url'  => 'nullable|string|max:255',
-            'category'       => 'nullable|string|max:50',
-            'slug'           => 'nullable|string|max:150',
+            'thumbnail_url'  => 'nullable|string|max:1000',
+            'category'       => 'nullable|string|max:120',
+            'slug'           => 'nullable|string|max:300',
             'metadata'       => 'nullable',
             'is_active'      => 'nullable|boolean',
+
+            // Giữ tương thích API cũ: cho phép gửi "files" kèm URL (nhưng KHÔNG dùng làm cover)
             'files'                  => 'nullable|array',
             'files.*.file_type'      => 'required_with:files|string|max:50',
-            'files.*.file_url'       => 'required_with:files|string|max:255',
+            'files.*.file_url'       => 'required_with:files|string|max:1000',
             'files.*.filesize_bytes' => 'nullable|integer|min:0',
             'files.*.is_preview'     => 'nullable|boolean',
+            'files.*.meta'           => 'nullable',
         ]);
         if ($v->fails()) {
             return response()->json(['success'=>false,'message'=>$v->errors()->first()], 422);
+        }
+
+        // Cấm ebook dùng thumbnail là YouTube
+        if (($data['type'] ?? null) === 'ebook' && $this->isYoutubeThumb((string)($data['thumbnail_url'] ?? ''))) {
+            return response()->json(['success'=>false,'message'=>'Ebook thumbnail cannot be a YouTube thumbnail'], 422);
         }
 
         DB::beginTransaction();
@@ -45,30 +59,42 @@ class ProductWriteController extends Controller
             $now  = now();
             $slug = $data['slug'] ?? Str::slug($data['title']).'-'.substr(md5((string)$now),0,6);
 
+            // Lưu trước, thumbnail để null rồi xử lý chuẩn hoá sau (nếu có)
             $id = DB::table('products')->insertGetId([
                 'type'          => $data['type'],
                 'title'         => $data['title'],
                 'description'   => $data['description'] ?? null,
                 'price_cents'   => $data['price_cents'],
-                'thumbnail_url' => $data['thumbnail_url'] ?? null,
+                'thumbnail_url' => null,
                 'category'      => $data['category'] ?? null,
                 'slug'          => $slug,
-                'metadata'      => isset($data['metadata']) ? json_encode($data['metadata']) : null,
+                'metadata'      => $this->normalizeMetadata($data['metadata'] ?? null),
                 'is_active'     => (int) ($data['is_active'] ?? 1),
                 'created_at'    => $now,
                 'updated_at'    => $now,
             ]);
 
-            // Vẫn hỗ trợ thêm file dạng URL để không phá UI cũ
+            // Chuẩn hoá thumbnail nếu client có gửi
+            if (!empty($data['thumbnail_url'])) {
+                $normalized = $this->normalizeCoverAndSave((string)$data['thumbnail_url'], $id, (string)$data['type']);
+                if ($normalized) {
+                    DB::table('products')->where('id',$id)->update([
+                        'thumbnail_url' => $normalized,
+                        'updated_at'    => now(),
+                    ]);
+                }
+            }
+
+            // Tương thích: cho phép ghi thêm các file URL (không ảnh hưởng bìa)
             if (!empty($data['files']) && is_array($data['files'])) {
                 foreach ($data['files'] as $f) {
                     DB::table('product_files')->insert([
                         'product_id'     => $id,
-                        'file_type'      => $f['file_type'],
-                        'file_url'       => $f['file_url'],
+                        'file_type'      => (string)$f['file_type'],
+                        'file_url'       => (string)$f['file_url'],
                         'filesize_bytes' => $f['filesize_bytes'] ?? null,
                         'is_preview'     => !empty($f['is_preview']) ? 1 : 0,
-                        'meta'           => isset($f['meta']) ? json_encode($f['meta']) : null,
+                        'meta'           => isset($f['meta']) ? $this->jsonOrNull($f['meta']) : null,
                         'created_at'     => $now,
                         'updated_at'     => $now,
                     ]);
@@ -85,17 +111,19 @@ class ProductWriteController extends Controller
 
     /**
      * PUT /api/v1/catalog/products/{id}
+     * Không cho phép đổi type ở đây để tránh lẫn dữ liệu; nếu cần, tạo API riêng.
      */
     public function update(Request $r, $id)
     {
         $data = $r->all();
-        $v = Validator()->make($data, [
+
+        $v = Validator::make($data, [
             'title'         => 'sometimes|required|string|max:300',
             'description'   => 'nullable|string',
             'price_cents'   => 'sometimes|required|integer|min:0',
-            'thumbnail_url' => 'nullable|string|max:255',
-            'category'      => 'nullable|string|max:50',
-            'slug'          => 'nullable|string|max:150',
+            'thumbnail_url' => 'nullable|string|max:1000',
+            'category'      => 'nullable|string|max:120',
+            'slug'          => 'nullable|string|max:300',
             'metadata'      => 'nullable',
             'is_active'     => 'nullable|boolean',
         ]);
@@ -107,11 +135,26 @@ class ProductWriteController extends Controller
         if (!$row) return response()->json(['success'=>false,'message'=>'Product not found'],404);
 
         $upd = [];
-        foreach (['title','description','price_cents','thumbnail_url','category','slug'] as $k) {
+        foreach (['title','description','price_cents','category','slug'] as $k) {
             if (array_key_exists($k,$data)) $upd[$k] = $data[$k];
         }
-        if (array_key_exists('metadata',$data)) $upd['metadata'] = json_encode($data['metadata']);
-        if (array_key_exists('is_active',$data)) $upd['is_active'] = (int) $data['is_active'];
+        if (array_key_exists('metadata',$data)) {
+            $upd['metadata'] = $this->normalizeMetadata($data['metadata']);
+        }
+        if (array_key_exists('is_active',$data)) {
+            $upd['is_active'] = (int) $data['is_active'];
+        }
+
+        // Chuẩn hoá thumbnail nếu client gửi lên
+        if (array_key_exists('thumbnail_url', $data)) {
+            // Ebook không cho dùng YouTube thumb
+            if ($row->type === 'ebook' && $this->isYoutubeThumb((string)$data['thumbnail_url'])) {
+                return response()->json(['success'=>false,'message'=>'Ebook thumbnail cannot be a YouTube thumbnail'], 422);
+            }
+            $normalized = $this->normalizeCoverAndSave((string)$data['thumbnail_url'], (int)$id, (string)$row->type);
+            $upd['thumbnail_url'] = $normalized ?: null;
+        }
+
         $upd['updated_at'] = now();
 
         DB::table('products')->where('id',$id)->update($upd);
@@ -120,11 +163,8 @@ class ProductWriteController extends Controller
 
     /**
      * POST /api/v1/catalog/products/{id}/files
-     * Nhận: pdf, txt, doc, docx, jpg, jpeg, png, webp, mp3
-     *
-     * Form-data:
-     *   file: (single)   HOẶC  files[]: (multiple)
-     *   is_preview=0|1   HOẶC  previews[]: 0|1 (song song với files[])
+     * Nhận: pdf, txt, doc, docx (ebook) | mp3, m4a, wav, mp4 (podcast)
+     * KHÔNG dùng làm ảnh bìa.
      */
     public function uploadFiles(Request $r, $id)
     {
@@ -137,10 +177,14 @@ class ProductWriteController extends Controller
             return response()->json(['success'=>false,'message'=>'No file uploaded'], 422);
         }
 
+        $ebookMimes   = 'pdf,txt,doc,docx';
+        $podcastMimes = 'mp3,m4a,wav,mp4';
+        $mimes = $product->type === 'podcast' ? $podcastMimes : $ebookMimes;
+
         $rules = [
-            'file'        => 'nullable|file|mimes:pdf,txt,doc,docx,jpg,jpeg,png,webp,mp3|max:51200',
+            'file'        => 'nullable|file|mimes:'.$mimes.'|max:51200', // 50MB
             'files'       => 'nullable|array',
-            'files.*'     => 'file|mimes:pdf,txt,doc,docx,jpg,jpeg,png,webp,mp3|max:51200',
+            'files.*'     => 'file|mimes:'.$mimes.'|max:51200',
             'is_preview'  => 'nullable|boolean',
             'previews'    => 'nullable|array',
             'previews.*'  => 'boolean',
@@ -153,17 +197,15 @@ class ProductWriteController extends Controller
         $now   = now();
         $added = [];
 
-        // Helper lưu 1 file
         $saveOne = function($file, $isPreview) use ($id, $now, &$added) {
             $ext     = strtolower($file->getClientOriginalExtension() ?: $file->extension());
-            $isImage = in_array($ext, ['jpg','jpeg','png','webp']);
-            $isAudio = in_array($ext, ['mp3']);
+            $isAudio = in_array($ext, ['mp3','m4a','wav']);
+            $isVideo = in_array($ext, ['mp4']);
             $isDoc   = in_array($ext, ['pdf','txt','doc','docx']);
-            $fileType= $isImage ? 'image' : ($isAudio ? 'audio' : ($isDoc ? $ext : 'file'));
+            $fileType= $isAudio ? 'audio' : ($isVideo ? 'video' : ($isDoc ? $ext : 'file'));
 
-            // Lưu vật lý vào disk public: storage/app/public/products/{id}/...
-            $stored  = $file->store("products/{$id}", 'public');       // ex: products/5/abc.pdf
-            $url     = Storage::url($stored);                          // ex: /storage/products/5/abc.pdf
+            $stored  = $file->store("products/{$id}", 'public');
+            $url     = Storage::url($stored);
             $size    = $file->getSize();
 
             DB::table('product_files')->insert([
@@ -176,17 +218,6 @@ class ProductWriteController extends Controller
                 'created_at'     => $now,
                 'updated_at'     => $now,
             ]);
-
-            // Nếu là ảnh và sản phẩm chưa có thumbnail → set làm cover
-            if ($isImage) {
-                $p = DB::table('products')->where('id',$id)->first();
-                if ($p && empty($p->thumbnail_url)) {
-                    DB::table('products')->where('id',$id)->update([
-                        'thumbnail_url' => $url,
-                        'updated_at'    => now(),
-                    ]);
-                }
-            }
 
             $added[] = [
                 'file_type'      => $fileType,
@@ -215,7 +246,7 @@ class ProductWriteController extends Controller
 
     /**
      * POST /api/v1/catalog/products/{id}/thumbnail
-     * Upload ảnh cover duy nhất cho sản phẩm
+     * Upload ảnh cover duy nhất cho sản phẩm -> luôn lưu về /storage/products/{id}/cover.ext
      */
     public function uploadThumbnail(Request $r, $id)
     {
@@ -223,14 +254,19 @@ class ProductWriteController extends Controller
         if (!$product) return response()->json(['success'=>false,'message'=>'Product not found'],404);
 
         $v = Validator::make($r->allFiles(), [
-            'image' => 'required|image|mimes:jpg,jpeg,png,webp|max:5120'
+            'image' => 'required|image|mimes:jpg,jpeg,png,webp,avif,heic,heif,tif,tiff|max:10240'
         ]);
         if ($v->fails()) {
             return response()->json(['success'=>false,'message'=>$v->errors()->first()], 422);
         }
 
-        $stored = $r->file('image')->store("products/{$id}", 'public');
-        $url    = Storage::url($stored); // /storage/products/{id}/...
+        // Lưu với tên cover.ext để ổn định
+        $ext     = strtolower($r->file('image')->getClientOriginalExtension() ?: $r->file('image')->extension());
+        $ext     = $ext === 'jpeg' ? 'jpg' : $ext;
+        $dstPath = "products/{$id}/cover.{$ext}";
+
+        Storage::disk('public')->put($dstPath, file_get_contents($r->file('image')->getRealPath()));
+        $url = Storage::url($dstPath);
 
         DB::table('products')->where('id',$id)->update([
             'thumbnail_url' => $url,
@@ -242,7 +278,6 @@ class ProductWriteController extends Controller
 
     /**
      * DELETE /api/v1/catalog/products/{product}/files/{file}
-     * Xoá file (DB + vật lý nếu nằm trong public storage)
      */
     public function destroyFile($productId, $fileId)
     {
@@ -251,7 +286,7 @@ class ProductWriteController extends Controller
 
         $urlPath = parse_url((string)$file->file_url, PHP_URL_PATH) ?: (string)$file->file_url;
         if (Str::startsWith($urlPath, '/storage/')) {
-            $rel = Str::replaceFirst('/storage/', '', $urlPath); // products/5/xxx.pdf
+            $rel = Str::replaceFirst('/storage/', '', $urlPath);
             Storage::disk('public')->delete($rel);
         }
 
@@ -265,7 +300,6 @@ class ProductWriteController extends Controller
      */
     public function destroy($id)
     {
-        // Cấm xoá nếu có bất kỳ order_items nào tham chiếu tới product
         $hasOrders = DB::table('order_items')->where('product_id', $id)->exists();
         if ($hasOrders) {
             return response()->json([
@@ -275,7 +309,6 @@ class ProductWriteController extends Controller
         }
 
         return DB::transaction(function () use ($id) {
-            // Xoá file vật lý nếu URL thuộc /storage
             $files = DB::table('product_files')->where('product_id',$id)->get();
             foreach ($files as $f) {
                 $urlPath = parse_url((string)$f->file_url, PHP_URL_PATH) ?: (string)$f->file_url;
@@ -296,9 +329,6 @@ class ProductWriteController extends Controller
 
     /**
      * GET /api/v1/catalog/products/{product}/files/{file}/download
-     * - /storage/... => tải trực tiếp
-     * - http(s)      => redirect
-     * - file:///     => từ chối (yêu cầu upload lên server)
      */
     public function downloadFile($productId, $fileId)
     {
@@ -311,37 +341,27 @@ class ProductWriteController extends Controller
             return response()->json(['success' => false, 'message' => 'File not found'], 404);
         }
 
-        // Gate: allow previews, restrict full files to paid users
         $isPreview = (bool) ($file->is_preview ?? 0);
         if (!$isPreview) {
-            // Resolve current user: prefer session (auth middleware) then fallback to Bearer token (Sanctum)
             $user = auth()->user();
             if (!$user) {
                 $token = request()->bearerToken();
                 if ($token) {
                     $pat = PersonalAccessToken::findToken($token);
-                    if ($pat) {
-                        $user = $pat->tokenable;
-                    }
+                    if ($pat) $user = $pat->tokenable;
                 }
             }
             if (!$user) {
                 return response()->json(['success' => false, 'message' => 'Authentication required'], 401);
             }
-            // Free product (price_cents = 0) is viewable for signed-in users
             $isFree = (int) DB::table('products')->where('id', $productId)->value('price_cents') === 0;
 
-            $canView = false;
-            if ($isFree) {
-                $canView = true;
-            } else {
-                $canView = DB::table('order_items')
-                    ->join('orders', 'orders.id', '=', 'order_items.order_id')
-                    ->where('orders.user_id', $user->id)
-                    ->where('orders.status', 'paid')
-                    ->where('order_items.product_id', $productId)
-                    ->exists();
-            }
+            $canView = $isFree ?: DB::table('order_items')
+                ->join('orders', 'orders.id', '=', 'order_items.order_id')
+                ->where('orders.user_id', $user->id)
+                ->where('orders.status', 'paid')
+                ->where('order_items.product_id', $productId)
+                ->exists();
 
             if (!$canView) {
                 return response()->json(['success' => false, 'message' => 'Please purchase this product to access full content'], 403);
@@ -350,9 +370,8 @@ class ProductWriteController extends Controller
 
         $urlPath = parse_url((string)$file->file_url, PHP_URL_PATH) ?: (string)$file->file_url;
 
-        // Files stored under storage symlinked path
         if (Str::startsWith($urlPath, '/storage/')) {
-            $rel = Str::replaceFirst('/storage/', '', $urlPath); // products/5/a.pdf
+            $rel = Str::replaceFirst('/storage/', '', $urlPath);
             $absolute = storage_path('app/public/' . $rel);
 
             if (is_file($absolute)) {
@@ -368,9 +387,8 @@ class ProductWriteController extends Controller
             return response()->json(['success' => false, 'message' => 'File missing on server'], 404);
         }
 
-        // Files placed directly under public/ (e.g. /books/Content/...) — support inline/protected access
         if (Str::startsWith($urlPath, '/books/')) {
-            $rel = ltrim($urlPath, '/'); // books/Content/...
+            $rel = ltrim($urlPath, '/');
             $absolute = public_path($rel);
             if (!is_file($absolute)) {
                 return response()->json(['success' => false, 'message' => 'File missing on server'], 404);
@@ -378,7 +396,6 @@ class ProductWriteController extends Controller
             $ext = strtolower(pathinfo($absolute, PATHINFO_EXTENSION));
             $name = basename($absolute);
             $mime = @mime_content_type($absolute) ?: 'application/octet-stream';
-            // Keep inline to allow iframe rendering; browser will still allow Save when viewing
             return response()->file($absolute, [
                 'Content-Type' => $mime,
                 'Content-Disposition' => 'inline; filename="'.$name.'"',
@@ -386,7 +403,6 @@ class ProductWriteController extends Controller
         }
 
         if (preg_match('#^https?://#i', (string)$file->file_url)) {
-            // Proxy remote file to avoid CORS issues on redirects
             try {
                 $resp = Http::withHeaders([])->get((string)$file->file_url);
                 if (!$resp->successful()) {
@@ -408,78 +424,143 @@ class ProductWriteController extends Controller
         ], 400);
     }
 
-
-public function attachYoutube(Request $r, int $id)
-{
-    // 1) Kiểm tra product
-    $product = DB::table('products')->where('id', $id)->first();
-    if (!$product) {
-        return response()->json(['success' => false, 'message' => 'Product not found'], 404);
-    }
-
-    // 2) Validate URL
-    $v = Validator::make($r->all(), [
-        'url' => ['required','string','max:255'],
-    ]);
-    if ($v->fails()) {
-        return response()->json(['success'=>false,'message'=>$v->errors()->first()], 422);
-    }
-
-    $url = trim((string)$r->input('url'));
-
-    // 3) Bắt id YouTube (hỗ trợ share/watch/embed/shorts)
-    if (!preg_match('~(?:youtu\.be/|v=|embed/|shorts/)([A-Za-z0-9_-]{11})~', $url, $m)) {
-        return response()->json(['success'=>false,'message'=>'Invalid YouTube URL'], 422);
-    }
-    $vid   = $m[1];
-    $watch = "https://www.youtube.com/watch?v={$vid}";
-    $embed = "https://www.youtube.com/embed/{$vid}";
-    $thumb = "https://img.youtube.com/vi/{$vid}/hqdefault.jpg";
-
-    // 4) (Tuỳ chọn) Lấy tiêu đề qua oEmbed — không bắt buộc phải thành công
-    $title = null;
-    try {
-        $o = Http::get('https://www.youtube.com/oembed', [
-            'url'    => $watch,
-            'format' => 'json',
-        ]);
-        if ($o->ok()) {
-            $title = $o->json('title');
+    /**
+     * POST /api/v1/catalog/products/{id}/attach-youtube
+     * Chỉ cho podcast. Không set bìa cho ebook.
+     */
+    public function attachYoutube(Request $r, int $id)
+    {
+        $product = DB::table('products')->where('id', $id)->first();
+        if (!$product) {
+            return response()->json(['success' => false, 'message' => 'Product not found'], 404);
         }
-    } catch (\Throwable $e) {
-        // ignore
-    }
+        if ($product->type !== 'podcast') {
+            return response()->json(['success'=>false,'message'=>'YouTube can only be attached to podcast products'], 422);
+        }
 
-    // 5) Ghi bản ghi "file" kiểu youtube vào product_files
-    $now = now();
-    DB::table('product_files')->insert([
-        'product_id'     => $id,
-        'file_type'      => 'youtube',
-        'file_url'       => $watch,                 // lưu link xem
-        'filesize_bytes' => null,
-        'is_preview'     => 0,
-        'meta'           => json_encode([
-            'provider'       => 'youtube',
-            'video_id'       => $vid,
-            'embed_url'      => $embed,
-            'thumbnail_url'  => $thumb,
-            'title'          => $title,
-        ]),
-        'created_at'     => $now,
-        'updated_at'     => $now,
-    ]);
-
-    // 6) Nếu product chưa có thumbnail -> set theo youtube
-    if (empty($product->thumbnail_url)) {
-        DB::table('products')->where('id', $id)->update([
-            'thumbnail_url' => $thumb,
-            'updated_at'    => now(),
+        $v = Validator::make($r->all(), [
+            'url' => ['required','string','max:1000'],
         ]);
+        if ($v->fails()) {
+            return response()->json(['success'=>false,'message'=>$v->errors()->first()], 422);
+        }
+
+        $url = trim((string)$r->input('url'));
+        if (!preg_match('~(?:youtu\.be/|v=|embed/|shorts/)([A-Za-z0-9_-]{11})~', $url, $m)) {
+            return response()->json(['success'=>false,'message'=>'Invalid YouTube URL'], 422);
+        }
+        $vid   = $m[1];
+        $watch = "https://www.youtube.com/watch?v={$vid}";
+        $embed = "https://www.youtube.com/embed/{$vid}";
+        $thumb = "https://img.youtube.com/vi/{$vid}/hqdefault.jpg";
+
+        $title = null;
+        try {
+            $o = Http::get('https://www.youtube.com/oembed', [
+                'url'    => $watch,
+                'format' => 'json',
+            ]);
+            if ($o->ok()) $title = $o->json('title');
+        } catch (\Throwable $e) { /* ignore */ }
+
+        $now = now();
+        DB::table('product_files')->insert([
+            'product_id'     => $id,
+            'file_type'      => 'youtube',
+            'file_url'       => $watch,
+            'filesize_bytes' => null,
+            'is_preview'     => 0,
+            'meta'           => json_encode([
+                'provider'       => 'youtube',
+                'video_id'       => $vid,
+                'embed_url'      => $embed,
+                'thumbnail_url'  => $thumb,
+                'title'          => $title,
+            ]),
+            'created_at'     => $now,
+            'updated_at'     => $now,
+        ]);
+
+        // Nếu podcast CHƯA có cover -> cho phép dùng thumb YouTube làm bìa tạm
+        if (empty($product->thumbnail_url)) {
+            DB::table('products')->where('id', $id)->update([
+                'thumbnail_url' => $thumb,
+                'updated_at'    => now(),
+            ]);
+        }
+
+        return response()->json(['success'=>true,'message'=>'YouTube attached']);
     }
 
-    return response()->json(['success'=>true,'message'=>'YouTube attached']);
-}
+    /* ========================= Helpers ========================= */
 
+    /** metadata có thể là array/object/string; lưu JSON nếu là array/object */
+    private function normalizeMetadata($metadata): ?string
+    {
+        if (is_array($metadata) || is_object($metadata)) {
+            return json_encode($metadata);
+        }
+        if (is_null($metadata) || $metadata === '') {
+            return null;
+        }
+        // giữ string đơn giản (client có thể lưu text), hoặc ép JSON hợp lệ nếu cần
+        return (string)$metadata;
+    }
 
+    /** Trả về true nếu URL là thumbnail YouTube */
+    private function isYoutubeThumb(string $url): bool
+    {
+        return stripos($url, 'img.youtube.com') !== false;
+    }
 
+    /**
+     * Chuẩn hoá ảnh bìa về /storage/products/{id}/cover.ext
+     * - Chấp nhận: URL http(s) hoặc đường dẫn tương đối dưới public/
+     * - Ebook: cấm YouTube thumb
+     */
+    private function normalizeCoverAndSave(?string $urlOrPath, int $productId, string $productType): ?string
+    {
+        $src = trim((string)$urlOrPath);
+        if ($src === '') return null;
+
+        // Ebook không được dùng YouTube thumb
+        if ($productType === 'ebook' && $this->isYoutubeThumb($src)) {
+            return null;
+        }
+
+        // Lấy binary
+        $bin = null;
+        try {
+            if (preg_match('#^https?://#i', $src)) {
+                $bin = @file_get_contents($src);
+            } else {
+                // Cho phép đường dẫn kiểu /books/thumbnail/a.jpg hoặc books/thumbnail/a.jpg
+                $path = public_path(ltrim($src, '/'));
+                if (is_file($path)) $bin = @file_get_contents($path);
+            }
+        } catch (\Throwable $e) {
+            $bin = null;
+        }
+        if (!$bin) return null;
+
+        // Đoán phần mở rộng
+        $ext = 'jpg';
+        if (preg_match('/\.(avif|webp|png|jpe?g)$/i', $src, $m)) {
+            $ext = strtolower($m[1] === 'jpeg' ? 'jpg' : $m[1]);
+        }
+
+        $dst = "products/{$productId}/cover.{$ext}";
+        Storage::disk('public')->put($dst, $bin);
+
+        return Storage::url($dst); // /storage/products/{id}/cover.ext
+    }
+
+    /** JSON encode nếu là array/object; nếu là string hợp lệ JSON rồi thì trả về nguyên string */
+    private function jsonOrNull($meta): ?string
+    {
+        if (is_null($meta) || $meta === '') return null;
+        if (is_array($meta) || is_object($meta)) return json_encode($meta);
+        $s = (string)$meta;
+        return $s;
+    }
 }

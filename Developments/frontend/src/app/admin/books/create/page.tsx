@@ -9,6 +9,7 @@ interface ProductInput {
   type: ProductType;
   title: string;
   description?: string;
+  // keep cents internally computed from priceStr
   price_cents: number;
   thumbnail_url?: string;
   category?: string;
@@ -26,6 +27,27 @@ export default function CreateBookPage() {
   const [uploadingLocal, setUploadingLocal] = useState(false);
   const [coverFile, setCoverFile] = useState<File | null>(null);
   const [coverPreview, setCoverPreview] = useState<string | null>(null);
+  const [priceStr, setPriceStr] = useState<string>("0.00");
+  const [categories, setCategories] = useState<string[]>([]);
+  const [categorySelect, setCategorySelect] = useState<string>("");
+  const [categoryOther, setCategoryOther] = useState<string>("");
+
+  // Load existing ebook categories from catalog (public endpoint)
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await fetch(`${API}/v1/catalog/products?type=ebook&per_page=200`);
+        const j = await r.json();
+        const items = j?.data?.items || [];
+        const set = new Set<string>();
+        for (const it of items) {
+          const c = String(it?.category || '').trim();
+          if (c) set.add(c);
+        }
+        setCategories(Array.from(set).sort());
+      } catch {}
+    })();
+  }, []);
 
   const addUrlRow = () => setForm({ ...form, files: [...(form.files || []), { file_type: 'pdf', file_url: '', is_preview: false }] });
 
@@ -56,8 +78,31 @@ export default function CreateBookPage() {
   const save = async () => {
     setSaving(true);
     try {
+      // required checks
+      if (!form.title.trim()) { alert('Please enter title'); return; }
+      if (!form.description?.trim()) { alert('Please enter description'); return; }
+      // validate price (allow commas, require non-negative)
+     const priceNum = Number.parseFloat((priceStr || '0').replace(/,/g, ''));
+     if (isNaN(priceNum) || priceNum < 0) { alert('Please enter a valid price (e.g., 00.00)'); return; }
+
+      if (!(categorySelect && categorySelect !== '__other__') && !categoryOther.trim()) { alert('Please select a category or enter Other'); return; }
+      if (!coverFile) { alert('Please upload a cover image'); return; }
+      // sanitize price: non-negative, cents
+      const dollars = Math.max(0, Number.parseFloat((priceStr || '0').replace(/,/g, '')) || 0);
+      const price_cents = Math.round(dollars * 100);
+      // resolve category: selected or other
+      const category = categorySelect === '__other__' ? (categoryOther.trim() || undefined) : (categorySelect || undefined);
       const r = await fetch(`${API}/v1/catalog/products`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify(form)
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({
+          type: form.type,
+          title: form.title,
+          description: form.description,
+          price_cents,
+          thumbnail_url: form.thumbnail_url,
+          category,
+          slug: form.slug,
+          files: form.files,
+        })
       });
       const j = await r.json();
       if (!j?.success) { alert(j?.message || 'Create failed'); return; }
@@ -75,7 +120,7 @@ export default function CreateBookPage() {
       }
       const up = await uploadLocalFiles(id);
       if (!up.ok) return;
-      alert('Created');
+      alert('🎉 Chúc mừng! Tạo sách thành công.');
       router.push('/admin/books');
     } finally {
       setSaving(false);
@@ -92,28 +137,58 @@ export default function CreateBookPage() {
         <div className="border rounded-xl p-4 space-y-3">
           <div className="grid md:grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm text-gray-600">Type</label>
+              <label className="block text-sm text-gray-600">Type <span className="text-red-500">*</span></label>
               <select value={form.type} onChange={e => setForm({ ...form, type: e.target.value as ProductType })} className="w-full border rounded px-3 py-2">
                 <option value="ebook">Ebook</option>
               </select>
             </div>
             <div>
-              <label className="block text-sm text-gray-600">Price (cents, USD)</label>
-              <input type="number" value={form.price_cents} onChange={e => setForm({ ...form, price_cents: Number(e.target.value) })} className="w-full border rounded px-3 py-2" />
+              <label className="block text-sm text-gray-600">Price (USD) <span className="text-red-500">*</span></label>
+              <input
+                type="number"
+                inputMode="decimal"
+                step="0.01"
+                min="0"
+                placeholder="00.00"
+                value={priceStr}
+                onChange={e => setPriceStr(e.target.value)}
+                required
+                className="w-full border rounded px-3 py-2"
+              />
             </div>
           </div>
           <div>
-            <label className="block text-sm text-gray-600">Title</label>
-            <input value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} className="w-full border rounded px-3 py-2" />
+            <label className="block text-sm text-gray-600">Title <span className="text-red-500">*</span></label>
+            <input value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} required className="w-full border rounded px-3 py-2" />
           </div>
           <div>
-            <label className="block text-sm text-gray-600">Description</label>
-            <textarea value={form.description || ''} onChange={e => setForm({ ...form, description: e.target.value })} className="w-full border rounded px-3 py-2 h-28" />
+            <label className="block text-sm text-gray-600">Description <span className="text-red-500">*</span></label>
+            <textarea value={form.description || ''} onChange={e => setForm({ ...form, description: e.target.value })} required className="w-full border rounded px-3 py-2 h-28" />
           </div>
           <div className="grid md:grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm text-gray-600">Category</label>
-              <input value={form.category || ''} onChange={e => setForm({ ...form, category: e.target.value })} className="w-full border rounded px-3 py-2" />
+              <label className="block text-sm text-gray-600">Category <span className="text-red-500">*</span></label>
+              <select
+                value={categorySelect}
+                onChange={e => setCategorySelect(e.target.value)}
+                className="w-full border rounded px-3 py-2"
+                required={categorySelect !== '__other__'}
+              >
+                <option value="">Select a category</option>
+                {categories.map(c => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+                <option value="__other__">Other…</option>
+              </select>
+              {categorySelect === '__other__' && (
+                <input
+                  className="mt-2 w-full border rounded px-3 py-2"
+                  placeholder="Enter new category"
+                  value={categoryOther}
+                  onChange={e => setCategoryOther(e.target.value)}
+                  required
+                />
+              )}
             </div>
             <div>
               <label className="block text-sm text-gray-600">Slug</label>
@@ -121,8 +196,8 @@ export default function CreateBookPage() {
             </div>
           </div>
           <div>
-            <label className="block text-sm text-gray-600">Cover image</label>
-            <input type="file" accept="image/*" onChange={(e)=>{
+            <label className="block text-sm text-gray-600">Cover image <span className="text-red-500">*</span></label>
+            <input type="file" accept="image/*,.avif,.heic,.heif,.tif,.tiff" required onChange={(e)=>{
               const f = e.target.files?.[0] || null;
               setCoverFile(f);
               if (f) {
@@ -142,7 +217,7 @@ export default function CreateBookPage() {
 
           <div className="border rounded p-3">
             <div className="flex items-center justify-between mb-2">
-              <div className="font-medium">External file URLs</div>
+              <div className="font-medium">External file URLs <span className="text-xs text-zinc-500 font-normal">(optional)</span></div>
               <button className="px-2 py-1 border rounded" onClick={addUrlRow}>+ Add URL</button>
             </div>
             {(form.files || []).length === 0 && <div className="text-sm text-gray-500">No external URLs. You can skip this.</div>}
@@ -158,7 +233,6 @@ export default function CreateBookPage() {
                   className="col-span-2 border rounded px-2 py-1"
                 >
                   <option value="pdf">pdf</option>
-                  <option value="image">image</option>
                   <option value="txt">txt</option>
                   <option value="doc">doc</option>
                   <option value="docx">docx</option>
@@ -186,8 +260,8 @@ export default function CreateBookPage() {
           </div>
 
           <div className="border rounded p-3">
-            <div className="font-medium mb-2">Upload local files (PDF/images)</div>
-            <input type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" multiple onChange={handlePickLocal} />
+            <div className="font-medium mb-2">Upload local files (documents: PDF, TXT, DOC, DOCX) <span className="text-xs text-zinc-500 font-normal">(optional)</span></div>
+            <input type="file" accept=".pdf,.txt,.doc,.docx" multiple onChange={handlePickLocal} />
             {localQueue.length > 0 && (
               <div className="mt-2 space-y-2">
                 {localQueue.map((q, i) => (

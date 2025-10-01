@@ -151,14 +151,14 @@ export default function LandingHome() {
 
   // 5 images in public/home␠ (note: folder name ends with a space)
   // Use a trailing slash when joining and encode URI to preserve the space.
-  const HOME_DIR = '/home ';
+  const HOME_DIR = '/home';
   const homeImages = useMemo(
     () => [
-      '—Pngtree—gilded microphone a conceptual 3d_6299480.jpg',
-      '—Pngtree—modern podcast studio with neon_15937169.jpg',
-      'download.jpeg',
-      'download (1).jpeg',
-      '2e46dca2-8bc4-47a7-9afd-db1f3341f883.jpeg',
+      'image1.jpg',
+      'image3.jpeg',
+      'image4.jpeg',
+      'image2.jpeg',
+      'image5.jpg',
     ],
     []
   );

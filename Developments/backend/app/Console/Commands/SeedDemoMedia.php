@@ -22,7 +22,7 @@ class SeedDemoMedia extends Command
         $pdfsAbs = $this->listPublicFiles('books/Content', ['pdf']);
         if (empty($pdfsAbs)) {
             // fallback nếu thư mục chữ thường
-            $pdfsAbs = $this->listPublicFiles('books/content', ['pdf']);
+            $pdfsAbs = $this->listPublicFiles('books/Content', ['pdf']);
         }
 
         $force = (bool) $this->option('force');

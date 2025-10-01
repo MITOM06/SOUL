@@ -8,8 +8,8 @@ use Laravel\Sanctum\PersonalAccessToken;
 
 class ContinueLiteController extends Controller
 {
-    /** Lấy user id: ưu tiên Sanctum, fallback X-User-Id (cho dev demo) */
-    private function currentUserId(Request $r): int
+    /** Resolve current user id from Sanctum Bearer token or X-User-Id. No demo fallback. */
+    private function currentUserId(Request $r): ?int
     {
         if (auth()->check()) return (int) auth()->id();
         // Try Bearer token (when route is public but FE sends token)
@@ -18,14 +18,16 @@ class ContinueLiteController extends Controller
             $pat = PersonalAccessToken::findToken($token);
             if ($pat && $pat->tokenable) return (int) $pat->tokenable->id;
         }
+        // Optional header for trusted internal calls
         $h = (int) $r->header('X-User-Id', 0);
-        return $h > 0 ? $h : 1; // fallback demo = 1
+        return $h > 0 ? $h : null;
     }
 
     /** (Tuỳ chọn) GET /api/v1/continues -> list các product đang dở */
     public function index(Request $r)
     {
         $userId = $this->currentUserId($r);
+        if (!$userId) return response()->json(['message' => 'Unauthenticated'], 401);
         $rows = DB::table('continues')
             ->where('user_id', $userId)
             ->orderByDesc('updated_at')
@@ -39,6 +41,7 @@ class ContinueLiteController extends Controller
     public function show(Request $r, int $product)
     {
         $userId = $this->currentUserId($r);
+        if (!$userId) return response()->json(['message' => 'Unauthenticated'], 401);
         $row = DB::table('continues')
             ->where('user_id', $userId)
             ->where('product_id', $product)
@@ -51,6 +54,7 @@ class ContinueLiteController extends Controller
     public function store(Request $r, int $product)
     {
         $userId = $this->currentUserId($r);
+        if (!$userId) return response()->json(['message' => 'Unauthenticated'], 401);
 
         // validate tối thiểu
         $data = $r->validate([
@@ -60,13 +64,15 @@ class ContinueLiteController extends Controller
             'is_active'            => ['nullable','boolean'],
         ]);
 
-        $payload = [
-            'current_chapter'      => $data['current_chapter']      ?? null,
-            'current_page'         => $data['current_page']         ?? null,
-            'current_time_seconds' => $data['current_time_seconds'] ?? null,
-            'is_active'            => array_key_exists('is_active', $data) ? (bool)$data['is_active'] : true,
-            'updated_at'           => now(),
-        ];
+        // Only set fields that are present to avoid unintentionally nulling others
+        $payload = [ 'updated_at' => now() ];
+        if ($r->has('current_chapter'))      $payload['current_chapter']      = $data['current_chapter'] ?? null;
+        if ($r->has('current_page'))         $payload['current_page']         = $data['current_page'] ?? null;
+        if ($r->has('current_time_seconds')) $payload['current_time_seconds'] = $data['current_time_seconds'] ?? null;
+        if ($r->has('is_active'))            $payload['is_active']            = (bool)($data['is_active'] ?? true);
+        if (count($payload) <= 1) { // only updated_at
+            return response()->json(['message' => 'No progress fields provided'], 422);
+        }
 
         // upsert theo (user_id, product_id)
         $exists = DB::table('continues')
@@ -96,6 +102,7 @@ class ContinueLiteController extends Controller
     public function destroy(Request $r, int $product)
     {
         $userId = $this->currentUserId($r);
+        if (!$userId) return response()->json(['message' => 'Unauthenticated'], 401);
         $deleted = DB::table('continues')
             ->where('user_id', $userId)
             ->where('product_id', $product)

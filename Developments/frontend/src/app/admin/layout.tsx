@@ -48,6 +48,7 @@ export default function AdminLayout({
 
   const links = [
     { href: "/admin/dashboard", label: "Dashboard" },
+    { href: "/admin/report", label: "Report" },
     { href: "/admin/books", label: "Book Management" },
     { href: "/admin/podcasts", label: "Podcast Management" },
     { href: "/admin/orders", label: "Orders" },

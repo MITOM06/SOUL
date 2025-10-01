@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Http\Controllers\Api\V1\Catalog;
 
 use Illuminate\Http\Request;
@@ -8,16 +9,22 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\PersonalAccessToken;
 use App\Services\PlanInclusions;
+use Illuminate\Support\Facades\File;
 
 class ProductReadController extends Controller
 {
     /**
      * GET /api/v1/catalog/products
      * Query: type=ebook|podcast, search, category, page, per_page, min_price, max_price (in cents)
+     *
+     * Nguyên tắc an toàn ảnh:
+     * - Chỉ fallback trong ĐÚNG loại (ebook -> books/, podcast -> podcasts/)
+     * - Nếu không tìm được ảnh đúng loại, trả null (frontend dùng placeholder theo type)
+     * - Kiểm tra tồn tại file theo nơi lưu: /storage/... trên Storage, /books|/podcasts/... ở public/
      */
     public function index(Request $r)
     {
-        // KHÔNG còn whereNull('deleted_at'), chỉ hiển thị sản phẩm đang active
+        // Chỉ hiển thị sản phẩm đang active
         $q = DB::table('products')->where('is_active', 1);
 
         if ($r->filled('type')) {
@@ -25,10 +32,10 @@ class ProductReadController extends Controller
         }
         if ($r->filled('search')) {
             $s = '%' . $r->query('search') . '%';
-            $q->where(function($x) use ($s) {
-                $x->where('title','like',$s)
-                  ->orWhere('description','like',$s)
-                  ->orWhere('category','like',$s);
+            $q->where(function ($x) use ($s) {
+                $x->where('title', 'like', $s)
+                  ->orWhere('description', 'like', $s)
+                  ->orWhere('category', 'like', $s);
             });
         }
         if ($r->filled('category')) {
@@ -50,8 +57,8 @@ class ProductReadController extends Controller
         if ($min !== null) { $q->where('price_cents', '>=', (int) $min); }
         if ($max !== null) { $q->where('price_cents', '<=', (int) $max); }
 
-        $per  = (int) ($r->query('per_page', 12));
-        $page = (int) ($r->query('page', 1));
+        $per   = (int) ($r->query('per_page', 12));
+        $page  = (int) ($r->query('page', 1));
         $total = $q->count();
 
         $items = $q->orderByDesc('id')
@@ -62,26 +69,61 @@ class ProductReadController extends Controller
                 'created_at','updated_at',
             ]);
 
-        // Ensure thumbnail_url is present; if missing or file not found, attach a random demo cover
-        $coversBooks    = collect(Storage::disk('public')->files('books/thumbnail'))
-            ->filter(fn($p) => preg_match('/\.(jpg|jpeg|png|webp|avif)$/i', $p));
-        $coversPodcasts = collect(Storage::disk('public')->files('podcasts/thumbnail'))
-            ->filter(fn($p) => preg_match('/\.(jpg|jpeg|png|webp|avif)$/i', $p));
+        // Chuẩn bị nguồn fallback đúng theo nơi bạn lưu (public/books/thumbnail & public/podcasts/thumbnail)
+        $booksAbsPath    = public_path('books/thumbnail');
+        $podcastsAbsPath = public_path('podcasts/thumbnail');
 
-        $items->transform(function ($it) use ($coversBooks, $coversPodcasts) {
+        $coversBooksAbs = is_dir($booksAbsPath)
+            ? collect(File::files($booksAbsPath))
+                ->filter(fn($f) => preg_match('/\.(jpg|jpeg|png|webp|avif)$/i', $f->getFilename()))
+                ->values()
+            : collect();
+
+        $coversPodcastsAbs = is_dir($podcastsAbsPath)
+            ? collect(File::files($podcastsAbsPath))
+                ->filter(fn($f) => preg_match('/\.(jpg|jpeg|png|webp|avif)$/i', $f->getFilename()))
+                ->values()
+            : collect();
+
+        // Transform: đảm bảo không lẫn ảnh bìa giữa 2 loại
+        $items->transform(function ($it) use ($coversBooksAbs, $coversPodcastsAbs) {
             $thumb = (string) ($it->thumbnail_url ?? '');
             $needsFallback = empty($thumb);
+
+            // Nếu là /storage/... kiểm tra tồn tại trên Storage::disk('public')
             if (!$needsFallback && str_starts_with($thumb, '/storage/')) {
                 $rel = ltrim(substr($thumb, strlen('/storage/')), '/');
                 $needsFallback = !Storage::disk('public')->exists($rel);
             }
+
+            // Nếu là /books/... hoặc /podcasts/... kiểm tra trực tiếp ở public/
+            if (
+                !$needsFallback &&
+                (str_starts_with($thumb, '/books/') || str_starts_with($thumb, '/podcasts/'))
+            ) {
+                $abs = public_path(ltrim($thumb, '/'));
+                $needsFallback = !is_file($abs);
+            }
+
             if ($needsFallback) {
-                if ($it->type === 'podcast' && $coversPodcasts->count()) {
-                    $it->thumbnail_url = Storage::url($coversPodcasts->random());
-                } elseif ($coversBooks->count()) {
-                    $it->thumbnail_url = Storage::url($coversBooks->random());
+                if ($it->type === 'ebook') {
+                    // CHỈ fallback trong books; nếu không có -> để null (frontend dùng placeholder ebook)
+                    if ($coversBooksAbs->count()) {
+                        $name = $coversBooksAbs->random()->getFilename();
+                        $it->thumbnail_url = '/books/thumbnail/' . $name; // file dưới public/
+                    } else {
+                        $it->thumbnail_url = null;
+                    }
+                } else { // podcast
+                    if ($coversPodcastsAbs->count()) {
+                        $name = $coversPodcastsAbs->random()->getFilename();
+                        $it->thumbnail_url = '/podcasts/thumbnail/' . $name;
+                    } else {
+                        $it->thumbnail_url = null;
+                    }
                 }
             }
+
             return $it;
         });
 
@@ -101,10 +143,14 @@ class ProductReadController extends Controller
 
     /**
      * GET /api/v1/catalog/products/{id}
+     *
+     * Nguyên tắc an toàn ảnh giống index():
+     * - Chỉ fallback theo đúng loại
+     * - Không lấy ảnh loại còn lại khi thiếu
+     * - Kiểm tra tồn tại file theo nơi lưu
      */
     public function show($id)
     {
-        // KHÔNG còn whereNull('deleted_at')
         $product = DB::table('products')->where('id', $id)->first();
         if (!$product) {
             return response()->json(['success' => false, 'message' => 'Product not found'], 404);
@@ -115,38 +161,58 @@ class ProductReadController extends Controller
             ->orderByDesc('id')
             ->get();
 
-        // Fallback thumbnail for detail view
-        if (empty($product->thumbnail_url)) {
-            $coversBooks    = collect(Storage::disk('public')->files('books/thumbnail'))
-                ->filter(fn($p) => preg_match('/\.(jpg|jpeg|png|webp|avif)$/i', $p));
-            $coversPodcasts = collect(Storage::disk('public')->files('podcasts/thumbnail'))
-                ->filter(fn($p) => preg_match('/\.(jpg|jpeg|png|webp|avif)$/i', $p));
-            if ($product->type === 'podcast' && $coversPodcasts->count()) {
-                $product->thumbnail_url = Storage::url($coversPodcasts->random());
-            } elseif ($coversBooks->count()) {
-                $product->thumbnail_url = Storage::url($coversBooks->random());
-            }
-        } else {
-            if (str_starts_with($product->thumbnail_url, '/storage/')) {
-                $rel = ltrim(substr($product->thumbnail_url, strlen('/storage/')), '/');
-                if (!Storage::disk('public')->exists($rel)) {
-                    $coversBooks    = collect(Storage::disk('public')->files('books/thumbnail'))
-                        ->filter(fn($p) => preg_match('/\.(jpg|jpeg|png|webp|avif)$/i', $p));
-                    $coversPodcasts = collect(Storage::disk('public')->files('podcasts/thumbnail'))
-                        ->filter(fn($p) => preg_match('/\.(jpg|jpeg|png|webp|avif)$/i', $p));
-                    if ($product->type === 'podcast' && $coversPodcasts->count()) {
-                        $product->thumbnail_url = Storage::url($coversPodcasts->random());
-                    } elseif ($coversBooks->count()) {
-                        $product->thumbnail_url = Storage::url($coversBooks->random());
+        $booksAbsPath    = public_path('books/thumbnail');
+        $podcastsAbsPath = public_path('podcasts/thumbnail');
+
+        $needsFallback = empty($product->thumbnail_url);
+
+        if (!$needsFallback && str_starts_with($product->thumbnail_url, '/storage/')) {
+            $rel = ltrim(substr($product->thumbnail_url, strlen('/storage/')), '/');
+            $needsFallback = !Storage::disk('public')->exists($rel);
+        }
+
+        if (
+            !$needsFallback &&
+            (str_starts_with($product->thumbnail_url, '/books/') || str_starts_with($product->thumbnail_url, '/podcasts/'))
+        ) {
+            $abs = public_path(ltrim($product->thumbnail_url, '/'));
+            $needsFallback = !is_file($abs);
+        }
+
+        if ($needsFallback) {
+            if ($product->type === 'ebook') {
+                if (is_dir($booksAbsPath)) {
+                    $c = collect(File::files($booksAbsPath))
+                        ->filter(fn($f) => preg_match('/\.(jpg|jpeg|png|webp|avif)$/i', $f->getFilename()))
+                        ->values();
+                    if ($c->count()) {
+                        $product->thumbnail_url = '/books/thumbnail/' . $c->random()->getFilename();
+                    } else {
+                        $product->thumbnail_url = null; // frontend placeholder ebook
                     }
+                } else {
+                    $product->thumbnail_url = null;
+                }
+            } else { // podcast
+                if (is_dir($podcastsAbsPath)) {
+                    $c = collect(File::files($podcastsAbsPath))
+                        ->filter(fn($f) => preg_match('/\.(jpg|jpeg|png|webp|avif)$/i', $f->getFilename()))
+                        ->values();
+                    if ($c->count()) {
+                        $product->thumbnail_url = '/podcasts/thumbnail/' . $c->random()->getFilename();
+                    } else {
+                        $product->thumbnail_url = null; // frontend placeholder podcast
+                    }
+                } else {
+                    $product->thumbnail_url = null;
                 }
             }
         }
 
-        // Compute access for current user (if authenticated via Sanctum token)
+        // Compute access cho user hiện tại (nếu có)
         $user = Auth::user();
         if (!$user) {
-            // Fallback: if Bearer token is sent but route is public, resolve user via Sanctum
+            // Fallback: nếu có Bearer token (Sanctum) mà route public
             $token = request()->bearerToken();
             if ($token) {
                 $pat = PersonalAccessToken::findToken($token);
@@ -155,6 +221,7 @@ class ProductReadController extends Controller
                 }
             }
         }
+
         $canView = false;
         if ($user) {
             $canView = DB::table('order_items')
@@ -163,13 +230,15 @@ class ProductReadController extends Controller
                 ->where('orders.status', 'paid')
                 ->where('order_items.product_id', $id)
                 ->exists();
+
             if (!$canView) {
-                // Also allow access if included in the user's active subscription plan
+                // Kiểm tra quyền qua gói subscription
                 try {
                     $canView = PlanInclusions::userHasAccessViaPlan($user->id, (int) $id);
                 } catch (\Throwable $e) { /* ignore */ }
             }
         }
+
         $hasPreview = DB::table('product_files')->where('product_id', $id)->where('is_preview', 1)->exists();
 
         return response()->json([
@@ -188,6 +257,8 @@ class ProductReadController extends Controller
     /**
      * GET /api/v1/catalog/podcast/categories
      * Optional: ?limit=… (defaults 100)
+     *
+     * (Giữ nguyên logic: chỉ đếm theo podcast; thumbnail lấy từ sản phẩm mới nhất trong category)
      */
     public function categories(Request $r)
     {
@@ -204,13 +275,14 @@ class ProductReadController extends Controller
             ->limit($limit)
             ->get();
 
-        $result = $cats->map(function($row) {
+        $result = $cats->map(function ($row) {
             $thumb = DB::table('products')
                 ->where('is_active', 1)
                 ->where('type', 'podcast')
                 ->where('category', $row->category)
                 ->orderByDesc('id')
                 ->value('thumbnail_url');
+
             return [
                 'category'      => $row->category,
                 'count'         => (int) $row->count,
