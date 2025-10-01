@@ -133,6 +133,9 @@ Route::prefix('v1')->group(function () {
     // =====================================================
     Route::prefix('admin')->middleware(['auth:sanctum', 'admin'])->group(function () {
         Route::get('stats', [AdminDashboardController::class, 'stats']);
+        // Reports
+        Route::get('reports/income', [\App\Http\Controllers\Api\V1\Admin\ReportController::class, 'income']);
+        Route::get('reports/daily',  [\App\Http\Controllers\Api\V1\Admin\ReportController::class, 'daily']);
 
         // Users management
         Route::apiResource('users', AdminUserController::class);

@@ -208,7 +208,7 @@ export const adminUserSubscriptionsAPI = {
   create: (payload: {
     user_id: number;
     plan_key: 'basic' | 'premium' | 'vip'; // hoặc gửi 'plan'
-    status: 'active' | 'canceled' | 'expired';
+    status: "active" | "canceled" | "expired" | "pending";
     start_date?: string | null;
     end_date?: string | null;
     price_cents?: number | null;
@@ -220,7 +220,7 @@ export const adminUserSubscriptionsAPI = {
     id: number,
     payload: Partial<{
       plan_key: 'basic' | 'premium' | 'vip'; // hoặc 'plan'
-      status: 'active' | 'canceled' | 'expired';
+      status: "active" | "canceled" | "expired" | "pending";
       start_date: string | null;
       end_date: string | null;
       price_cents: number | null;

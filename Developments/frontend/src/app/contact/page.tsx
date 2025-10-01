@@ -1,13 +1,22 @@
 "use client";
 
 import React, { useState } from "react";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function ContactPage() {
+  const { user } = useAuth();
   const [sent, setSent] = useState(false);
   const [form, setForm] = useState({ name: "", email: "", subject: "", message: "" });
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
+    // Require login to send message
+    if (!user) {
+      alert("Vui lòng đăng nhập để gửi tin nhắn.");
+      const next = encodeURIComponent(window.location.pathname + window.location.search);
+      window.location.href = `/auth/login?next=${next}`;
+      return;
+    }
     setSent(true);
     setTimeout(() => setSent(false), 3000);
   };

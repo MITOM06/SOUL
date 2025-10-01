@@ -448,8 +448,13 @@ export default function BookDetail() {
   const canView = Boolean((data as any)?.access?.can_view);
   const priceCents = Number(p?.price_cents ?? 0);
   const owned = canView || (priceCents === 0 && isCustomer);
-  const preview = files.find((f) => !!f.is_preview && f.file_type === 'pdf' && canOpenDirect(f.file_url)) || null;
-  const fullPdf = files.find((f) => f.file_type === 'pdf' && !f.is_preview) || null;
+  const isPdf = (f: ProductFile) => {
+    const t = String(f.file_type || '').toLowerCase();
+    const url = String(f.file_url || '');
+    return t === 'pdf' || /\.pdf(\?|$)/i.test(url);
+  };
+  const preview = files.find((f) => !!f.is_preview && isPdf(f) && canOpenDirect(f.file_url)) || null;
+  const fullPdf = files.find((f) => isPdf(f) && !f.is_preview) || null;
   const coverSrc = toAbs(p?.thumbnail_url) || FALLBACK_IMG;
 
   const meta =
@@ -470,15 +475,31 @@ export default function BookDetail() {
 
   const onRead = () => {
     const previewFile = files.find((f) => !!f.is_preview && f.file_type === 'pdf');
-    if (!previewFile) return alert('No preview available.');
-    openPdfInline(p!.id, previewFile.id, `${p!.title} — Preview`);
+    if (previewFile) {
+      openPdfInline(p!.id, previewFile.id, `${p!.title} — Preview`);
+      return;
+    }
+    // Fallback: if user owns and only full PDF exists, open full
+    if (owned && fullPdf) {
+      if (!isLoggedIn) {
+        const next = encodeURIComponent(window.location.pathname);
+        window.location.href = `/auth/login?next=${next}`;
+        return;
+      }
+      openPdfInline(p!.id, fullPdf.id, p!.title);
+      return;
+    }
+    alert('No preview available.');
   };
   const onReadFull = () => {
-    if (!fullPdf) return;
     if (!owned) return;
     if (!isLoggedIn) {
       const next = encodeURIComponent(window.location.pathname);
       window.location.href = `/auth/login?next=${next}`;
+      return;
+    }
+    if (!fullPdf) {
+      alert('This ebook has no full PDF uploaded yet. Please contact support.');
       return;
     }
     openPdfInline(p!.id, fullPdf.id, p!.title);
@@ -676,7 +697,7 @@ export default function BookDetail() {
                 <div className="flex items-center gap-3 flex-wrap">
                   <button
                     onClick={onRead}
-                    disabled={!preview}
+                    disabled={!preview && !owned}
                     className="inline-flex items-center gap-2 bg-[color:var(--brand-500)] hover:bg-[color:var(--brand-600)] disabled:opacity-50 text-white font-semibold px-5 py-2.5 rounded-xl shadow transition"
                   >
                     Read Preview
@@ -735,7 +756,7 @@ export default function BookDetail() {
                   {canView || priceCents === 0 ? (
                     <button
                       onClick={onReadFull}
-                      disabled={!fullPdf}
+                      disabled={false}
                       className="mt-4 w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:hover:bg-emerald-600/90 disabled:cursor-not-allowed disabled:opacity-50 text-white font-semibold py-2.5"
                     >
                       Read Full

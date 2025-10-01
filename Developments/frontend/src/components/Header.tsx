@@ -146,7 +146,7 @@ export default function Header() {
   }, []);
 
   const nav = [
-    { href: "/", label: "(SOUL) Stories Online, Unified Library" },
+    { href: "/", label: "SOUL - Stories Online, Unified Library" },
     { href: "/hot", label: "Hot" },
     { href: "/book", label: "Books" },
     { href: "/podcast", label: "Podcasts" },
