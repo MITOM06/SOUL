@@ -42,7 +42,8 @@ class LoginController extends Controller
         if (! $user->is_active) {
             return response()->json([
                 'success' => false,
-                'message' => 'Account is inactive.'
+                'code'    => 'USER_SUSPENDED',
+                'message' => 'Your account has been temporarily locked for violating community standards. Please contact support at (+84) 0900-123-456.'
             ], 403);
         }
 

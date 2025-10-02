@@ -61,7 +61,7 @@ Route::prefix('v1')->group(function () {
     // =====================================================
     // 🔹 Routes cần login
     // =====================================================
-    Route::middleware('auth:sanctum')->group(function () {
+    Route::middleware(['auth:sanctum','active'])->group(function () {
         // Authenticated user
         Route::post('logout', [AuthController::class, 'logout']);
         Route::get('user',   [AuthController::class, 'getUser']);

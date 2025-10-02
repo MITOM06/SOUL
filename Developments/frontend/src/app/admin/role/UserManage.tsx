@@ -131,7 +131,7 @@ export default function UserManage({ roleFilter }: UserManageProps) {
 
   // Delete
   const deleteUser = async (userId: number) => {
-    if (!confirm("Bạn có chắc muốn xoá user này?")) return;
+    if (!confirm("Are you sure you want to delete this user?")) return;
     try {
       await adminUsersAPI.delete(userId);
       fetchUsers(currentPage, roleFilter);

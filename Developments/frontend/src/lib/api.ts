@@ -1,6 +1,7 @@
 // frontend/src/lib/api.ts
 import axios from 'axios';
 import Cookies from 'js-cookie';
+import toast from 'react-hot-toast';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api';
 
@@ -28,7 +29,11 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (resp) => resp,
   (error) => {
-    if (error.response?.status === 401 && error.config.url !== '/v1/user') {
+    const status = error?.response?.status;
+    const data   = error?.response?.data || {};
+
+    // If session expired / unauthorized: go to login as before
+    if (status === 401 && error.config.url !== '/v1/user') {
       const hadToken = Boolean(Cookies.get('auth_token') || error.config?.headers?.Authorization);
       if (hadToken) {
         Cookies.remove('auth_token');
@@ -39,6 +44,27 @@ api.interceptors.response.use(
         }
       }
     }
+
+    // If user is suspended/inactive: show message and push to homepage
+    if (status === 403) {
+      const code = data?.error?.code || data?.code || '';
+      const message = data?.error?.message || data?.message || 'Your account has been locked. Please contact support.';
+      const url = String(error?.config?.url || '');
+
+      if (code === 'USER_SUSPENDED' || /temporarily locked|community standards/i.test(String(message))) {
+        // Do not redirect during login; let the login form display the message
+        if (url === '/v1/login') {
+          return Promise.reject(error);
+        }
+
+        try { Cookies.remove('auth_token'); } catch {}
+        try { localStorage.setItem('susp_notice', message); } catch {}
+        toast.error(message);
+        // Navigate to home where a global notice can be shown
+        window.location.replace('/');
+      }
+    }
+
     return Promise.reject(error);
   }
 );
