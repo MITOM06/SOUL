@@ -57,8 +57,8 @@ class ProductReadController extends Controller
         if ($min !== null) { $q->where('price_cents', '>=', (int) $min); }
         if ($max !== null) { $q->where('price_cents', '<=', (int) $max); }
 
-        $per   = (int) ($r->query('per_page', 12));
-        $page  = (int) ($r->query('page', 1));
+        $per   = max(1, (int) ($r->query('per_page', 12)));
+        $page  = max(1, (int) ($r->query('page', 1)));
         $total = $q->count();
 
         $items = $q->orderByDesc('id')

@@ -13,10 +13,9 @@ use Laravel\Sanctum\PersonalAccessToken;
 
 class ProductWriteController extends Controller
 {
-    /**
+    /*
      * POST /api/v1/catalog/products
      * Body JSON: { type,title,description,price_cents,thumbnail_url?,category?,slug?,metadata?,is_active?, files?[] }
-     *
      * Chính sách an toàn ảnh bìa:
      * - Luôn chuẩn hoá ảnh bìa vào /storage/products/{id}/cover.ext
      * - Cấm ebook dùng thumbnail YouTube
