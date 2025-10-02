@@ -59,7 +59,8 @@ class TestUserSeeder extends Seeder
             'user_id'       => $user->id,
             'provider'      => 'momo',
             'amount_cents'  => $order->total_cents,
-            'currency'      => 'VND',
+            // Thống nhất 1 loại tiền tệ
+            'currency'      => 'USD',
             'status'        => Payment::STATUS_INITIATED,
         ]);
     }

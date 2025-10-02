@@ -43,7 +43,8 @@ class PaymentController extends Controller
             'user_id'      => $user->id,
             'provider'     => $request->provider,
             'amount_cents' => $order->total_cents,
-            'currency'     => 'VND',
+            // Thống nhất 1 loại tiền tệ cho hệ thống (UI hiển thị USD)
+            'currency'     => 'USD',
             'status'       => Payment::STATUS_INITIATED,
         ]);
 
@@ -58,7 +59,7 @@ class PaymentController extends Controller
             'order_id'   => $order->id,
             'provider'   => $request->provider,
             'amount'     => $order->total_cents,
-            'currency'   => 'VND',
+            'currency'   => 'USD',
             'qr_url'     => $qrUrl,
             'otp_demo'   => '123456', // demo OTP
             'message'    => 'Quét QR và nhập OTP để hoàn tất thanh toán',
@@ -144,24 +145,6 @@ class PaymentController extends Controller
                 if (method_exists($user, 'products')) {
                     // Không ghi đè, chỉ gắn thêm (idempotent)
                     $user->products()->syncWithoutDetaching($productIds);
-                } else {
-                    // Fallback: ghi trực tiếp vào pivot payments (chuẩn Laravel)
-                    // Cần có bảng payments với cột user_id, product_id (unique composite)
-                    $rows = [];
-                    $now  = now();
-                    foreach ($productIds as $pid) {
-                        $rows[] = [
-                            'user_id'    => $user->id,
-                            'created_at' => $now,
-                            'provider'=> $payment->provider,
-                            'updated_at' => $now,
-                            'amount_cents'=>$order->total_cents,
-
-                        ];
-                    }
-                    if (!empty($rows)) {
-                        DB::table('payments')->insertOrIgnore($rows);
-                    }
                 }
 
                 // 4) Giữ lại order đã thanh toán để Library có thể hiển thị purchases

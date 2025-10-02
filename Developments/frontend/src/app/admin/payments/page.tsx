@@ -20,7 +20,8 @@ export default function AdminPaymentsPage() {
 
   // filters
   const [query, setQuery] = useState("");
-  const [status, setStatus] = useState("");
+  // Mặc định filter theo trạng thái thành công
+  const [status, setStatus] = useState("success");
   const [provider, setProvider] = useState("");
 
   const fetchPayments = async (page = 1) => {
@@ -87,11 +88,9 @@ export default function AdminPaymentsPage() {
             onChange={(e) => setStatus(e.target.value)}
             className="border rounded-lg px-3 py-2"
           >
-            <option value="">All Status</option>
-            <option value="initiated">Initiated</option>
-            <option value="success">Success</option>
-            <option value="failed">Failed</option>
-            <option value="refunded">Refunded</option>
+            {/* Chỉ hiển thị 2 loại trạng thái: Khởi tạo & Thành công */}
+            <option value="initiated">Khởi tạo</option>
+            <option value="success">Thành công</option>
           </select>
 
           {/* Provider filter */}
@@ -139,7 +138,7 @@ export default function AdminPaymentsPage() {
                 <td className="border p-2">{p.user?.email}</td>
                 <td className="border p-2">{p.provider}</td>
                 <td className="border p-2">
-                  {(p.amount_cents / 100).toLocaleString()} {p.currency}
+                  {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format((p.amount_cents || 0) / 100)}
                 </td>
                 <td className="border p-2 capitalize">{p.status}</td>
                 <td className="border p-2">

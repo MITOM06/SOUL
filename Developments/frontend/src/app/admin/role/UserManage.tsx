@@ -81,6 +81,16 @@ export default function UserManage({ roleFilter }: UserManageProps) {
     }
   };
 
+  // Label vai trò hiển thị cho 3 admin (chỉ UI)
+  const getAdminRoleLabel = (u: User): string => {
+    if ((u.role || '').toLowerCase() !== 'admin') return '';
+    const email = (u.email || '').toLowerCase();
+    if (email === 'admin1@soul.app') return 'User management, users_subscription';
+    if (email === 'admin2@soul.app') return 'Product Management';
+    if (email === 'admin3@soul.app') return 'Order management, payment';
+    return 'Admin';
+  };
+
   // Tạo user
   const createUser = async () => {
     try {
@@ -151,16 +161,19 @@ export default function UserManage({ roleFilter }: UserManageProps) {
               🔎
             </span>
           </div>
-          <button
-            onClick={() => {
-              setSelectedUser(null);
-              setForm({ is_active: true });
-              setShowForm(true);
-            }}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:brightness-110"
-          >
-            Add {roleFilter === "admin" ? "Admin" : "User"}
-          </button>
+          {/* Bỏ phần Add Users: chỉ cho phép thêm Admin; ẩn nút khi đang ở trang Users */}
+          {roleFilter === 'admin' && (
+            <button
+              onClick={() => {
+                setSelectedUser(null);
+                setForm({ is_active: true });
+                setShowForm(true);
+              }}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:brightness-110"
+            >
+              Add Admin
+            </button>
+          )}
         </div>
       </div>
 
@@ -172,6 +185,9 @@ export default function UserManage({ roleFilter }: UserManageProps) {
               <th className="p-2 border">#</th>
               <th className="p-2 border">Name</th>
               <th className="p-2 border">Email</th>
+              {roleFilter === 'admin' && (
+                <th className="p-2 border">Role</th>
+              )}
               <th className="p-2 border">Active</th>
               <th className="p-2 border">Created</th>
               <th className="p-2 border">Actions</th>
@@ -196,6 +212,9 @@ export default function UserManage({ roleFilter }: UserManageProps) {
                   </td>
                   <td className="border p-2">{user.name || "(No name)"}</td>
                   <td className="border p-2">{user.email}</td>
+                  {roleFilter === 'admin' && (
+                    <td className="border p-2">{getAdminRoleLabel(user) || '-'}</td>
+                  )}
                   <td
                     className="border p-2 select-none"
                     title="Click to toggle active"
