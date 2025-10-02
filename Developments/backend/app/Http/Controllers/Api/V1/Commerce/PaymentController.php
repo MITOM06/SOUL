@@ -9,6 +9,7 @@ use App\Models\Payment;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Log;
 use App\Mail\OrderSuccessMail;
 
 class PaymentController extends Controller
@@ -175,7 +176,13 @@ class PaymentController extends Controller
                 Mail::to($user->email)->send(new OrderSuccessMail($user, $order, $payment));
             }
         } catch (\Throwable $e) {
-            // swallow to avoid breaking API response
+            // Log error for diagnostics (mail config, network, etc.)
+            Log::error('OrderSuccessMail send failed', [
+                'payment_id' => $payment->id ?? null,
+                'user_id'    => $user->id ?? null,
+                'email'      => $user->email ?? null,
+                'error'      => $e->getMessage(),
+            ]);
         }
 
         return response()->json([

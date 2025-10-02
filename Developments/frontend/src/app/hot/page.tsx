@@ -131,8 +131,11 @@ export default function HotPage() {
     return () => { mounted = false; };
   }, []);
 
-  const hotBooks = partitionByTag(books.length ? books : (demoBooks as any[]), "hot", [0,1,2,3,4,5,6,7,8,9]);
-  const hotPodcasts = partitionByTag(podcasts.length ? podcasts : (demoPodcasts as any[]), "hot", [0,1,2,3,4,5,6,7,8,9]);
+  const hotBooksRaw = partitionByTag(books.length ? books : (demoBooks as any[]), "hot", [0,1,2,3,4,5,6,7,8,9]);
+  const hotPodcastsRaw = partitionByTag(podcasts.length ? podcasts : (demoPodcasts as any[]), "hot", [0,1,2,3,4,5,6,7,8,9]);
+  // Exclude Coming Soon from Hot rows to avoid duplication
+  const hotBooks = hotBooksRaw.filter((b:any) => !(Array.isArray((b as any)?.tags) && (b as any).tags.includes('coming_soon')) && !String((b as any)?.category||'').toLowerCase().includes('coming'));
+  const hotPodcasts = hotPodcastsRaw.filter((p:any) => !(Array.isArray((p as any)?.tags) && (p as any).tags.includes('coming_soon')) && !String((p as any)?.category||'').toLowerCase().includes('coming'));
   const carouselItems = useMemo(() => [
     ...hotBooks.slice(0,3).map((b) => ({ ...b, type: "book" as const })),
     ...hotPodcasts.slice(0,3).map((p) => ({ ...p, type: "podcast" as const })),
@@ -158,7 +161,7 @@ export default function HotPage() {
                     <div className="px-1.5 pt-2"><div className="h-3.5 w-3/4 bg-zinc-200 rounded animate-pulse" /></div>
                   </>
                 ) : (
-                  <BookCard book={b} />
+                  <BookCard book={b} qs="?coming=1" />
                 )}
               </div>
             ))}
@@ -172,7 +175,7 @@ export default function HotPage() {
                     <div className="px-1.5 pt-2"><div className="h-3.5 w-3/5 bg-zinc-200 rounded animate-pulse" /></div>
                   </>
                 ) : (
-                  <BookCard book={b} />
+                  <BookCard book={b} qs="?coming=0" />
                 )}
               </div>
             ))}
@@ -190,7 +193,7 @@ export default function HotPage() {
                     <div className="px-1.5 pt-2"><div className="h-3.5 w-2/3 bg-zinc-200 rounded animate-pulse" /></div>
                   </>
                 ) : (
-                  <PodcastCard podcast={p} variant="wide" />
+                  <PodcastCard podcast={p} variant="wide" hidePrice qs="?coming=1" />
                 )}
               </div>
             ))}
@@ -204,7 +207,7 @@ export default function HotPage() {
                     <div className="px-1.5 pt-2"><div className="h-3.5 w-1/2 bg-zinc-200 rounded animate-pulse" /></div>
                   </>
                 ) : (
-                  <PodcastCard podcast={p} variant="wide" />
+                  <PodcastCard podcast={p} variant="wide" qs="?coming=0" />
                 )}
               </div>
             ))}

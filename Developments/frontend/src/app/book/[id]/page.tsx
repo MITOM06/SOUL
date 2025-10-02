@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import api from '@/lib/api';
 import BookCard from '@/components/BookCard';
@@ -51,6 +51,16 @@ const toAbs = (u?: string | null) => {
 const formatUSD = (cents?: number | null) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(((cents ?? 0) as number) / 100);
 
+/* ========== Helpers (NEW): wrap description by words ========== */
+function wrapByWords(text: string, wordsPerLine = 12) {
+  const words = text.split(/\s+/).filter(Boolean);
+  const lines: string[] = [];
+  for (let i = 0; i < words.length; i += wordsPerLine) {
+    lines.push(words.slice(i, i + wordsPerLine).join(' '));
+  }
+  return lines.join('\n');
+}
+
 /* ========== Toast ========== */
 function useToast(autoHideMs = 2500) {
   const [open, setOpen] = useState(false);
@@ -82,14 +92,9 @@ function Toast({ open, msg, onClose }: { open: boolean; msg: string; onClose: ()
       aria-live="polite"
     >
       <div className="flex items-center gap-2 rounded-xl bg-emerald-600 text-white px-4 py-2 shadow-xl ring-1 ring-emerald-700/40">
-        {/* Ẩn icon theo yêu cầu */}
-        <span className="text-lg hidden" aria-hidden="true">
-          🛟
-        </span>
+        <span className="text-lg hidden" aria-hidden="true">🛟</span>
         <span className="text-sm font-medium">{msg}</span>
-        <button onClick={onClose} className="ml-auto text-white/80 hover:text-white text-sm" aria-label="close">
-          ✕
-        </button>
+        <button onClick={onClose} className="ml-auto text-white/80 hover:text-white text-sm" aria-label="close">✕</button>
       </div>
     </div>
   );
@@ -116,7 +121,6 @@ function useContinue(productId: number | null) {
       ...p,
     };
     const r = await api.post(`/v1/continues/${productId}`, payload);
-    // optimistic update
     setProgress((prev: any) => ({ ...(prev || {}), ...payload, ...r.data?.data }));
     return r;
   };
@@ -183,7 +187,6 @@ function RelatedRow({ items }: { items: Array<{ id: number; title: string; cover
 
 /* ===================================================================== */
 export default function BookDetail() {
-  /* ------- contexts & params ------- */
   const params = useParams();
   const { add } = useCart();
   const { user } = useAuth();
@@ -194,18 +197,15 @@ export default function BookDetail() {
   const isAdmin = role === 'admin';
   const isCustomer = isLoggedIn && !isAdmin;
 
-  /* ------- derived id ------- */
   const id = useMemo(() => {
     const raw = (params as any)?.id;
     const s = Array.isArray(raw) ? raw[0] : raw;
     const n = Number(s);
     return Number.isFinite(n) && n > 0 ? n : null;
   }, [params]);
+  const searchParams = useSearchParams();
 
-  /* ------- ALL HOOKS live here (before any conditional return) ------- */
-  const [data, setData] = useState<{ product: Product; files: ProductFile[]; access?: { can_view?: boolean } } | null>(
-    null
-  );
+  const [data, setData] = useState<{ product: Product; files: ProductFile[]; access?: { can_view?: boolean } } | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const { progress, load, save } = useContinue(id);
 
@@ -219,16 +219,13 @@ export default function BookDetail() {
   const [lastSavedPage, setLastSavedPage] = useState<number>(0);
   const [savingPage, setSavingPage] = useState(false);
 
-  // Favorites (CHỈ 1 BLOCK)
+  // Favorites
   const [favOn, setFavOn] = useState<boolean>(false);
   const [canFav, setCanFav] = useState<boolean>(true);
 
   // Related
   const [related, setRelated] = useState<any[]>([]);
 
-  /* ------- effects (still hooks; above any return) ------- */
-
-  // disable scroll + cleanup blob
   useEffect(() => {
     if (!pdfUrl) return;
     const prev = document.body.style.overflow;
@@ -241,7 +238,6 @@ export default function BookDetail() {
     };
   }, [pdfUrl]);
 
-  // keepalive on abrupt close
   const saveKeepalive = (pageVal: number) => {
     if (!id) return;
     try {
@@ -285,7 +281,6 @@ export default function BookDetail() {
     };
   }, [isDirty, isLoggedIn, readingPage]);
 
-  // load product + progress
   useEffect(() => {
     if (!id) return;
     const ac = new AbortController();
@@ -313,7 +308,6 @@ export default function BookDetail() {
     return () => ac.abort();
   }, [id, isLoggedIn]);
 
-  // sync page outside when server progress changes + store to local (only when > 0)
   useEffect(() => {
     const cur = Math.max(0, Number(progress?.current_page || 0));
     setPage(cur);
@@ -324,7 +318,6 @@ export default function BookDetail() {
     if (isReading && cur > 0) setLastSavedPage(cur);
   }, [progress?.current_page, isReading, id]);
 
-  // NEW: when progress comes later, sync readingPage in overlay as well
   useEffect(() => {
     const cur = Number(progress?.current_page || 0);
     if (isReading && cur > 0) {
@@ -333,12 +326,10 @@ export default function BookDetail() {
     }
   }, [progress?.current_page, isReading]);
 
-  // while reading, keep outer UI number in sync (UI only)
   useEffect(() => {
     if (isReading) setPage(readingPage);
   }, [readingPage, isReading]);
 
-  // favorites
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -369,7 +360,6 @@ export default function BookDetail() {
     };
   }, [id, isLoggedIn, isAdmin]);
 
-  // related
   useEffect(() => {
     (async () => {
       try {
@@ -388,7 +378,6 @@ export default function BookDetail() {
     })();
   }, [id, data?.product?.category]);
 
-  /* ------- helper actions (no hooks below this line) ------- */
   const applyAndSavePage = async (next: number) => {
     const nextPage = Math.max(1, Number(next || 1));
     setReadingPage(nextPage);
@@ -408,7 +397,6 @@ export default function BookDetail() {
 
   const promptSaveThenClose = async () => {
     if (!pdfUrl) return;
-    // Auto-save without prompting
     if (Number(readingPage) !== Number(lastSavedPage)) {
       try {
         await applyAndSavePage(readingPage);
@@ -430,7 +418,6 @@ export default function BookDetail() {
       setPdfUrl(url);
       setPdfTitle(title);
 
-      // Ưu tiên server; nếu chưa kịp, dùng localStorage; cuối cùng mặc định 1
       const local = getLocalContinue(productId);
       const start = Math.max(1, Number(progress?.current_page ?? local ?? 1));
 
@@ -467,6 +454,19 @@ export default function BookDetail() {
           }
         })()
       : p?.metadata || {};
+  const comingSoon = (() => {
+    const tags: any = (meta?.tags ?? meta?.tag) as any;
+    const arr = Array.isArray(tags) ? tags : (tags ? [tags] : []);
+    const hasTag = arr.map((t:any)=>String(t).toLowerCase()).includes('coming_soon');
+    const status = String(meta?.status || '').toLowerCase();
+    const cat = String(p?.category || '').toLowerCase();
+    const qsComing = String(searchParams.get('coming') || '').toLowerCase();
+    const forceTrue  = qsComing === '1' || qsComing === 'true' || qsComing === 'yes';
+    const forceFalse = qsComing === '0' || qsComing === 'false' || qsComing === 'no';
+    if (forceTrue) return true;
+    if (forceFalse) return false;
+    return hasTag || status.includes('coming') || cat.includes('coming');
+  })();
   const author = meta?.author || meta?.writer || meta?.creator || '-';
   const publisher = meta?.publisher || '-';
   const released = meta?.release_date || meta?.published_at || meta?.created_at || '-';
@@ -479,7 +479,6 @@ export default function BookDetail() {
       openPdfInline(p!.id, previewFile.id, `${p!.title} — Preview`);
       return;
     }
-    // Fallback: if user owns and only full PDF exists, open full
     if (owned && fullPdf) {
       if (!isLoggedIn) {
         const next = encodeURIComponent(window.location.pathname);
@@ -558,10 +557,12 @@ export default function BookDetail() {
     }
   };
 
-  /* ------------------ Render ------------------ */
   if (!id) return <div className="p-6 text-red-600">Invalid URL (missing id).</div>;
   if (err) return <div className="p-6 text-red-600">Error: {err}</div>;
   if (!p) return <div className="p-6">Loading…</div>;
+
+  /* ========== NEW: wrapped description computed here ========== */
+  const descWrapped = p.description ? wrapByWords(p.description, 12) : '';
 
   return (
     <>
@@ -575,9 +576,7 @@ export default function BookDetail() {
 
         {/* Breadcrumb */}
         <div className="container mx-auto px-6 md:px-12 pt-6 text-sm text-zinc-800">
-          <Link href="/" className="hover:underline">
-            Home
-          </Link>
+          <Link href="/" className="hover:underline">Home</Link>
           <span className="px-2">›</span>
           <span className="opacity-90 line-clamp-1 align-middle">{p.title}</span>
         </div>
@@ -598,179 +597,194 @@ export default function BookDetail() {
                   }}
                 />
               </article>
-              <div className="absolute top-3 right-3">
-                <div className="px-3 py-1 rounded-full text-sm font-bold text-white shadow bg-[color:var(--brand-500)]">
-                  {priceCents > 0 ? formatUSD(priceCents) : 'Free'}
+              {!comingSoon && (
+                <div className="absolute top-3 right-3">
+                  <div className="px-3 py-1 rounded-full text-sm font-bold text-white shadow bg-[color:var(--brand-500)]">
+                    {priceCents > 0 ? formatUSD(priceCents) : 'Free'}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
 
             {/* Right */}
             <div className="text-zinc-900 bg-white/80 backdrop-blur rounded-2xl p-6 ring-1 ring-black/5 shadow-sm">
-              <h1 className="text-3xl md:text-5xl font-extrabold leading-tight">{p.title}</h1>
-              <div className="mt-2 flex items-center gap-2 text-sm text-zinc-600">
-                <span className="font-semibold">{rating.toFixed(1)}</span>
-                <span className="text-yellow-300">
-                  {'★★★★★'.slice(0, Math.max(0, Math.min(5, Math.round(rating))))}
-                  {'☆☆☆☆☆'.slice(Math.max(0, Math.min(5, Math.round(rating))))}
-                </span>
-                <span>· {reviews} reviews</span>
-              </div>
-
-              {/* Meta */}
-              <div className="mt-6 grid grid-cols-2 lg:grid-cols-4 gap-y-4 text-sm text-zinc-800">
+              {/* ========== NEW LAYOUT: grid to push rail to the very top ========== */}
+              <div className="lg:grid lg:grid-cols-[1fr_320px] lg:gap-8">
+                {/* Content (left sub-column) */}
                 <div>
-                  <div className="text-zinc-500">Author</div>
-                  <div className="font-medium">{author}</div>
-                </div>
-                <div>
-                  <div className="text-zinc-500">Category</div>
-                  <div className="font-medium">{p.category || '-'}</div>
-                </div>
-                <div>
-                  <div className="text-zinc-500">Publisher</div>
-                  <div className="font-medium">{publisher}</div>
-                </div>
-                <div>
-                  <div className="text-zinc-500">Released</div>
-                  <div className="font-medium">{released}</div>
-                </div>
-              </div>
-
-              {/* Description + Progress */}
-              <div className="mt-6 space-y-6">
-                {p.description && (
-                  <div>
-                    <h2 className="text-lg font-semibold mb-2">Description</h2>
-                    <p className="text-sm text-zinc-700 whitespace-pre-wrap leading-relaxed">{p.description}</p>
+                  <h1 className="text-3xl md:text-5xl font-extrabold leading-tight">{p.title}</h1>
+                  <div className="mt-2 flex items-center gap-2 text-sm text-zinc-600">
+                    <span className="font-semibold">{rating.toFixed(1)}</span>
+                    <span className="text-yellow-300">
+                      {'★★★★★'.slice(0, Math.max(0, Math.min(5, Math.round(rating))))}
+                      {'☆☆☆☆☆'.slice(Math.max(0, Math.min(5, Math.round(rating))))}
+                    </span>
+                    <span>· {reviews} reviews</span>
                   </div>
-                )}
-                {(canView || (priceCents === 0 && isCustomer)) && (
-                  <div>
-                    <h2 className="text-lg font-semibold mb-2">Reading Progress</h2>
-                    <div className="text-sm text-gray-600">Current page: {page ?? 0}</div>
-                    <div className="mt-3 flex items-center gap-2 flex-wrap">
-                      <input
-                        type="number"
-                        min={0}
-                        value={page}
-                        onChange={(e) => setPage(Number(e.target.value))}
-                        disabled={!(canView || (priceCents === 0 && isCustomer)) || !isCustomer}
-                        className="border rounded px-2 py-1 w-24 disabled:bg-zinc-100 disabled:cursor-not-allowed"
-                      />
-                      <button
-                        onClick={() => applyAndSavePage(page)}
-                        disabled={!(canView || (priceCents === 0 && isCustomer)) || !isCustomer || savingPage}
-                        className="px-3 py-1 rounded bg-green-600 text-white disabled:opacity-60 disabled:cursor-not-allowed"
-                      >
-                        {savingPage ? 'Saving…' : 'Save progress'}
-                      </button>
-                      <button
-                        onClick={() => {
-                          const previewFile = files.find((f) => !!f.is_preview && f.file_type === 'pdf');
-                          const allowedFull = (canView || (priceCents === 0 && isCustomer));
-                          const target = (allowedFull ? fullPdf : null) || previewFile;
-                          if (!target) return alert('No PDF available.');
-                          if (target === fullPdf) {
-                            if (!isLoggedIn) {
-                              const next = encodeURIComponent(window.location.pathname);
-                              window.location.href = `/auth/login?next=${next}`;
-                              return;
-                            }
-                            openPdfInline(p.id, fullPdf!.id, p.title);
-                          } else {
-                            openPdfInline(p.id, previewFile!.id, `${p.title} — Preview`);
-                          }
-                        }}
-                        disabled={!preview && !(canView || (priceCents === 0 && isCustomer))}
-                        className="px-3 py-1 rounded bg-zinc-800 text-white disabled:opacity-50"
-                      >
-                        Continue reading
-                      </button>
+
+                  {/* Meta */}
+                  <div className="mt-6 grid grid-cols-2 xl:grid-cols-4 gap-y-4 text-sm text-zinc-800">
+                    <div>
+                      <div className="text-zinc-500">Author</div>
+                      <div className="font-medium">{author}</div>
+                    </div>
+                    <div>
+                      <div className="text-zinc-500">Category</div>
+                      <div className="font-medium">{p.category || '-'}</div>
+                    </div>
+                    <div>
+                      <div className="text-zinc-500">Publisher</div>
+                      <div className="font-medium">{publisher}</div>
+                    </div>
+                    <div>
+                      <div className="text-zinc-500">Released</div>
+                      <div className="font-medium">{released}</div>
                     </div>
                   </div>
-                )}
-              </div>
 
-              {/* Rail */}
-              <aside className="mt-6 w-full lg:max-w-sm xl:max-w-md space-y-4 lg:ml-auto">
-                <div className="flex items-center gap-3 flex-wrap">
-                  <button
-                    onClick={onRead}
-                    disabled={!preview && !owned}
-                    className="inline-flex items-center gap-2 bg-[color:var(--brand-500)] hover:bg-[color:var(--brand-600)] disabled:opacity-50 text-white font-semibold px-5 py-2.5 rounded-xl shadow transition"
-                  >
-                    Read Preview
-                  </button>
-                  <button
-                    onClick={toggleFav}
-                    aria-pressed={favOn}
-                    aria-disabled={!isCustomer}
-                    className={cn(
-                      'h-10 px-4 inline-flex items-center gap-2 rounded-full border transition',
-                      favOn ? 'bg-rose-50 text-rose-600 border-rose-200' : 'border-zinc-300 text-zinc-700 hover:bg-zinc-50',
-                      !isCustomer && 'opacity-70'
-                    )}
-                  >
-                    <span className="text-lg">{favOn ? '♥' : '♡'}</span>
-                    <span className="text-sm hidden sm:inline">{favOn ? 'Unfavorite' : 'Favorite'}</span>
-                  </button>
-                  <button
-                    onClick={onShare}
-                    className="h-10 w-10 grid place-items-center rounded-full border border-zinc-300 hover:bg-zinc-50"
-                    aria-label="Share"
-                  >
-                    <span className="text-lg">⇪</span>
-                  </button>
-                </div>
-
-                <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-lg">
-                  <div className="relative">
-                    <div className="absolute -top-3 left-0 text-xs font-bold text-white px-2 py-0.5 rounded-full bg-[color:var(--brand-500)]">
-                      One-off
-                    </div>
-                  </div>
-                  {canView ? (
-                    <>
-                      <div className="flex items-end gap-3 mt-1">
-                        <div className="text-3xl font-extrabold text-emerald-700">Owned</div>
+                  {/* Description + Progress */}
+                  <div className="mt-6 space-y-6">
+                    {p.description && (
+                      <div>
+                        <h2 className="text-lg font-semibold mb-2">Description</h2>
+                        {/* 12-words-per-line effect */}
+                        <p className="text-sm text-zinc-700 whitespace-pre-wrap leading-relaxed">{descWrapped}</p>
                       </div>
-                      <div className="mt-2 text-emerald-600 text-sm font-semibold">You already own this ebook</div>
-                    </>
-                  ) : (
-                    <>
-                      <div className="flex items-end gap-3 mt-1">
-                        {Number(meta?.compare_at_cents ?? 0) > 0 && (
-                          <div className="text-zinc-500 line-through text-lg">
-                            {formatUSD(Number(meta?.compare_at_cents ?? 0))}
-                          </div>
-                        )}
-                        <div className="text-3xl font-extrabold text-zinc-900">
-                          {priceCents > 0 ? formatUSD(priceCents) : 'Free'}
+                    )}
+
+                    {(!comingSoon) && (canView || (priceCents === 0 && isCustomer)) && (
+                      <div>
+                        <h2 className="text-lg font-semibold mb-2">Reading Progress</h2>
+                        <div className="text-sm text-gray-600">Current page: {page ?? 0}</div>
+                        <div className="mt-3 flex items-center gap-2 flex-wrap">
+                          <input
+                            type="number"
+                            min={0}
+                            value={page}
+                            onChange={(e) => setPage(Number(e.target.value))}
+                            disabled={!(canView || (priceCents === 0 && isCustomer)) || !isCustomer}
+                            className="border rounded px-2 py-1 w-24 disabled:bg-zinc-100 disabled:cursor-not-allowed"
+                          />
+                          <button
+                            onClick={() => applyAndSavePage(page)}
+                            disabled={!(canView || (priceCents === 0 && isCustomer)) || !isCustomer || savingPage}
+                            className="px-3 py-1 rounded bg-green-600 text-white disabled:opacity-60 disabled:cursor-not-allowed"
+                          >
+                            {savingPage ? 'Saving…' : 'Save progress'}
+                          </button>
+                          <button
+                            onClick={() => {
+                              const previewFile = files.find((f) => !!f.is_preview && f.file_type === 'pdf');
+                              const allowedFull = (canView || (priceCents === 0 && isCustomer));
+                              const target = (allowedFull ? fullPdf : null) || previewFile;
+                              if (!target) return alert('No PDF available.');
+                              if (target === fullPdf) {
+                                if (!isLoggedIn) {
+                                  const next = encodeURIComponent(window.location.pathname);
+                                  window.location.href = `/auth/login?next=${next}`;
+                                  return;
+                                }
+                                openPdfInline(p.id, fullPdf!.id, p.title);
+                              } else {
+                                openPdfInline(p.id, previewFile!.id, `${p.title} — Preview`);
+                              }
+                            }}
+                            disabled={!preview && !(canView || (priceCents === 0 && isCustomer))}
+                            className="px-3 py-1 rounded bg-zinc-800 text-white disabled:opacity-50"
+                          >
+                            Continue reading
+                          </button>
                         </div>
                       </div>
-                      <div className="mt-2 text-emerald-600 text-sm font-semibold">Own this ebook forever</div>
-                    </>
-                  )}
-
-                  {canView || priceCents === 0 ? (
-                    <button
-                      onClick={onReadFull}
-                      disabled={false}
-                      className="mt-4 w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:hover:bg-emerald-600/90 disabled:cursor-not-allowed disabled:opacity-50 text-white font-semibold py-2.5"
-                    >
-                      Read Full
-                    </button>
-                  ) : (
-                    <button
-                      onClick={onBuy}
-                      className="mt-4 w-full rounded-xl bg-[color:var(--brand-500)] hover:bg-[color:var(--brand-600)] text-white font-semibold py-2.5"
-                    >
-                      Buy now
-                    </button>
-                  )}
+                    )}
+                  </div>
                 </div>
-              </aside>
+
+                {/* Rail (right sub-column) — moved to TOP and aligned */}
+                <aside className="mt-6 lg:mt-0 self-start lg:sticky lg:top-6 w-full space-y-4 lg:ml-auto">
+                  <div className="flex items-center gap-3 flex-wrap">
+                    {!comingSoon && (
+                      <button
+                        onClick={onRead}
+                        disabled={!preview && !owned}
+                        className="inline-flex items-center gap-2 bg-[color:var(--brand-500)] hover:bg-[color:var(--brand-600)] disabled:opacity-50 text-white font-semibold px-5 py-2.5 rounded-xl shadow transition"
+                      >
+                        Read Preview
+                      </button>
+                    )}
+                    <button
+                      onClick={toggleFav}
+                      aria-pressed={favOn}
+                      aria-disabled={!isCustomer}
+                      className={cn(
+                        'h-10 px-4 inline-flex items-center gap-2 rounded-full border transition',
+                        favOn ? 'bg-rose-50 text-rose-600 border-rose-200' : 'border-zinc-300 text-zinc-700 hover:bg-zinc-50',
+                        !isCustomer && 'opacity-70'
+                      )}
+                    >
+                      <span className="text-lg">{favOn ? '♥' : '♡'}</span>
+                      <span className="text-sm hidden sm:inline">{favOn ? 'Unfavorite' : 'Favorite'}</span>
+                    </button>
+                    <button
+                      onClick={onShare}
+                      className="h-10 w-10 grid place-items-center rounded-full border border-zinc-300 hover:bg-zinc-50"
+                      aria-label="Share"
+                    >
+                      <span className="text-lg">⇪</span>
+                    </button>
+                  </div>
+
+                  {!comingSoon && (
+                    <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-lg">
+                      <div className="relative">
+                        <div className="absolute -top-3 left-0 text-xs font-bold text-white px-2 py-0.5 rounded-full bg-[color:var(--brand-500)]">
+                          One-off
+                        </div>
+                      </div>
+                      {canView ? (
+                        <>
+                          <div className="flex items-end gap-3 mt-1">
+                            <div className="text-3xl font-extrabold text-emerald-700">Owned</div>
+                          </div>
+                          <div className="mt-2 text-emerald-600 text-sm font-semibold">You already own this ebook</div>
+                        </>
+                      ) : (
+                        <>
+                          <div className="flex items-end gap-3 mt-1">
+                            {Number(meta?.compare_at_cents ?? 0) > 0 && (
+                              <div className="text-zinc-500 line-through text-lg">
+                                {formatUSD(Number(meta?.compare_at_cents ?? 0))}
+                              </div>
+                            )}
+                            <div className="text-3xl font-extrabold text-zinc-900">
+                              {priceCents > 0 ? formatUSD(priceCents) : 'Free'}
+                            </div>
+                          </div>
+                          <div className="mt-2 text-emerald-600 text-sm font-semibold">Own this ebook forever</div>
+                        </>
+                      )}
+
+                      {canView || priceCents === 0 ? (
+                        <button
+                          onClick={onReadFull}
+                          disabled={false}
+                          className="mt-4 w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:hover:bg-emerald-600/90 disabled:cursor-not-allowed disabled:opacity-50 text-white font-semibold py-2.5"
+                        >
+                          Read Full
+                        </button>
+                      ) : (
+                        <button
+                          onClick={onBuy}
+                          className="mt-4 w-full rounded-xl bg-[color:var(--brand-500)] hover:bg-[color:var(--brand-600)] text-white font-semibold py-2.5"
+                        >
+                          Buy now
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </aside>
+              </div>
+              {/* ========== END NEW LAYOUT ========== */}
             </div>
           </div>
         </section>

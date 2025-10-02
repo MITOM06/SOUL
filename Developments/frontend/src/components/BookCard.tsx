@@ -3,9 +3,9 @@ import React from 'react'
 import { Book } from '@/types'
 
 // Image-only frame; caption sits below as a separate block
-export default function BookCard({ book }: { book: Book }) {
+export default function BookCard({ book, qs = '' }: { book: Book; qs?: string }) {
   return (
-    <Link href={`/book/${book.id}`} className="group block">
+    <Link href={`/book/${book.id}${qs || ''}`} className="group block">
       <article className="card overflow-hidden transition shadow-sm hover:shadow-md hover:-translate-y-0.5 duration-200">
         <div className="w-full aspect-[3/4] bg-zinc-100 overflow-hidden">
           {book.cover ? (

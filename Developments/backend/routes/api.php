@@ -5,6 +5,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\V1\Auth\LoginController;
 use App\Http\Controllers\Api\V1\Auth\RegisterController;
 use App\Http\Controllers\Api\V1\Auth\AuthController;
+use App\Http\Controllers\Api\V1\Auth\PasswordResetController;
 
 use App\Http\Controllers\Api\ProductController;
 use App\Http\Controllers\Api\V1\Commerce\OrderController;
@@ -43,6 +44,7 @@ Route::prefix('v1')->group(function () {
     // ---------------- Auth (public) ----------------
     Route::post('register', [RegisterController::class, 'register']);
     Route::post('login',    [LoginController::class,   'login']);
+    Route::post('auth/forgot-password', [PasswordResetController::class, 'forgot']);
 
     // ---------------- Public Products ----------------
     Route::get('products',           [ProductController::class, 'index']);

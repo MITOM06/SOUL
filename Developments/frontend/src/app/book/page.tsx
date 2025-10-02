@@ -414,7 +414,9 @@ export default function BooksListPage() {
 
   // Normalize
   const books = useMemo(() => {
-    return (items || []).map((i) => ({
+    // Exclude Coming Soon items from products listing (they only show in Coming Soon section)
+    const notComing = (items || []).filter((i:any) => !String(i?.category||'').toLowerCase().includes('coming'));
+    return notComing.map((i) => ({
       ...i,
       cover: toAbs(i.thumbnail_url || undefined),
     }));
