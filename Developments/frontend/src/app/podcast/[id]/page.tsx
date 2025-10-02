@@ -10,6 +10,7 @@ import React, {
 } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import PodcastCard from '@/components/PodcastCard';
 import api from '@/lib/api';
 import { useCart } from '@/contexts/CartContext';
@@ -429,6 +430,8 @@ export default function PodcastDetailPage() {
     const n = Number(s);
     return Number.isFinite(n) && n > 0 ? n : null;
   }, [params]);
+  // must be declared before any early returns (Rules of Hooks)
+  const searchParams = useSearchParams();
 
   const [data, setData] = useState<{ product: Product; files: ProductFile[]; access?: { can_view?: boolean } } | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -545,6 +548,20 @@ export default function PodcastDetailPage() {
   const priceCents = Number(p?.price_cents || 0);
   // Align with book: only customers can listen; admin is blocked even if can_view
   const owned = isCustomer && (canView || priceCents === 0);
+  const meta = parseMaybeJSON(p.metadata) || {};
+  const comingSoon = (() => {
+    const tags: any = (meta?.tags ?? meta?.tag) as any;
+    const arr = Array.isArray(tags) ? tags : (tags ? [tags] : []);
+    const hasTag = arr.map((t:any)=>String(t).toLowerCase()).includes('coming_soon');
+    const status = String(meta?.status || '').toLowerCase();
+    const cat = String(p?.category || '').toLowerCase();
+    const qsComing = String(searchParams.get('coming') || '').toLowerCase();
+    const forceTrue  = qsComing === '1' || qsComing === 'true' || qsComing === 'yes';
+    const forceFalse = qsComing === '0' || qsComing === 'false' || qsComing === 'no';
+    if (forceTrue) return true;
+    if (forceFalse) return false;
+    return hasTag || status.includes('coming') || cat.includes('coming');
+  })();
 
   const ytPreviewFile = files.find(f => String(f.file_type).toLowerCase()==='youtube' && (f.is_preview===1 || f.is_preview===true));
   const ytFullFile    = files.find(f => String(f.file_type).toLowerCase()==='youtube' && !(f.is_preview===1 || f.is_preview===true));
@@ -661,7 +678,7 @@ export default function PodcastDetailPage() {
               )}
 
               <div className="mt-5 flex items-center gap-3">
-                {owned ? (
+                {!comingSoon && owned ? (
                   <button
                     onClick={onListenNow}
                     className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold px-5 py-2.5 rounded-xl shadow transition"
@@ -676,7 +693,7 @@ export default function PodcastDetailPage() {
                   >
                     Listen (Locked)
                   </button>
-                ) : (
+                ) : (!comingSoon && (
                   priceCents === 0 ? (
                     <button
                       onClick={() => { window.location.href = `/auth/login?next=${encodeURIComponent(window.location.pathname)}`; }}
@@ -696,7 +713,7 @@ export default function PodcastDetailPage() {
                       Buy {priceCents>0 ? `(${formatUSD(priceCents)})` : '(Free)'}
                     </button>
                   )
-                )}
+                ))}
 
                 <button
                   onClick={toggleFav}
@@ -734,6 +751,7 @@ export default function PodcastDetailPage() {
               )}
 
               {/* Price card */}
+              {!comingSoon && (
               <div className="mt-6 max-w-sm">
                 <div className="relative rounded-2xl border border-zinc-200 bg-white p-4 shadow-lg">
                   <div className="absolute -top-3 left-4 text-xs font-bold text-white px-2 py-0.5 rounded-full bg-[color:var(--brand-500)]">
@@ -752,11 +770,16 @@ export default function PodcastDetailPage() {
                   )}
                 </div>
               </div>
+              )}
             </div>
 
             {/* RIGHT: Player */}
             <div id="player">
-              {owned ? (
+              {comingSoon ? (
+                <div className="rounded-2xl overflow-hidden ring-1 ring-black/10 bg-white p-6 text-zinc-700">
+                  Coming soon — media and progress will be available after release.
+                </div>
+              ) : owned ? (
                 yt ? (
                   <YouTubeAudioOnly
                     ref={playerRef}

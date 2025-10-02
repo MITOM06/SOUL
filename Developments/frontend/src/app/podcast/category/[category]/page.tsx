@@ -153,7 +153,10 @@ export default function PodcastCategoryPage() {
     // theo yêu cầu, giữ nguyên deps gốc (không đổi logic filters khác)
   }, [category, minUSD, maxUSD]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const gridItems = useMemo(() => items, [items]);
+  const gridItems = useMemo(() => {
+    // Exclude Coming Soon items from generic product listings
+    return (items || []).filter((i: any) => !String((i as any)?.category || '').toLowerCase().includes('coming'));
+  }, [items]);
 
   return (
     <section className="space-y-4 animate-fade-in">

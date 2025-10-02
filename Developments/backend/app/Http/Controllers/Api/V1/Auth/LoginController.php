@@ -26,9 +26,13 @@ class LoginController extends Controller
             ], 422);
         }
 
-        $user = User::where('email', $request->email)->first();
+        $email = strtolower(trim($request->email));
+        $pass  = (string) $request->password;
+        $pass  = strlen($pass) ? trim($pass) : $pass;
+        // Case-insensitive lookup to tolerate mixed-case emails in DB
+        $user = User::whereRaw('LOWER(email) = ?', [$email])->first();
 
-        if (! $user || ! Hash::check($request->password, $user->password_hash)) {
+        if (! $user || ! Hash::check($pass, $user->password_hash)) {
             return response()->json([
                 'success' => false,
                 'message' => 'Invalid email or password.'
