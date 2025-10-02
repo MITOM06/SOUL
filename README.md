@@ -20,7 +20,7 @@ List Of Member:
 
 =======================================
 
-Documentations : 
+Documentations : https://github.com/MITOM06/SOUL/tree/main/Documentations/01.%20Project%20Docs
 
 =======================================
 
