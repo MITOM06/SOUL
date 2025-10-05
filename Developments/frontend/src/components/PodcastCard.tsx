@@ -11,6 +11,13 @@ export default function PodcastCard({ podcast, variant = 'square', hidePrice = f
         ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(priceCents / 100)
         : 'Free')
     : null
+  const FALLBACK = `data:image/svg+xml;utf8,${encodeURIComponent(
+    `<svg xmlns='http://www.w3.org/2000/svg' width='800' height='450'>
+       <rect width='100%' height='100%' fill='#f1f5f9'/>
+       <text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle'
+         font-family='sans-serif' font-size='22' fill='#94a3b8'>Podcast</text>
+     </svg>`
+  )}`
   return (
     <Link href={`/podcast/${podcast.id}${qs || ''}`} className="group block">
       <article className="card overflow-hidden transition shadow-sm hover:shadow-md hover:-translate-y-0.5 duration-200 relative">
@@ -27,6 +34,7 @@ export default function PodcastCard({ podcast, variant = 'square', hidePrice = f
               alt={podcast.title}
               className="block w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
               loading="lazy"
+              onError={(e)=>{ (e.currentTarget as HTMLImageElement).src = FALLBACK; }}
             />
           ) : (
             <div className="cover-placeholder w-full h-full" />

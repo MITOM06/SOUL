@@ -8,13 +8,35 @@ type Cat = { category: string; count: number; thumbnail_url?: string | null };
 const API_BASE = (process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api').replace(/\/$/, '');
 const ORIGIN   = API_BASE.replace(/\/api$/, '');
 
-const toAbs = (u?: string|null) => {
+/**
+ * Chuẩn hoá URL ảnh thành URL tuyệt đối có thể load được từ trình duyệt.
+ * - Bỏ các path file:// hoặc ổ đĩa Windows
+ * - Giữ nguyên http(s) tuyệt đối
+ * - Hỗ trợ scheme-relative: //cdn.example.com/...
+ * - Gắn ORIGIN cho path bắt đầu bằng "/" hoặc đường dẫn tương đối ("storage/...","./storage/...")
+ */
+const toAbs = (u?: string | null) => {
   if (!u) return '';
+
   const s = u.trim();
+
+  // Không hỗ trợ path local dạng file:// hoặc C:\...
   if (/^file:\/\//i.test(s) || /^[A-Za-z]:\\/.test(s)) return '';
-  if (s.startsWith('http://') || s.startsWith('https://')) return s;
+
+  // URL tuyệt đối
+  if (/^https?:\/\//i.test(s)) return s;
+
+  // Scheme-relative
+  if (s.startsWith('//')) {
+    const proto = (typeof window !== 'undefined' ? window.location.protocol : 'https:');
+    return `${proto}${s}`;
+  }
+
+  // Bắt đầu bằng "/" → gắn ORIGIN
   if (s.startsWith('/')) return `${ORIGIN}${s}`;
-  return s;
+
+  // Đường dẫn tương đối ("storage/products/...", "./storage/...")
+  return `${ORIGIN}/${s.replace(/^\.?\//, '')}`;
 };
 
 const FALLBACK_IMG = `data:image/svg+xml;utf8,${encodeURIComponent(
@@ -61,25 +83,45 @@ export default function PodcastCategoriesPage() {
         <h1 className="text-3xl font-bold">Podcast Topics</h1>
         <div className="mt-3 max-w-2xl">
           <div className="relative">
-            <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search topics by name..." className="w-full border rounded-xl pl-9 pr-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            <input
+              value={q}
+              onChange={e=>setQ(e.target.value)}
+              placeholder="Search topics by name..."
+              className="w-full border rounded-xl pl-9 pr-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">🔎</span>
           </div>
         </div>
       </div>
+
       <div className="relative w-screen left-[50%] right-[50%] -ml-[50vw] -mr-[50vw] px-4 md:px-8">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {filtered.map((c) => {
-          const img = toAbs(c.thumbnail_url) || FALLBACK_IMG;
-          return (
-            <Link key={c.category} href={`/podcast/category/${encodeURIComponent(c.category)}`} className="group relative rounded-3xl overflow-hidden border bg-white shadow-sm hover:shadow-md transition">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={img} alt={c.category} className="w-full h-72 md:h-[420px] object-cover transform transition-transform duration-500 group-hover:translate-y-2" onError={(e)=>{ (e.currentTarget as HTMLImageElement).src = FALLBACK_IMG; }} />
-              <div className="absolute inset-x-0 top-0 p-4">
-                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-black/60 text-white text-sm font-semibold opacity-0 -translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition">{c.category} <span className="text-white/80 text-xs">({c.count})</span></div>
-              </div>
-            </Link>
-          );
-        })}
+          {filtered.map((c) => {
+            const img = toAbs(c.thumbnail_url) || FALLBACK_IMG;
+            return (
+              <Link
+                key={c.category}
+                href={`/podcast/category/${encodeURIComponent(c.category)}`}
+                className="group relative rounded-3xl overflow-hidden border bg-white shadow-sm hover:shadow-md transition"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={img}
+                  alt={c.category}
+                  loading="lazy"
+                  decoding="async"
+                  referrerPolicy="no-referrer"
+                  className="w-full h-72 md:h-[420px] object-cover transform transition-transform duration-500 group-hover:translate-y-2"
+                  onError={(e) => { (e.currentTarget as HTMLImageElement).src = FALLBACK_IMG; }}
+                />
+                <div className="absolute inset-x-0 top-0 p-4">
+                  <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-black/60 text-white text-sm font-semibold opacity-0 -translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition">
+                    {c.category} <span className="text-white/80 text-xs">({c.count})</span>
+                  </div>
+                </div>
+              </Link>
+            );
+          })}
         </div>
       </div>
     </section>

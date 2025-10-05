@@ -6,21 +6,24 @@ use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 
+/**
+ * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\Product>
+ */
 class ProductFactory extends Factory
 {
     protected $model = \App\Models\Product::class;
 
     public function definition(): array
     {
-        // 1) Determine the type (ebook or podcast) and choose a category.  The
-        // category influences both the title and the metadata to provide
-        // meaningful, domain‑appropriate names rather than filler text.
+        // 1) Type & category
         $type     = $this->faker->randomElement(['ebook', 'podcast']);
         $category = $this->faker->randomElement([
             'Programming','Design','Business','Marketing','Health','Education'
         ]);
-        // Construct a human‑readable title based on the type and category.
+
+        // 2) Title theo type
         if ($type === 'ebook') {
             $modifier  = $this->faker->randomElement(['Essentials','Basics','Guide','Handbook','Principles']);
             $title     = ucfirst($category) . ' ' . $modifier . ': ' . $this->faker->catchPhrase();
@@ -33,34 +36,30 @@ class ProductFactory extends Factory
             $title = $this->faker->randomElement($titleOptions);
         }
 
-        // 2) Map type -> correct directory under public for thumbnails.  You have
-        // stored covers in public/books/thumbnail and public/podcasts/thumbnail.
+        // 3) Chọn 1 ảnh NGUỒN theo type (đường dẫn public tương đối, KHÔNG asset())
         $dirMap = [
             'ebook'   => 'books/thumbnail',
             'podcast' => 'podcasts/thumbnail',
         ];
         $dir = $dirMap[$type];
 
-        // 3) Chọn 1 ảnh từ public/... theo type
-        $coverUrl = null;
+        $coverSrc = null; // ví dụ: 'books/thumbnail/xxx.jpg'
         try {
-            $abs = public_path($dir);                // ví dụ: {project}/public/books/thumbnail
+            $abs = public_path($dir);
             if (is_dir($abs)) {
                 $files = collect(File::files($abs))
                     ->filter(fn($f) => preg_match('/\.(jpg|jpeg|png|webp|avif)$/i', $f->getFilename()))
                     ->values();
 
                 if ($files->isNotEmpty()) {
-                    $name = $files->random()->getFilename();
-                    // URL hiển thị ra web (theo APP_URL)
-                    $coverUrl = asset($dir.'/'.$name); // ví dụ http://127.0.0.1:8000/books/thumbnail/xxx.jpg
+                    $coverSrc = $dir . '/' . $files->random()->getFilename();
                 }
             }
         } catch (\Throwable $e) {
             // để null nếu không tìm thấy
         }
 
-        // 4) Metadata theo type
+        // 4) Metadata theo type (mảng để Eloquent cast)
         $metadata = $type === 'ebook'
             ? [
                 'pages'    => $this->faker->numberBetween(50, 500),
@@ -77,17 +76,13 @@ class ProductFactory extends Factory
         return [
             'type'          => $type,
             'title'         => $title,
-            // Provide a richer description with two paragraphs to better simulate
-            // content you would see on a real e‑commerce site.  The true
-            // parameter concatenates the paragraphs into a single string.
             'description'   => $this->faker->paragraphs(2, true),
-            // Price ranges from free (0) up to $200.  Some items will be free in
-            // the seeder by explicit override.
             'price_cents'   => $this->faker->numberBetween(0, 20000),
-            'thumbnail_url' => $coverUrl,
+            // TẠM lưu nguồn cover để afterCreating chuẩn hoá (đặt dạng '/books/thumbnail/xxx.jpg')
+            'thumbnail_url' => $coverSrc ? ('/' . ltrim($coverSrc, '/')) : null,
             'category'      => $category,
             'slug'          => Str::slug($title) . '-' . Str::random(5),
-            'metadata'      => json_encode($metadata),
+            'metadata'      => $metadata, // KHÔNG json_encode
             'is_active'     => true,
         ];
     }
@@ -97,8 +92,44 @@ class ProductFactory extends Factory
         return $this->afterCreating(function (\App\Models\Product $p) {
             $now = now();
 
+            /* ===================== CHUẨN HOÁ COVER ===================== */
+            try {
+                $src = $p->thumbnail_url ? ltrim((string)$p->thumbnail_url, '/') : null; // VD: 'books/thumbnail/xxx.jpg'
+                if ($src) {
+                    // Chốt: ebook không nhận nguồn từ podcasts/, podcast không nhận từ books/
+                    if ($p->type === 'ebook' && Str::startsWith($src, 'podcasts/thumbnail')) {
+                        $src = null;
+                    }
+                    if ($p->type === 'podcast' && Str::startsWith($src, 'books/thumbnail')) {
+                        $src = null;
+                    }
+                }
+
+                if ($src) {
+                    $abs = public_path($src);
+                    if (is_file($abs)) {
+                        $ext = strtolower(pathinfo($abs, PATHINFO_EXTENSION) ?: 'jpg');
+                        if ($ext === 'jpeg') $ext = 'jpg';
+
+                        $dst = "products/{$p->id}/cover.{$ext}";
+                        Storage::disk('public')->put($dst, @file_get_contents($abs));
+                        $p->update(['thumbnail_url' => Storage::url($dst)]);
+                    } else {
+                        // Không tìm thấy file nguồn -> bỏ cover để FE dùng placeholder
+                        $p->update(['thumbnail_url' => null]);
+                    }
+                } else {
+                    // Không có nguồn hợp lệ -> bỏ cover
+                    $p->update(['thumbnail_url' => null]);
+                }
+            } catch (\Throwable $e) {
+                // Lỗi đọc/ghi -> bỏ cover
+                $p->update(['thumbnail_url' => null]);
+            }
+
+            /* ===================== NỘI DUNG THEO TYPE ===================== */
             if ($p->type === 'ebook') {
-                // Gắn PDF từ public/books/Content (preview + full)
+                // Gắn PDF (preview + full) từ public/books/Content
                 try {
                     $dirPdf = 'books/Content';
                     $absPdf = public_path($dirPdf);
@@ -144,50 +175,54 @@ class ProductFactory extends Factory
                 }
             } else {
                 // Podcast: Youtube (preview + full)
-                $vids  = ['pIrkcBp-UO8','dQw4w9WgXcQ','kXYiU_JCYtU','9bZkp7q19f0','3JZ_D3ELwOQ'];
-                $vid   = $vids[array_rand($vids)];
-                $watch = "https://www.youtube.com/watch?v={$vid}";
-                $embed = "https://www.youtube.com/embed/{$vid}";
-                $thumb = "https://img.youtube.com/vi/{$vid}/hqdefault.jpg";
+                try {
+                    $vids  = ['pIrkcBp-UO8','dQw4w9WgXcQ','kXYiU_JCYtU','9bZkp7q19f0','3JZ_D3ELwOQ'];
+                    $vid   = $vids[array_rand($vids)];
+                    $watch = "https://www.youtube.com/watch?v={$vid}";
+                    $embed = "https://www.youtube.com/embed/{$vid}";
+                    $thumb = "https://img.youtube.com/vi/{$vid}/hqdefault.jpg";
 
-                DB::table('product_files')->insert([
-                    'product_id'     => $p->id,
-                    'file_type'      => 'youtube',
-                    'file_url'       => $watch,
-                    'filesize_bytes' => null,
-                    'is_preview'     => 1,
-                    'meta'           => json_encode([
-                        'provider'       => 'youtube',
-                        'video_id'       => $vid,
-                        'embed_url'      => $embed,
-                        'thumbnail_url'  => $thumb,
-                        'watch_url'      => $watch,
-                        'title'          => 'Preview',
-                    ]),
-                    'created_at'     => $now,
-                    'updated_at'     => $now,
-                ]);
+                    DB::table('product_files')->insert([
+                        'product_id'     => $p->id,
+                        'file_type'      => 'youtube',
+                        'file_url'       => $watch,
+                        'filesize_bytes' => null,
+                        'is_preview'     => 1,
+                        'meta'           => json_encode([
+                            'provider'       => 'youtube',
+                            'video_id'       => $vid,
+                            'embed_url'      => $embed,
+                            'thumbnail_url'  => $thumb,
+                            'watch_url'      => $watch,
+                            'title'          => 'Preview',
+                        ]),
+                        'created_at'     => $now,
+                        'updated_at'     => $now,
+                    ]);
 
-                DB::table('product_files')->insert([
-                    'product_id'     => $p->id,
-                    'file_type'      => 'youtube',
-                    'file_url'       => $watch,
-                    'filesize_bytes' => null,
-                    'is_preview'     => 0,
-                    'meta'           => json_encode([
-                        'provider'       => 'youtube',
-                        'video_id'       => $vid,
-                        'embed_url'      => $embed,
-                        'thumbnail_url'  => $thumb,
-                        'watch_url'      => $watch,
-                        'title'          => 'Full',
-                    ]),
-                    'created_at'     => $now,
-                    'updated_at'     => $now,
-                ]);
+                    DB::table('product_files')->insert([
+                        'product_id'     => $p->id,
+                        'file_type'      => 'youtube',
+                        'file_url'       => $watch,
+                        'filesize_bytes' => null,
+                        'is_preview'     => 0,
+                        'meta'           => json_encode([
+                            'provider'       => 'youtube',
+                            'video_id'       => $vid,
+                            'embed_url'      => $embed,
+                            'thumbnail_url'  => $thumb,
+                            'watch_url'      => $watch,
+                            'title'          => 'Full',
+                        ]),
+                        'created_at'     => $now,
+                        'updated_at'     => $now,
+                    ]);
+                } catch (\Throwable $e) {
+                    // ignore
+                }
             }
 
-            // Ảnh phụ (0..3) — dùng CÙNG thư mục thumbnail theo type
+            /* ===================== ẢNH PHỤ (0..3) ===================== */
             try {
                 $dirImg = $p->type === 'ebook' ? 'books/thumbnail' : 'podcasts/thumbnail';
                 $absImg = public_path($dirImg);

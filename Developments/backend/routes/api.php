@@ -138,6 +138,9 @@ Route::prefix('v1')->group(function () {
         // Reports
         Route::get('reports/income', [\App\Http\Controllers\Api\V1\Admin\ReportController::class, 'income']);
         Route::get('reports/daily',  [\App\Http\Controllers\Api\V1\Admin\ReportController::class, 'daily']);
+        // Reports export/share
+        Route::get('reports/income/export', [\App\Http\Controllers\Api\V1\Admin\ReportController::class, 'exportIncome']);
+        Route::post('reports/income/share', [\App\Http\Controllers\Api\V1\Admin\ReportController::class, 'shareIncome']);
 
         // Users management
         Route::apiResource('users', AdminUserController::class);
@@ -196,4 +199,13 @@ Route::prefix('v1')->group(function () {
 
     // ---------------- Fallback ----------------
     Route::fallback(fn() => response()->json(['message' => 'Endpoint not found'], 404));
+});
+
+// =====================================================
+// 🔹 Public signed download for shared reports (no auth)
+// =====================================================
+Route::prefix('v1')->group(function () {
+    Route::get('reports/shared/{file}', [\App\Http\Controllers\Api\V1\Admin\ReportController::class, 'sharedDownload'])
+        ->name('reports.shared')
+        ->middleware('signed');
 });

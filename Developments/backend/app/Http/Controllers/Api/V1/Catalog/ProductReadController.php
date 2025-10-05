@@ -276,12 +276,31 @@ class ProductReadController extends Controller
             ->get();
 
         $result = $cats->map(function ($row) {
+            // Lấy thumbnail MỚI NHẤT nhưng đảm bảo KHÔNG NULL
             $thumb = DB::table('products')
                 ->where('is_active', 1)
                 ->where('type', 'podcast')
                 ->where('category', $row->category)
+                ->whereNotNull('thumbnail_url')
                 ->orderByDesc('id')
                 ->value('thumbnail_url');
+
+            // Nếu vẫn null, fallback chọn 1 ảnh có sẵn trong public/podcasts/thumbnail
+            if (!$thumb) {
+                try {
+                    $abs = public_path('podcasts/thumbnail');
+                    if (is_dir($abs)) {
+                        $files = collect(\Illuminate\Support\Facades\File::files($abs))
+                            ->filter(fn($f) => preg_match('/\.(jpg|jpeg|png|webp|avif)$/i', $f->getFilename()))
+                            ->values();
+                        if ($files->isNotEmpty()) {
+                            $thumb = '/podcasts/thumbnail/' . $files->random()->getFilename();
+                        }
+                    }
+                } catch (\Throwable $e) {
+                    // ignore, keep null
+                }
+            }
 
             return [
                 'category'      => $row->category,
