@@ -2,6 +2,8 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import api from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
+import { normalizeRole } from "@/lib/role";
 
 /* ================= Types & utils ================= */
 type IncomeResp = {
@@ -28,8 +30,13 @@ const CHART_COLORS = {
   products:{ line:"#8b5cf6", areaTop: "#8b5cf6", areaMid: "#c4b5fd" },  // violet/purple
 };
 
+
 /* ================ Page ================ */
 export default function AdminReportPage() {
+  const { user } = useAuth();
+  const role = normalizeRole(user);
+  const adminName = user?.name || user?.email || "Unknown";
+  const adminEmail = user?.email || "unknown@example.com";
   const [mode, setMode] = useState<"day" | "month">("day");
   const [from, setFrom] = useState<string>(() => new Date(Date.now() - 13 * 86400000).toISOString().slice(0, 10));
   const [to, setTo] = useState<string>(() => new Date().toISOString().slice(0, 10));
@@ -44,6 +51,48 @@ export default function AdminReportPage() {
   const [toMini, setToMini] = useState<string>(() => new Date().toISOString().slice(0, 10));
   const [mini, setMini] = useState<DailyResp["data"] | null>(null);
   const [loadingMini, setLoadingMini] = useState(false);
+
+  // === Today / current month for date constraints ===
+  const TODAY_DATE = new Date().toISOString().slice(0, 10);
+  const THIS_MONTH = new Date().toISOString().slice(0, 7);
+
+  const buildParams = () => {
+    if (mode === "day") return { mode: "day", from, to } as const;
+    return { mode: "month", from_month: fromM, to_month: toM } as const;
+  };
+
+  // Removed server-side export action as requested
+
+  const handlePrintPdf = () => {
+    // Client-side print to PDF with neon theme and professional layout
+    // The print-ready DOM lives in this component and is shown only in @media print
+    try {
+      window.print();
+    } catch (e) {
+      alert("Unable to open print dialog. Please use your browser's print to PDF.");
+    }
+  };
+
+  const handleShare = async () => {
+    try {
+      if (mode === "day") validateDayRange(from, to);
+      else validateMonthRange(fromM, toM);
+
+      const payload = buildParams() as any;
+      const res = await api.post(`/v1/admin/reports/income/share`, payload);
+      const url = res?.data?.data?.url;
+      if (!url) throw new Error("No share URL returned");
+      try {
+        await navigator.clipboard.writeText(url);
+        alert("Copied share link to clipboard:\n" + url);
+      } catch {
+        window.open(url, "_blank");
+        window.prompt("Share link (copy):", url);
+      }
+    } catch (e: any) {
+      alert(e?.response?.data?.message || e?.message || "Failed to create share link");
+    }
+  };
 
   const validateDayRange = (a: string, b: string) => {
     const d1 = new Date(a + "T00:00:00");
@@ -103,8 +152,33 @@ export default function AdminReportPage() {
 
   const topSummary = income?.summary || { orders: 0, subs: 0, products: 0 };
 
+  // Build human-friendly range text for the report header
+  const rangeLabel = mode === "day" ? `${from} → ${to}` : `${fromM} → ${toM}`;
+  const generatedAt = new Date().toLocaleString("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+  // Trend helper: compare average of first half vs last half
+  const trendOf = (values: number[]) => {
+    if (!values || values.length < 2) return "Steady" as const;
+    const n = values.length;
+    const mid = Math.floor(n / 2);
+    const avg = (arr: number[]) => (arr.reduce((s, v) => s + (Number(v) || 0), 0) / Math.max(1, arr.length));
+    const a = avg(values.slice(0, mid));
+    const b = avg(values.slice(mid));
+    const diff = b - a;
+    const tol = Math.max(1, a) * 0.05; // 5% tolerance
+    if (diff > tol) return "Growth" as const;
+    if (diff < -tol) return "Decline" as const;
+    return "Steady" as const;
+  };
+
   return (
-    <section className="relative">
+    <section id="report-print-root" className="relative">
       {/* nền nhẹ */}
       <div className="pointer-events-none absolute inset-0 -z-10">
         <div className="absolute -top-24 -left-24 h-72 w-72 rounded-full bg-blue-200/30 blur-3xl" />
@@ -112,15 +186,27 @@ export default function AdminReportPage() {
       </div>
 
       {/* container full width */}
-      <div className="mx-auto max-w-none px-0">
+      <div id="screen-only" className="mx-auto max-w-none px-0">
         {/* Header */}
         <div className="mb-6 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between px-4 sm:px-6 lg:px-8">
-          <h1 className="text-3xl font-bold tracking-tight">Income Summary</h1>
+          <div className="flex items-center gap-3">
+            {/* Simple SOUL logo for context (top-left) */}
+            <div className="relative">
+              <div className="absolute inset-0 blur-md opacity-60 bg-gradient-to-tr from-indigo-500 via-fuchsia-500 to-rose-500 rounded-xl" />
+              <div className="relative h-10 w-10 grid place-items-center rounded-xl bg-gradient-to-tr from-indigo-500 via-fuchsia-500 to-rose-500 text-white font-bold shadow-md">
+                S
+              </div>
+            </div>
+            <div>
+              <div className="text-3xl font-extrabold tracking-tight leading-none">SOUL</div>
+              <div className="text-xs text-zinc-500">Income and Activity Report</div>
+            </div>
+          </div>
           <div className="flex items-center gap-2">
-            <button className="rounded-xl border bg-white/90 px-4 py-2 text-sm shadow-sm hover:bg-white">Export</button>
-            <button className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700">
-              Share
+            <button onClick={handlePrintPdf} className="rounded-xl bg-[color:var(--brand-500)] px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-[color:var(--brand-600)]" title="Export PDF">
+              Export
             </button>
+            <button onClick={handleShare} className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700">Share</button>
           </div>
         </div>
 
@@ -151,8 +237,8 @@ export default function AdminReportPage() {
 
               {mode === "day" ? (
                 <div className="flex items-end gap-3">
-                  <LabeledInput label="From" type="date" value={from} onChange={setFrom} />
-                  <LabeledInput label="To" type="date" value={to} onChange={setTo} />
+                  <LabeledInput label="From" type="date" value={from} onChange={(v) => setFrom(v > TODAY_DATE ? TODAY_DATE : v)} max={TODAY_DATE} />
+                  <LabeledInput label="To" type="date" value={to} onChange={(v) => setTo(v > TODAY_DATE ? TODAY_DATE : v)} max={TODAY_DATE} />
                   <button
                     onClick={loadTop}
                     className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700"
@@ -162,8 +248,8 @@ export default function AdminReportPage() {
                 </div>
               ) : (
                 <div className="flex items-end gap-3">
-                  <LabeledInput label="From month" type="month" value={fromM} onChange={setFromM} />
-                  <LabeledInput label="To month" type="month" value={toM} onChange={setToM} />
+                  <LabeledInput label="From month" type="month" value={fromM} onChange={(v) => setFromM(v > THIS_MONTH ? THIS_MONTH : v)} max={THIS_MONTH} />
+                  <LabeledInput label="To month" type="month" value={toM} onChange={(v) => setToM(v > THIS_MONTH ? THIS_MONTH : v)} max={THIS_MONTH} />
                   <button
                     onClick={loadTop}
                     className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700"
@@ -182,17 +268,13 @@ export default function AdminReportPage() {
                 labels={income.labels}
                 values={income.revenue_cents}
                 color={CHART_COLORS.revenue}
-                // Y: chỉ hiển thị 3 mốc cho khung tiền
                 yTicks={5}
                 xGrids={14}
-                height={620} // to hơn
+                height={620}
                 unit="USD"
                 xUnit="days"
-                // thước đo 1 chữ số – dữ liệu là cents
                 formatY={(n) => ((n || 0) / 100).toFixed(1)}
-                // 3 đồ thị đầu tiên cần “vạch chia” dài gần chạm khung
                 tickLongEnds
-                // trục đậm bình thường
                 axisEmphasis="normal"
               />
             )}
@@ -211,8 +293,8 @@ export default function AdminReportPage() {
 
         {/* Bottom filter */}
         <div className="mt-6 flex flex-wrap items-end gap-3 px-4 sm:px-6 lg:px-8">
-          <LabeledInput label="From" type="date" value={fromMini} onChange={setFromMini} />
-          <LabeledInput label="To" type="date" value={toMini} onChange={setToMini} />
+          <LabeledInput label="From" type="date" value={fromMini} onChange={(v) => setFromMini(v > TODAY_DATE ? TODAY_DATE : v)} max={TODAY_DATE} />
+          <LabeledInput label="To" type="date" value={toMini} onChange={(v) => setToMini(v > TODAY_DATE ? TODAY_DATE : v)} max={TODAY_DATE} />
           <button
             onClick={loadMini}
             className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700"
@@ -222,8 +304,8 @@ export default function AdminReportPage() {
           <span className="text-xs text-zinc-500">(Min 14 days, Max 3 months)</span>
         </div>
 
-        {/* 2 chart trên 1 hàng, chart thứ 3 xuống hàng full-width */}
-        <div className="mt-4 grid grid-cols-1 gap-6 px-0 sm:px-4 lg:grid-cols-2 lg:px-8">
+        {/* === 3 charts: mỗi cái full-width, xuống hàng riêng === */}
+        <div className="mt-4 grid grid-cols-1 gap-6 px-0 sm:px-4 lg:px-8">
           <MiniChart
             title="Orders"
             labels={mini?.labels || []}
@@ -232,8 +314,8 @@ export default function AdminReportPage() {
             unit="orders"
             color={CHART_COLORS.orders}
             tickLongEnds
-            // Một trong “2 đồ thị ở giữa” → trục & nhãn to/đậm hơn
             axisEmphasis="strong"
+            height={520}       
           />
           <MiniChart
             title="Plan Purchases"
@@ -243,8 +325,8 @@ export default function AdminReportPage() {
             unit="subscriptions"
             color={CHART_COLORS.subs}
             tickLongEnds
-            // Cái thứ hai ở giữa → trục & nhãn to/đậm hơn
             axisEmphasis="strong"
+            height={520}       
           />
           <MiniChart
             title="Products"
@@ -253,12 +335,25 @@ export default function AdminReportPage() {
             yTicks={5}
             unit="products"
             color={CHART_COLORS.products}
-            className="lg:col-span-2"
             tickLongEnds
             axisEmphasis="normal"
+            height={420}       
           />
         </div>
       </div>
+      {/* Print-only: Neon PDF layout (moved outside screen-only for clean printing) */}
+      <PrintDocument
+        adminName={adminName}
+        adminEmail={adminEmail}
+        adminRole={role}
+        rangeLabel={rangeLabel}
+        generatedAt={generatedAt}
+        mode={mode}
+        income={income}
+        mini={mini}
+        fmtUSD={fmtUSD}
+        trendOf={trendOf}
+      />
     </section>
   );
 }
@@ -269,11 +364,13 @@ function LabeledInput({
   type,
   value,
   onChange,
+  max,
 }: {
   label: string;
   type: "date" | "month" | "text";
   value: string;
   onChange: (v: string) => void;
+  max?: string;
 }) {
   return (
     <label className="block">
@@ -282,6 +379,7 @@ function LabeledInput({
         type={type}
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        max={max}
         className="h-10 rounded-xl border bg-white px-3 text-sm shadow-sm outline-none ring-blue-500/20 focus:ring-4"
       />
     </label>
@@ -297,6 +395,208 @@ function Stat({ title, value }: { title: string; value: string }) {
   );
 }
 
+/* ============== Print Document (Neon PDF) ============== */
+function PrintDocument({
+  adminName,
+  adminEmail,
+  adminRole,
+  rangeLabel,
+  generatedAt,
+  mode,
+  income,
+  mini,
+  fmtUSD,
+  trendOf,
+}: {
+  adminName: string;
+  adminEmail: string;
+  adminRole: string;
+  rangeLabel: string;
+  generatedAt: string;
+  mode: "day" | "month";
+  income: IncomeResp["data"] | null;
+  mini: DailyResp["data"] | null;
+  fmtUSD: (cents: number) => string;
+  trendOf: (values: number[]) => "Growth" | "Decline" | "Steady";
+}) {
+  // Build trend captions for charts
+  const revenueTrend = trendOf(income?.revenue_cents || []);
+  const ordersTrend = trendOf(mini?.orders || []);
+  const subsTrend = trendOf(mini?.subscriptions || []);
+  const productsTrend = trendOf(mini?.products || []);
+
+  return (
+    <div className="hidden print:block">
+      <style jsx global>{`
+        @media print {
+          @page { size: A4; margin: 14mm; }
+          html, body { -webkit-print-color-adjust: exact; print-color-adjust: exact; margin: 0 !important; padding: 0 !important; }
+          /* Hide the on-screen UI completely so no blank pages are laid out */
+          #screen-only { display: none !important; }
+          /* Ensure print document flows from page 1 */
+          #soul-print-doc { position: static !important; width: auto !important; }
+          /* Fallback for gradient title in print */
+          #soul-print-doc .print-title { background: none !important; color: #111 !important; -webkit-text-fill-color: #111 !important; }
+        }
+      `}</style>
+
+      <div id="soul-print-doc" className="text-[13px]">
+        {/* Header */}
+        <div className="flex items-center gap-4 mb-4">
+          <div className="relative">
+            <div className="absolute inset-0 blur-md opacity-70 bg-gradient-to-tr from-indigo-500 via-fuchsia-500 to-rose-500 rounded-xl" />
+            <div className="relative h-12 w-12 grid place-items-center rounded-xl bg-gradient-to-tr from-indigo-500 via-fuchsia-500 to-rose-500 text-white font-bold shadow-md">
+              S
+            </div>
+          </div>
+          <div>
+            <div className="text-2xl font-black tracking-tight">SOUL</div>
+            <div className="text-[11px] text-zinc-600">Stories Online, Unified Library</div>
+          </div>
+        </div>
+
+        {/* Title */}
+        <div className="text-center mb-8">
+          <div className="text-[10px] uppercase tracking-[0.2em] text-zinc-600">Official Report</div>
+          <h1 className="mt-1 text-3xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-[color:var(--neon-from)] via-[color:var(--neon-via)] to-[color:var(--neon-to)] print-title">
+            Income and Activity Report
+          </h1>
+          <div className="text-sm text-zinc-700 mt-1">Period: {rangeLabel}</div>
+        </div>
+
+        {/* Meta */}
+        <div className="grid grid-cols-2 gap-4 mb-8">
+          <div className="rounded-xl p-3 border bg-gradient-to-br from-white to-white/90">
+            <div className="text-xs text-zinc-500">Generated By</div>
+            <div className="font-semibold">{adminName}</div>
+            <div className="text-xs text-zinc-600">Role: {adminRole || "admin"}</div>
+            <div className="text-xs text-zinc-600">Email: {adminEmail}</div>
+          </div>
+          <div className="rounded-xl p-3 border bg-gradient-to-br from-white to-white/90">
+            <div className="text-xs text-zinc-500">Generated At</div>
+            <div className="font-semibold">{generatedAt}</div>
+            <div className="text-xs text-zinc-600">Scope: Income, Orders, Subscriptions, Products</div>
+          </div>
+        </div>
+
+        {/* Introduction */}
+        <section className="mb-6">
+          <h2 className="text-xl font-bold mb-2">Introduction</h2>
+          <p className="text-[13px] text-zinc-700">
+            This document provides a comprehensive overview of SOUL platform revenue and operational activity for the selected period. All charts reflect live data aggregated by day or by month, and captions summarize overall trends: growth, decline, or steady state.
+          </p>
+        </section>
+
+        {/* Body */}
+        <section className="mb-6">
+          <h2 className="text-xl font-bold mb-3">Body</h2>
+          {/* Revenue chart */}
+          {income && (
+            <div className="mb-2">
+              <div className="text-sm font-semibold mb-2">Revenue (USD)</div>
+              <div className="border rounded-xl p-2">
+                <InteractiveLineChart
+                  labels={income.labels}
+                  values={income.revenue_cents}
+                  color={CHART_COLORS.revenue}
+                  yTicks={5}
+                  xGrids={14}
+                  height={420}
+                  unit="USD"
+                  xUnit={mode === "day" ? "days" : "months"}
+                  formatY={(n) => ((n || 0) / 100).toFixed(1)}
+                  tickLongEnds
+                  axisEmphasis="normal"
+                />
+              </div>
+              <div className="text-[12px] text-zinc-600 mt-1">Overall trend: {revenueTrend}</div>
+            </div>
+          )}
+
+          {/* Orders */}
+          {mini && (
+            <div className="mt-4">
+              <div className="text-sm font-semibold mb-2">Orders</div>
+              <div className="border rounded-xl p-2">
+                <MiniChart
+                  title="Orders"
+                  labels={mini.labels}
+                  values={mini.orders}
+                  yTicks={5}
+                  unit="orders"
+                  color={CHART_COLORS.orders}
+                  tickLongEnds
+                  axisEmphasis="strong"
+                  height={360}
+                />
+              </div>
+              <div className="text-[12px] text-zinc-600 mt-1">Overall trend: {ordersTrend}</div>
+            </div>
+          )}
+
+          {/* Subscriptions */}
+          {mini && (
+            <div className="mt-4">
+              <div className="text-sm font-semibold mb-2">Plan Purchases</div>
+              <div className="border rounded-xl p-2">
+                <MiniChart
+                  title="Plan Purchases"
+                  labels={mini.labels}
+                  values={mini.subscriptions}
+                  yTicks={5}
+                  unit="subscriptions"
+                  color={CHART_COLORS.subs}
+                  tickLongEnds
+                  axisEmphasis="strong"
+                  height={360}
+                />
+              </div>
+              <div className="text-[12px] text-zinc-600 mt-1">Overall trend: {subsTrend}</div>
+            </div>
+          )}
+
+          {/* Products */}
+          {mini && (
+            <div className="mt-4">
+              <div className="text-sm font-semibold mb-2">Products</div>
+              <div className="border rounded-xl p-2">
+                <MiniChart
+                  title="Products"
+                  labels={mini.labels}
+                  values={mini.products}
+                  yTicks={5}
+                  unit="products"
+                  color={CHART_COLORS.products}
+                  tickLongEnds
+                  axisEmphasis="normal"
+                  height={320}
+                />
+              </div>
+              <div className="text-[12px] text-zinc-600 mt-1">Overall trend: {productsTrend}</div>
+            </div>
+          )}
+        </section>
+
+        {/* Conclusion */}
+        <section className="mb-8">
+          <h2 className="text-xl font-bold mb-2">Conclusion</h2>
+          <p className="text-[13px] text-zinc-700">
+            The above charts summarize the platform’s performance over the selected timeframe. Use these insights to inform product planning, marketing activities, and capacity forecasting. For detailed breakdowns, consult the admin dashboard.
+          </p>
+        </section>
+
+        {/* Footer */}
+        <footer className="pt-4 border-t">
+          <div className="text-[12px] text-zinc-700">
+            Contact: (+84) 901 234 567 • hello@soul.app • {adminEmail}
+          </div>
+          <div className="text-[11px] text-zinc-500 mt-1">Internal circulation document</div>
+        </footer>
+      </div>
+    </div>
+  );
+}
+
 /* ============== Charts ============== */
 function MiniChart({
   title,
@@ -308,6 +608,7 @@ function MiniChart({
   color,
   tickLongEnds,
   axisEmphasis = "normal",
+  height = 420,
 }: {
   title: string;
   labels: string[];
@@ -318,6 +619,7 @@ function MiniChart({
   color: { line: string; areaTop: string; areaMid: string };
   tickLongEnds?: boolean;
   axisEmphasis?: "normal" | "strong";
+  height?: number;
 }) {
   return (
     <div className={`rounded-3xl border bg-white/90 p-4 shadow-sm ${className}`}>
@@ -326,12 +628,10 @@ function MiniChart({
         labels={labels}
         values={values}
         yTicks={yTicks}
-        // 3 khung dưới chỉ 7 đơn vị chia theo ngày
         xGrids={7}
-        height={420} // to hơn
+        height={height}
         unit={unit}
         xUnit="days"
-        // Hiển thị giá trị; đơn vị hiển thị ở nhãn trục
         formatY={(n) => `${Number(n || 0).toFixed(1)}`}
         color={color}
         tickLongEnds={tickLongEnds}
@@ -341,7 +641,15 @@ function MiniChart({
   );
 }
 
-/** SVG chart: lưới Y nét đứt kéo dài, đường cong mượt, hover bám chuột */
+/** SVG chart: lưới Y nét đứt kéo dài, đường cong mượt, hover bám chuột
+ *  - FIX: trục Y “nice scale” + headroom để không tràn khung
+ *  - FIX: chiều cao viewBox bám theo prop `height` => trục đứng thật sự dài hơn
+ */
+/** SVG chart: lưới Y nét đứt kéo dài, đường cong mượt, hover bám chuột
+ *  - Unit label (trục Y) hiển thị NGANG, đặt phía TRÊN trục Y
+ *  - Lề trái (left) tính động theo độ dài nhãn Y để không bị chồng lấn
+ *  - Nice scale + headroom tránh tràn khung
+ */
 function InteractiveLineChart({
   labels,
   values,
@@ -360,27 +668,55 @@ function InteractiveLineChart({
   yTicks?: number;
   xGrids?: number;
   height?: number;
-  unit?: string; // y-axis unit: "USD", "orders", ...
-  xUnit?: string; // x-axis unit label, e.g., "days"
+  unit?: string; // y-axis unit
+  xUnit?: string; // x-axis unit label
   formatY?: (n: number) => string;
   color: { line: string; areaTop: string; areaMid: string };
-  /** vạch chia trục dọc dài hơn, gần chạm hai đầu khung (3 đồ thị đầu tiên) */
   tickLongEnds?: boolean;
-  /** làm trục & nhãn to/đậm hơn (2 đồ thị ở giữa) */
   axisEmphasis?: "normal" | "strong";
 }) {
-  // viewport rộng; trục X sát đáy, trục Y sát trái
-  const vb = { w: 1600, h: 420 };
-  const left = 56,
-    right = 16,
-    top = 10,
-    bottom = vb.h - 22;
+  // ===== helper: nice number rounding (1,2,5 * 10^k) =====
+  const niceCeil = (x: number) => {
+    if (x <= 0) return 1;
+    const exp = Math.floor(Math.log10(x));
+    const f = x / Math.pow(10, exp);
+    let nf = 1;
+    if (f <= 1) nf = 1;
+    else if (f <= 2) nf = 2;
+    else if (f <= 5) nf = 5;
+    else nf = 10;
+    return nf * Math.pow(10, exp);
+  };
+
+  // viewBox CHẠY THEO height để trục đứng dài ra thật
+  const vbH = Math.max(360, Math.floor(height));
+  const vb = { w: 1600, h: vbH };
+
+  // ==== Y scale: headroom + nice ceil ====
+  const rawMax = Math.max(0, ...values);
+  const padded = rawMax * 1.1; // +10% headroom
+  const maxYBase = niceCeil(padded);
+  const maxY = Math.max(1, maxYBase);
+
+  // Ước lượng độ rộng nhãn lớn nhất ở trục Y để dành lề trái đủ rộng
+  const largestLabel = formatY(maxY);
+  const approxLabelW = largestLabel.length * 7.2; // ước lượng ~7.2px mỗi ký tự
+  const tickLenBase = 12;
+  const extraGap = 10;
+  const baseLeft = 56;
+  const left = Math.max(baseLeft, 16 + tickLenBase + approxLabelW + extraGap);
+
+  // Tăng đệm phía trên để chừa chỗ cho unit label nằm NGANG
+  const top = 32;            // trước đây là 10 → tăng để đặt nhãn
+  const right = 16;
+  const bottom = vb.h - 22;
+
   const chartW = vb.w - left - right;
   const chartH = bottom - top;
+
   const N = Math.max(1, labels.length);
   const step = N > 1 ? chartW / (N - 1) : 0;
   const toX = (i: number) => left + i * step;
-  const maxY = Math.max(1, ...values, 0);
   const toY = (v: number) => bottom - (v / maxY) * chartH;
 
   // ---- smooth path (Catmull-Rom -> Cubic Bézier) ----
@@ -394,7 +730,6 @@ function InteractiveLineChart({
       const p1 = p[i];
       const p2 = p[i + 1];
       const p3 = i !== p.length - 2 ? p[i + 2] : p2;
-      // Catmull-Rom to Bezier
       const c1x = p1.x + (p2.x - p0.x) / 6;
       const c1y = p1.y + (p2.y - p0.y) / 6;
       const c2x = p2.x - (p3.x - p1.x) / 6;
@@ -405,8 +740,6 @@ function InteractiveLineChart({
   };
   const pathD = getSmoothPath(pts);
 
-  // Nhịp label theo số ô dọc (xGrids)
-  const labelStep = Math.max(1, Math.round(N / Math.max(1, xGrids)));
   const [hover, setHover] = useState<{ x: number; y: number; value: number } | null>(null);
   const ref = useRef<SVGSVGElement | null>(null);
   const clamp = (n: number, a: number, b: number) => Math.min(b, Math.max(a, n));
@@ -444,7 +777,9 @@ function InteractiveLineChart({
   const glowId = `glow-${idBase}`;
 
   // Path area phủ dưới đường (đóng kín)
-  const areaD = `${pathD} L ${pts.length ? pts[pts.length - 1].x : left} ${bottom} L ${pts.length ? pts[0].x : left} ${bottom} Z`;
+  const areaD =
+    `${pathD} L ${pts.length ? pts[pts.length - 1].x : left} ${bottom} ` +
+    `L ${pts.length ? pts[0].x : left} ${bottom} Z`;
 
   return (
     <svg
@@ -456,13 +791,11 @@ function InteractiveLineChart({
       onMouseLeave={handleLeave}
     >
       <defs>
-        {/* gradient đổ bóng: từ màu đường → mid nhạt hơn → trắng gần đáy */}
         <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor={color.areaTop} stopOpacity="0.45" />
           <stop offset="55%" stopColor={color.areaMid} stopOpacity="0.22" />
           <stop offset="100%" stopColor="#ffffff" stopOpacity="0.85" />
         </linearGradient>
-        {/* glow nhẹ cho đường */}
         <filter id={glowId} x="-20%" y="-20%" width="140%" height="140%">
           <feGaussianBlur in="SourceGraphic" stdDeviation="2.0" result="blur" />
           <feMerge>
@@ -470,31 +803,42 @@ function InteractiveLineChart({
             <feMergeNode in="SourceGraphic" />
           </feMerge>
         </filter>
-        {/* clip vùng biểu đồ để không tràn khỏi khung */}
         <clipPath id={clipId}>
           <rect x={left} y={top} width={chartW} height={chartH} rx="0" ry="0" />
         </clipPath>
       </defs>
       <rect x="0" y="0" width={vb.w} height={vb.h} fill="#ffffff" />
 
-      {/* Axes (vẽ trước) */}
+      {/* Axes */}
       <line x1={left} y1={top} x2={left} y2={bottom} stroke="#e5e7eb" strokeWidth={AXIS.axisW} />
       <line x1={left} y1={bottom} x2={vb.w - right} y2={bottom} stroke="#e5e7eb" strokeWidth={AXIS.axisW} />
 
-      {/* Grids dọc nhẹ (đằng sau) */}
+      {/* Unit label (NGANG) — đặt TRÊN trục Y */}
+      {unit && (
+        <text
+          x={left}                 // ngay trên trục Y
+          y={top - 8}              // phía trên vùng biểu đồ
+          textAnchor="start"
+          fontSize={axisEmphasis === "strong" ? 14 : 12}
+          fontWeight={600}
+          fill="#334155"
+        >
+          {unit}
+        </text>
+      )}
+
+      {/* Grids dọc nhẹ */}
       {Array.from({ length: xGrids }).map((_, i) => {
         const x = left + (i / (xGrids - 1)) * chartW;
         return <line key={i} x1={x} y1={top} x2={x} y2={bottom} stroke="#f1f5f9" />;
       })}
 
-      {/* Area + Smooth line & nodes (clip để không tràn) */}
+      {/* Area + line + nodes */}
       <g clipPath={`url(#${clipId})`}>
-        {/* vùng màu gradient dưới đường */}
         <path d={areaD} fill={`url(#${gradId})`} opacity={1}>
           <animate attributeName="opacity" from="0" to="1" dur="0.8s" fill="freeze" />
         </path>
 
-        {/* đường chính */}
         <path
           d={pathD}
           fill="none"
@@ -508,7 +852,6 @@ function InteractiveLineChart({
           <animate attributeName="stroke-dashoffset" from={1} to={0} dur="1.2s" fill="freeze" />
         </path>
 
-        {/* nodes nhỏ hiện dần */}
         {pts.map((p, i) => (
           <circle key={i} cx={p.x} cy={p.y} r="0" fill={color.line}>
             <animate attributeName="r" from="0" to="3.2" dur="0.5s" begin={`${0.2 + i * 0.02}s`} fill="freeze" />
@@ -516,30 +859,34 @@ function InteractiveLineChart({
         ))}
       </g>
 
-      {/* Y ticks + dashed grid + nhãn (VẼ SAU để luôn nằm TRÊN đồ thị) */}
+      {/* Y ticks + dashed grid + nhãn (để SAU cùng để nổi lên trên) */}
       {Array.from({ length: yTicks + 1 }).map((_, i) => {
         const frac = i / yTicks;
         const y = bottom - frac * chartH;
         const val = frac * maxY;
         return (
           <g key={i}>
-            {/* vạch chia ngắn ở trục Y, dài hơn nếu tickLongEnds */}
             <line x1={left - AXIS.tickLen} y1={y} x2={left} y2={y} stroke="#64748b" strokeWidth={AXIS.tickW} />
-            {/* lưới ngang nét đứt kéo dài toàn đồ thị */}
             <line x1={left} y1={y} x2={vb.w - right} y2={y} stroke="#e2e8f0" strokeDasharray="4 4" />
-            <text x={left - AXIS.tickLen - 4} y={y + 5} textAnchor="end" fontSize={AXIS.font} fill="#475569">
+            <text
+              x={left - AXIS.tickLen - 4}
+              y={y + 5}
+              textAnchor="end"
+              fontSize={AXIS.font}
+              fill="#475569"
+            >
               {formatY(val)}
             </text>
           </g>
         );
       })}
 
-      {/* X labels – sát đáy khung */}
+      {/* X labels */}
       {labels.map((l, i) => {
-        const labelFont = AXIS.font;
         if (i % Math.max(1, Math.round(labels.length / Math.max(1, xGrids))) !== 0 && i !== labels.length - 1)
           return null;
-        const x = toX(i);
+        const x = left + i * step;
+        const labelFont = AXIS.font;
         return (
           <g key={i}>
             <line x1={x} y1={bottom} x2={x} y2={bottom + AXIS.tickLen * 0.6} stroke="#64748b" strokeWidth={AXIS.tickW} />
@@ -550,19 +897,7 @@ function InteractiveLineChart({
         );
       })}
 
-      {/* Nhãn đơn vị cho trục */}
-      {unit && (
-        <text
-          x={left - 42}
-          y={top + 12}
-          textAnchor="start"
-          fontSize={axisEmphasis === "strong" ? 14 : 12}
-          fill="#64748b"
-          transform={`rotate(-90 ${left - 42}, ${top + 12})`}
-        >
-          {unit}
-        </text>
-      )}
+      {/* X unit (nếu cần) */}
       {xUnit && (
         <text
           x={vb.w - right}
@@ -575,7 +910,7 @@ function InteractiveLineChart({
         </text>
       )}
 
-      {/* Hover – bám đúng vị trí chuột */}
+      {/* Hover */}
       {hover && (
         <g>
           <line x1={hover.x} y1={top} x2={hover.x} y2={bottom} stroke="#94a3b8" strokeDasharray="3 3" />

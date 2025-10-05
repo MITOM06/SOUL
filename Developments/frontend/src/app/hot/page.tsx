@@ -9,6 +9,33 @@ import PodcastCard from "@/components/PodcastCard";
 import { demoBooks } from "@/data/demoBooks";
 import { demoPodcasts } from "@/data/demoPodcasts";
 import api from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
+import { normalizeRole } from "@/lib/role";
+
+// Normalize thumbnail/file URLs to absolute URLs that the browser can load
+const API_BASE = (process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api').replace(/\/$/, '');
+const ORIGIN   = API_BASE.replace(/\/api$/, '');
+const toAbs = (u?: string | null) => {
+  if (!u) return '';
+  const s = String(u).trim();
+  if (!s) return '';
+  if (/^file:\/\//i.test(s) || /^[A-Za-z]:\\/.test(s)) return '';
+  if (/^https?:\/\//i.test(s)) return s;
+  if (s.startsWith('//')) {
+    const proto = (typeof window !== 'undefined' ? window.location.protocol : 'https:');
+    return `${proto}${s}`;
+  }
+  if (s.startsWith('/')) return `${ORIGIN}${s}`;
+  return `${ORIGIN}/${s.replace(/^\.?\//, '')}`;
+};
+
+const FALLBACK_IMG = `data:image/svg+xml;utf8,${encodeURIComponent(
+  `<svg xmlns='http://www.w3.org/2000/svg' width='1200' height='600'>
+     <rect width='100%' height='100%' fill='#f8fafc'/>
+     <text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle'
+       font-family='sans-serif' font-size='22' fill='#94a3b8'>SOUL</text>
+   </svg>`
+)}`;
 
 function toBookHref(b: any) { return `/book/${b?.id}`; }
 function toPodcastHref(p: any) { return `/podcast/${p?.id}`; }
@@ -40,13 +67,13 @@ function FullSlideCarousel({ items, autoMs = 6000, heightClass = "h-[88vh] md:h-
       <div className="relative w-full h-full overflow-hidden" onMouseEnter={() => (hovering.current = true)} onMouseLeave={() => (hovering.current = false)}>
         <div className="flex h-full transition-transform duration-700 ease-out" style={{ transform: `translateX(-${idx * 100}%)` }}>
           {items.map((item, i) => {
-            const img = (item as any).cover || (item as any).image;
+            const img = toAbs((item as any).cover || (item as any).image);
             const href = item.type === "book" ? toBookHref(item as any) : toPodcastHref(item as any);
             return (
               <div key={`${item.type}-${(item as any).id}-${i}`} className="w-full shrink-0 h-full">
                 <Link href={href} className="block w-full h-full">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={img || "/placeholder.jpg"} alt="" className="w-full h-full object-cover" loading="eager" />
+                  <img src={img || FALLBACK_IMG} alt="" className="w-full h-full object-cover" loading="eager" onError={(e)=>{ (e.currentTarget as HTMLImageElement).src = FALLBACK_IMG; }} />
                 </Link>
               </div>
             );
@@ -105,10 +132,85 @@ function SectionHeader({ title }: { title: string }) {
   );
 }
 
+/* ===== Favourite helpers ===== */
+function useFavourites() {
+  const [favIds, setFavIds] = useState<Set<number>>(new Set());
+  const [canFav, setCanFav] = useState(true);
+  const [loading, setLoading] = useState(false);
+
+  const load = async (signal?: AbortSignal) => {
+    setLoading(true);
+    try {
+      const res = await api.get('/v1/favourites', { signal: signal as any });
+      const data = res.data?.data || res.data || {};
+      const ids: number[] = data.product_ids || [];
+      setFavIds(new Set(ids));
+      setCanFav(true);
+    } catch (e: any) {
+      if (e?.response?.status === 401) {
+        setCanFav(false);
+        setFavIds(new Set());
+      }
+    } finally { setLoading(false); }
+  };
+
+  const toggle = async (productId: number) => {
+    if (!canFav) {
+      alert('Please sign in to use Favorites');
+      const next = encodeURIComponent(window.location.pathname + window.location.search);
+      window.location.href = `/auth/login?next=${next}`;
+      return;
+    }
+    const willAdd = !favIds.has(productId);
+    const optimistic = new Set(favIds);
+    if (willAdd) optimistic.add(productId); else optimistic.delete(productId);
+    setFavIds(optimistic);
+    try {
+      if (willAdd) await api.post('/v1/favourites', { product_id: productId });
+      else         await api.delete(`/v1/favourites/${productId}`);
+    } catch (e: any) {
+      const reverted = new Set(optimistic);
+      if (willAdd) reverted.delete(productId); else reverted.add(productId);
+      setFavIds(reverted);
+      if (e?.response?.status === 401) {
+        setCanFav(false);
+        alert('Session expired. Please sign in again.');
+        const next = encodeURIComponent(window.location.pathname + window.location.search);
+        window.location.href = `/auth/login?next=${next}`;
+      } else {
+        alert('Failed to update Favorites.');
+      }
+    }
+  };
+
+  return { favIds, canFav, loading, load, toggle };
+}
+
+function FavBtn({ on, onToggle, variant }: { on: boolean; onToggle: () => void; variant: 'book' | 'podcast' }) {
+  const topClass = variant === 'book' ? 'top-10' : 'top-10';
+  return (
+    <button
+      onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggle(); }}
+      aria-pressed={on}
+      aria-label={on ? 'Unfavorite' : 'Favorite'}
+      className={`absolute ${topClass} right-2 z-20 h-8 px-3 rounded-full border backdrop-blur bg-white/80 hover:bg-white transition text-xs 
+      ${on ? 'border-rose-200 text-rose-600 bg-rose-50' : 'border-zinc-200 text-zinc-700'}`}
+      title={on ? 'Unfavorite' : 'Favorite'}
+    >
+      <span className="text-sm align-middle">{on ? '♥' : '♡'}</span>
+      <span className="ml-1 hidden sm:inline">{on ? 'Unfavourite' : 'Favourite'}</span>
+    </button>
+  );
+}
+
 export default function HotPage() {
+  const { user } = useAuth();
+  const role = normalizeRole(user);
+  const isAdmin = role === 'admin';
   const [books, setBooks] = useState<any[]>([]);
   const [podcasts, setPodcasts] = useState<any[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const { favIds, load: loadFavs, toggle: toggleFav } = useFavourites();
   useEffect(() => {
     let mounted = true;
     const load = async () => {
@@ -120,8 +222,18 @@ export default function HotPage() {
         ]);
         const bookItems = booksResp.data?.data?.items || booksResp.data?.data?.data || [];
         const podcastItems = podcastsResp.data?.data?.items || podcastsResp.data?.data?.data || [];
-        const bs = (bookItems as any[]).map((i) => ({ ...i, type: (i.type || 'ebook').toLowerCase(), cover: i.thumbnail_url || i.cover || i.image || null, tags: i.tags || i.metadata?.tags || undefined, }));
-        const ps = (podcastItems as any[]).map((i) => ({ ...i, type: (i.type || 'podcast').toLowerCase(), cover: i.thumbnail_url || i.cover || i.image || null, tags: i.tags || i.metadata?.tags || undefined, }));
+        const bs = (bookItems as any[]).map((i) => ({
+          ...i,
+          type: (i.type || 'ebook').toLowerCase(),
+          cover: toAbs(i.thumbnail_url || i.cover || i.image || ''),
+          tags: i.tags || i.metadata?.tags || undefined,
+        }));
+        const ps = (podcastItems as any[]).map((i) => ({
+          ...i,
+          type: (i.type || 'podcast').toLowerCase(),
+          cover: toAbs(i.thumbnail_url || i.cover || i.image || ''),
+          tags: i.tags || i.metadata?.tags || undefined,
+        }));
         if (mounted) { setBooks(bs); setPodcasts(ps); }
       } catch (err) {
         if (mounted) { setBooks(demoBooks as any[]); setPodcasts(demoPodcasts as any[]); }
@@ -129,6 +241,13 @@ export default function HotPage() {
     };
     load();
     return () => { mounted = false; };
+  }, []);
+
+  // After initial lists loaded, fetch favourites
+  useEffect(() => {
+    const ac = new AbortController();
+    loadFavs(ac.signal);
+    return () => ac.abort();
   }, []);
 
   const hotBooksRaw = partitionByTag(books.length ? books : (demoBooks as any[]), "hot", [0,1,2,3,4,5,6,7,8,9]);
@@ -167,18 +286,24 @@ export default function HotPage() {
             ))}
           </RowWithArrows>
           <RowWithArrows title="Hot" href="/book">
-            {(loading ? Array.from({ length: 10 }) : (hotBooks as any[]).slice(0, 10)).map((b: any, i: number) => (
-              <div key={`hb-${b?.id ?? i}`} className="snap-start shrink-0 basis-[calc((100vw-3rem)/2)] sm:basis-[calc((100vw-4rem)/3)] md:basis-[calc((100vw-8rem)/5)]">
-                {loading ? (
-                  <>
-                    <article className="card overflow-hidden"><div className="w-full aspect-[3/4] bg-zinc-100 animate-pulse" /></article>
-                    <div className="px-1.5 pt-2"><div className="h-3.5 w-3/5 bg-zinc-200 rounded animate-pulse" /></div>
-                  </>
-                ) : (
-                  <BookCard book={b} qs="?coming=0" />
-                )}
-              </div>
-            ))}
+            {(loading ? Array.from({ length: 10 }) : (hotBooks as any[]).slice(0, 10)).map((b: any, i: number) => {
+              const favOn = favIds.has(b?.id);
+              return (
+                <div key={`hb-${b?.id ?? i}`} className="relative snap-start shrink-0 basis-[calc((100vw-3rem)/2)] sm:basis-[calc((100vw-4rem)/3)] md:basis-[calc((100vw-8rem)/5)]">
+                  {!loading && !isAdmin && (
+                    <FavBtn variant="book" on={favOn} onToggle={() => toggleFav(b.id)} />
+                  )}
+                  {loading ? (
+                    <>
+                      <article className="card overflow-hidden"><div className="w-full aspect-[3/4] bg-zinc-100 animate-pulse" /></article>
+                      <div className="px-1.5 pt-2"><div className="h-3.5 w-3/5 bg-zinc-200 rounded animate-pulse" /></div>
+                    </>
+                  ) : (
+                    <BookCard book={b} qs="?coming=0" />
+                  )}
+                </div>
+              );
+            })}
           </RowWithArrows>
         </section>
 
@@ -199,18 +324,24 @@ export default function HotPage() {
             ))}
           </RowWithArrows>
           <RowWithArrows title="Hot" href="/podcast">
-            {(loading ? Array.from({ length: 10 }) : (hotPodcasts as any[]).slice(0, 10)).map((p: any, i: number) => (
-              <div key={`hp-${p?.id ?? i}`} className="min-w-[300px] max-w-[300px] md:min-w-[616px] md:max-w-[616px] snap-start">
-                {loading ? (
-                  <>
-                    <article className="card overflow-hidden"><div className="w-full aspect-[16/9] bg-zinc-100 animate-pulse" /></article>
-                    <div className="px-1.5 pt-2"><div className="h-3.5 w-1/2 bg-zinc-200 rounded animate-pulse" /></div>
-                  </>
-                ) : (
-                  <PodcastCard podcast={p} variant="wide" qs="?coming=0" />
-                )}
-              </div>
-            ))}
+            {(loading ? Array.from({ length: 10 }) : (hotPodcasts as any[]).slice(0, 10)).map((p: any, i: number) => {
+              const favOn = favIds.has(p?.id);
+              return (
+                <div key={`hp-${p?.id ?? i}`} className="relative min-w-[300px] max-w-[300px] md:min-w-[616px] md:max-w-[616px] snap-start">
+                  {!loading && !isAdmin && (
+                    <FavBtn variant="podcast" on={favOn} onToggle={() => toggleFav(p.id)} />
+                  )}
+                  {loading ? (
+                    <>
+                      <article className="card overflow-hidden"><div className="w-full aspect-[16/9] bg-zinc-100 animate-pulse" /></article>
+                      <div className="px-1.5 pt-2"><div className="h-3.5 w-1/2 bg-zinc-200 rounded animate-pulse" /></div>
+                    </>
+                  ) : (
+                    <PodcastCard podcast={p} variant="wide" qs="?coming=0" />
+                  )}
+                </div>
+              );
+            })}
           </RowWithArrows>
         </section>
       </section>

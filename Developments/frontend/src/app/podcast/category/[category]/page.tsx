@@ -95,7 +95,7 @@ function FavBtn({ on, onToggle }: { on: boolean; onToggle: () => void }) {
       onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggle(); }}
       aria-pressed={on}
       aria-label={on ? 'Unfavorite' : 'Favorite'}
-      className={`absolute top-2 right-2 z-20 h-8 px-3 rounded-full border backdrop-blur bg-white/80 hover:bg-white transition text-xs 
+      className={`absolute top-10 right-2 z-20 h-8 px-3 rounded-full border backdrop-blur bg-white/80 hover:bg-white transition text-xs 
       ${on ? 'border-rose-200 text-rose-600 bg-rose-50' : 'border-zinc-200 text-zinc-700'}`}
       title={on ? 'Unfavorite' : 'Favorite'}
     >
