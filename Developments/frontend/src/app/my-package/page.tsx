@@ -200,9 +200,10 @@ export default function MyPackagePage() {
                   <a
                     href="/upgrade"
                     className={`inline-flex items-center justify-center rounded-xl px-5 py-2.5 text-sm font-semibold ${palette.solid} transition`}
-                  >
+                  >                
                     Change plan
                   </a>
+
                   <a
                     href="/payment-history"
                     className="inline-flex items-center justify-center rounded-xl px-5 py-2.5 text-sm font-semibold bg-white text-zinc-900 ring-1 ring-zinc-200 hover:bg-zinc-50 dark:bg-zinc-900 dark:text-zinc-100 dark:ring-zinc-700 dark:hover:bg-zinc-800 transition"
@@ -316,7 +317,7 @@ export default function MyPackagePage() {
                   Billing history
                 </a>
                 <a
-                  href="/support"
+                  href="/contact"
                   className="inline-flex items-center justify-center rounded-xl px-4 py-2 text-sm font-semibold bg-white text-zinc-900 ring-1 ring-zinc-200 hover:bg-zinc-50 dark:bg-zinc-900 dark:text-zinc-100 dark:ring-zinc-700 dark:hover:bg-zinc-800 transition"
                 >
                   Contact support

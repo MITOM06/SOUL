@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import api from '@/lib/api';
+import { toAbsoluteImgUrl as toAbs } from '@/lib/img'
 import { useAuth } from '@/contexts/AuthContext';
 import { normalizeRole } from '@/lib/role';
 
@@ -11,15 +12,6 @@ type Item = { id: number; title: string; thumbnail_url?: string | null; price_ce
 
 const API_BASE = (process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api').replace(/\/$/, '');
 const ORIGIN   = API_BASE.replace(/\/api$/, '');
-
-const toAbs = (u?: string|null) => {
-  if (!u) return '';
-  const s = u.trim();
-  if (/^file:\/\//i.test(s) || /^[A-Za-z]:\\/.test(s)) return '';
-  if (s.startsWith('http://') || s.startsWith('https://')) return s;
-  if (s.startsWith('/')) return `${ORIGIN}${s}`;
-  return s;
-};
 
 const FALLBACK = `data:image/svg+xml;utf8,${encodeURIComponent(
   `<svg xmlns='http://www.w3.org/2000/svg' width='400' height='225'>

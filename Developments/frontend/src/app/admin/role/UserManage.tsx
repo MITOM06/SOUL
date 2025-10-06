@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { adminUsersAPI } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
+import toast from "react-hot-toast";
 
 interface User {
   id: number;
@@ -31,6 +33,7 @@ interface LaravelPaginator<T> {
 }
 
 export default function UserManage({ roleFilter }: UserManageProps) {
+  const { user: authUser } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
@@ -220,11 +223,19 @@ export default function UserManage({ roleFilter }: UserManageProps) {
                     title="Click to toggle active"
                     onClick={(e) => {
                       e.stopPropagation();
+                      // Prevent an admin from deactivating themselves
+                      if (
+                        roleFilter === 'admin' &&
+                        authUser && Number(authUser.id) === Number(user.id)
+                      ) {
+                        toast.error('You cannot lock your own admin account.');
+                        return;
+                      }
                       // Toggle is_active directly
                       adminUsersAPI
                         .update(user.id, { is_active: !user.is_active })
                         .then(() => fetchUsers(currentPage, roleFilter, query))
-                        .catch(() => {/* ignore */});
+                        .catch(() => { /* ignore */ });
                     }}
                   >
                     {user.is_active ? "✅" : "❌"}

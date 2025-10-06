@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { toAbsoluteImgUrl as toAbs } from '@/lib/img'
 
 /** ================ Tiny visual helpers ================ */
 function NeonOrb({ className }: { className?: string }) {
@@ -50,20 +51,16 @@ export default function LandingHome() {
   /** Search state (home quick search) */
   const API_BASE = (process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api").replace(/\/$/, "");
   const ORIGIN = API_BASE.replace(/\/api$/, "");
-  const toAbs = (u?: string | null) => {
-    if (!u) return "";
-    const s = u.trim();
-    if (/^file:\/\//i.test(s) || /^[A-Za-z]:\\/.test(s)) return "";
-    if (s.startsWith("http://") || s.startsWith("https://")) return s;
-    if (s.startsWith("/")) return `${ORIGIN}${s}`;
-    return s;
-  };
 
   const [q, setQ] = useState("");
   const [stype, setStype] = useState<"all" | "ebook" | "podcast">("all");
-  const [category, setCategory] = useState("");
+  const [category, setCategory] = useState("all");
+  const [catOptions, setCatOptions] = useState<string[]>(["all"]);
   const [results, setResults] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [openSug, setOpenSug] = useState(false);
+  const [sugs, setSugs] = useState<any[]>([]);
+  const sugRef = useRef<HTMLDivElement>(null);
 
   // Public stats (real DB): users, podcasts, books, members (VIP+Premium)
   type PublicStats = { total_users: number; total_podcasts: number; total_ebooks: number; total_members: number };
@@ -113,7 +110,7 @@ export default function LandingHome() {
       const params = new URLSearchParams();
       if (stype !== "all") params.set("type", stype);
       if (q.trim()) params.set("search", q.trim());
-      if (category.trim()) params.set("category", category.trim());
+      if (category && category !== 'all') params.set("category", category);
       params.set("per_page", "24");
       const r = await fetch(`${API_BASE}/v1/catalog/products?${params.toString()}`);
       const j = await r.json();
@@ -124,6 +121,58 @@ export default function LandingHome() {
       setLoading(false);
     }
   };
+
+  // Load categories from both books and podcasts
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const fetchCats = async (type: 'ebook'|'podcast') => {
+          const r = await fetch(`${API_BASE}/v1/catalog/products?type=${type}&per_page=120`);
+          const j = await r.json();
+          const items = j?.data?.items || [];
+          return items.map((it:any) => String(it.category || '')).filter(Boolean);
+        };
+        const [bc, pc] = await Promise.all([fetchCats('ebook'), fetchCats('podcast')]);
+        if (!cancelled) {
+          const s = new Set<string>(['all']);
+          [...bc, ...pc].forEach(c => s.add(c));
+          setCatOptions(Array.from(s.values()));
+        }
+      } catch {}
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Suggestions (debounced API based)
+  useEffect(() => {
+    const qq = q.trim();
+    if (!qq) { setSugs([]); return; }
+    const ac = new AbortController();
+    const h = window.setTimeout(async () => {
+      try {
+        const params = new URLSearchParams();
+        if (stype !== 'all') params.set('type', stype);
+        params.set('per_page', '12');
+        params.set('search', qq);
+        if (category && category !== 'all') params.set('category', category);
+        const r = await fetch(`${API_BASE}/v1/catalog/products?${params.toString()}`, { signal: ac.signal });
+        const j = await r.json();
+        setSugs(j?.data?.items || []);
+      } catch {}
+    }, 220);
+    return () => { window.clearTimeout(h); ac.abort(); };
+  }, [q, category, stype]);
+
+  // Click outside to close suggestions
+  useEffect(() => {
+    const onClick = (e: MouseEvent) => {
+      if (!sugRef.current) return;
+      if (!sugRef.current.contains(e.target as Node)) setOpenSug(false);
+    };
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, []);
 
   /** ========== Mount + simple reveal animations ========== */
   const [mounted, setMounted] = useState(false);
@@ -262,21 +311,41 @@ export default function LandingHome() {
       {/* ===================== SEARCH BAND ===================== */}
       <section className="relative w-screen left-[50%] right-[50%] -ml-[50vw] -mr-[50vw]">
         <div className="px-6 md:px-12">
-          <div className="relative -mt-16 md:-mt-24 rounded-3xl bg-white/85 backdrop-blur ring-1 ring-zinc-200 shadow-xl p-4 md:p-6">
+          <div className="relative z-40 -mt-16 md:-mt-24 rounded-3xl bg-white/85 backdrop-blur ring-1 ring-zinc-200 shadow-xl p-4 md:p-6">
             {/* subtle shine */}
             <div className="pointer-events-none absolute inset-0 rounded-3xl overflow-hidden">
               <div className="absolute -inset-1 opacity-0 group-hover:opacity-5" />
             </div>
 
             <form onSubmit={doSearch} className="grid gap-3 md:grid-cols-[1fr_160px_220px_auto]">
-              <div className="relative">
+              <div className="relative" ref={sugRef}>
                 <input
                   value={q}
-                  onChange={(e) => setQ(e.target.value)}
+                  onChange={(e) => { setQ(e.target.value); setOpenSug(true); }}
+                  onFocus={() => setOpenSug(true)}
                   placeholder="Search by title…"
                   className="w-full border rounded-2xl pl-10 pr-3 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500/70 focus:border-indigo-300 border-zinc-200"
                 />
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400">🔎</span>
+                {openSug && q.trim() && sugs.length > 0 && (
+                  <div className="absolute z-50 mt-2 w-full max-h-96 overflow-auto rounded-xl border bg-white shadow-lg">
+                    {sugs.map((it:any) => (
+                      <Link
+                        key={`sug-${it.id}`}
+                        href={String(it.type).toLowerCase()==='podcast' ? `/podcast/${it.id}` : `/book/${it.id}`}
+                        className="flex items-center gap-3 px-3 py-2 hover:bg-zinc-50"
+                        onClick={()=> setOpenSug(false)}
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={toAbs(it.thumbnail_url) || FALLBACK_IMG} alt="" className="h-10 w-10 object-cover rounded" />
+                        <div className="min-w-0">
+                          <div className="text-sm font-medium truncate">{it.title}</div>
+                          <div className="text-xs text-zinc-500">{String(it.type||'').toUpperCase()} · {it.category || '-'}</div>
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                )}
               </div>
               <select
                 value={stype}
@@ -287,12 +356,15 @@ export default function LandingHome() {
                 <option value="ebook">Books</option>
                 <option value="podcast">Podcasts</option>
               </select>
-              <input
+              <select
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
-                placeholder="Category (e.g., Programming, Design)"
                 className="border rounded-2xl px-3 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500/70 border-zinc-200"
-              />
+              >
+                {catOptions.map(c => (
+                  <option key={c} value={c}>{c==='all' ? 'All categories' : c}</option>
+                ))}
+              </select>
               <button
                 type="submit"
                 className="rounded-2xl bg-[color:var(--brand-500)] hover:bg-[color:var(--brand-600)] text-white font-semibold px-6 py-3 shadow transition-transform hover:-translate-y-0.5"

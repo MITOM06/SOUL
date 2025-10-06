@@ -17,6 +17,7 @@ import { useCart } from '@/contexts/CartContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { normalizeRole } from '@/lib/role';
 import { cn } from '@/lib/utils';
+import { toAbsoluteImgUrl as toAbs } from '@/lib/img';
 
 /* ---------------- Types & helpers ---------------- */
 type ProductType = 'ebook' | 'podcast';
@@ -49,14 +50,7 @@ const FALLBACK_IMG = (() => {
   </svg>`;
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 })();
-const toAbs = (u?: string | null) => {
-  if (!u) return '';
-  const s = u.trim();
-  if (/^file:\/\//i.test(s) || /^[A-Za-z]:\\/.test(s)) return '';
-  if (s.startsWith('http://') || s.startsWith('https://')) return s;
-  if (s.startsWith('/')) return `${ORIGIN}${s}`;
-  return s;
-};
+// Use shared toAbs util from lib/img
 const parseMaybeJSON = (v: any) => {
   if (!v) return null;
   if (typeof v === 'object') return v;

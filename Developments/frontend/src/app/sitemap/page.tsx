@@ -26,6 +26,8 @@ import {
   UserCheck,
   BookMarked,
   Mic,
+  CreditCard as CreditCardIcon,
+  BarChart2,
 } from "lucide-react";
 
 type Item = { href: string; label: string; icon: React.ElementType; badge?: "HOT" | "NEW" | "UPDATED" };
@@ -110,19 +112,35 @@ export default function SiteMapPage() {
     links: [
       { href: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
       { href: "/admin/orders", label: "Orders", icon: ShoppingBag },
-      { href: "/admin/role/admin", label: "Admins", icon: Shield },
-      { href: "/admin/role/users", label: "Users", icon: UsersIcon },
-      { href: "/admin/users-sub", label: "Users Subscriptions", icon: UserCheck },
+      { href: "/admin/payments", label: "Payments", icon: CreditCardIcon },
+      { href: "/admin/report", label: "Reports", icon: BarChart2 },
       { href: "/admin/books", label: "Books Management", icon: BookMarked },
       { href: "/admin/podcasts", label: "Podcasts Management", icon: Mic },
       { href: "/admin/notifications", label: "Notifications", icon: Bell },
+      { href: "/admin/role/admin", label: "Admins", icon: Shield },
+      { href: "/admin/role/users", label: "Users", icon: UsersIcon },
+      { href: "/admin/users-sub", label: "Users Subscriptions", icon: UserCheck },
     ],
   };
 
-  const sections: Section[] =
-    role === "admin"
-      ? [general, library, account, support, legal, admin]
-      : [general, library, account, support, legal];
+  // Tailor sitemap per role:
+  // - Admin: hide user content (books/podcasts browsing, library, continues, orders, payments, upgrade).
+  //          Show Home and full Admin panel.
+  // - User: show all browsing + personal sections.
+  const sections: Section[] = (() => {
+    if (role === "admin") {
+      const generalAdmin: Section = {
+        title: "General",
+        links: [ { href: "/", label: "Home", icon: Home } ],
+      };
+      const accountAdmin: Section = {
+        title: "Account",
+        links: [ { href: "/profile", label: "Profile", icon: User } ],
+      };
+      return [generalAdmin, accountAdmin, support, legal, admin];
+    }
+    return [general, library, account, support, legal];
+  })();
 
   return (
     <section className="full-bleed p-6 md:p-10">

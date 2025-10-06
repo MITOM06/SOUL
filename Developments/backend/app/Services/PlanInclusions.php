@@ -5,6 +5,7 @@ namespace App\Services;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Date;
+use App\Support\Thumbs;
 
 class PlanInclusions
 {
@@ -60,10 +61,15 @@ class PlanInclusions
         $ebooks = [];
         $podcasts = [];
         if ($ids['ebooks']) {
-            $ebooks = DB::table('products')->whereIn('id', $ids['ebooks'])->orderByDesc('id')->get($selectCols)->toArray();
+            $ebooks = DB::table('products')->whereIn('id', $ids['ebooks'])->orderByDesc('id')->get($selectCols);
+            // normalize thumbnails (avoid null/missing)
+            $ebooks->transform(function($p){ $p->thumbnail_url = Thumbs::ensureThumb($p->type, $p->thumbnail_url); return $p; });
+            $ebooks = $ebooks->toArray();
         }
         if ($ids['podcasts']) {
-            $podcasts = DB::table('products')->whereIn('id', $ids['podcasts'])->orderByDesc('id')->get($selectCols)->toArray();
+            $podcasts = DB::table('products')->whereIn('id', $ids['podcasts'])->orderByDesc('id')->get($selectCols);
+            $podcasts->transform(function($p){ $p->thumbnail_url = Thumbs::ensureThumb($p->type, $p->thumbnail_url); return $p; });
+            $podcasts = $podcasts->toArray();
         }
         return [ 'ebooks' => $ebooks, 'podcasts' => $podcasts ];
     }
@@ -137,4 +143,3 @@ class PlanInclusions
         return in_array($productId, $ids['ebooks'], true) || in_array($productId, $ids['podcasts'], true);
     }
 }
-

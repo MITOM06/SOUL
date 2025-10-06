@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1\Library;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use App\Support\Thumbs;
 
 class LibraryController extends Controller
 {
@@ -38,7 +39,11 @@ class LibraryController extends Controller
         }
 
         $items = $q->orderByDesc('purchased_at')->get();
+        // Normalize thumbnails for each item
+        $items->transform(function($p){
+            $p->thumbnail_url = Thumbs::ensureThumb($p->type ?? null, $p->thumbnail_url ?? null);
+            return $p;
+        });
         return response()->json(['success'=>true,'data'=>$items]);
     }
 }
-

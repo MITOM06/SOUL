@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { toAbsoluteImgUrl as toAbs } from '@/lib/img'
 
 type ProductType = 'ebook' | 'podcast';
 interface Product {
@@ -40,20 +41,7 @@ const FALLBACK_IMG = (() => {
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 })();
 
-/** Chuẩn hoá URL ảnh:
- *  - chặn file:// và đường dẫn C:\...
- *  - nối ORIGIN cho đường dẫn bắt đầu bằng /
- *  - giữ nguyên http(s)://
- *  - nếu không hợp lệ -> trả '' (sẽ rơi về fallback)
- */
-const toAbs = (u?: string | null) => {
-  if (!u) return '';
-  const s = u.trim();
-  if (/^file:\/\//i.test(s) || /^[A-Za-z]:\\/.test(s)) return '';
-  if (s.startsWith('http://') || s.startsWith('https://')) return s;
-  if (s.startsWith('/')) return `${ORIGIN}${s}`;
-  return s;
-};
+// use shared toAbs
 
 export default function AdminPodcasts() {
   // list

@@ -9,6 +9,7 @@ import { useCart } from '@/contexts/CartContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { normalizeRole } from '@/lib/role';
 import { cn } from '@/lib/utils';
+import { toAbsoluteImgUrl as toAbs } from '@/lib/img';
 
 /* ========== Types ========== */
 interface Product {
@@ -40,14 +41,7 @@ const FALLBACK_IMG = (() => {
   </svg>`;
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 })();
-const toAbs = (u?: string | null) => {
-  if (!u) return '';
-  const s = u.trim();
-  if (/^file:\/\//i.test(s) || /^[A-Za-z]:\\/.test(s)) return '';
-  if (s.startsWith('http://') || s.startsWith('https://')) return s;
-  if (s.startsWith('/')) return `${ORIGIN}${s}`;
-  return s;
-};
+// Use shared toAbs util from lib/img
 const formatUSD = (cents?: number | null) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(((cents ?? 0) as number) / 100);
 

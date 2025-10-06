@@ -6,16 +6,7 @@ import { ordersAPI } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 import UserPanelLayout from '@/components/UserPanelLayout';
 import{ useCart } from '@/contexts/CartContext';  
-// Helpers for absolute URLs
-const API_BASE = (process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api').replace(/\/$/, '');
-const ORIGIN = API_BASE.replace(/\/api$/, '');
-const toAbs = (u?: string | null) => {
-  if (!u) return '';
-  const s = u.trim();
-  if (s.startsWith('http://') || s.startsWith('https://')) return s;
-  if (s.startsWith('/')) return `${ORIGIN}${s}`;
-  return s;
-}
+import { toAbsoluteImgUrl as toAbs } from '@/lib/img'
 // --- Interfaces ---
 interface Product {
   id: number;
@@ -128,17 +119,13 @@ export default function OrdersPage() {
               {/* Left: Info */}
               <div className="flex items-center gap-4">
                 <div className="w-20 h-20 bg-gray-100 overflow-hidden rounded">
-                  {item.product?.thumbnail_url ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={toAbs(item.product.thumbnail_url)}
-                      alt={item.product.title}
-                      className="w-full h-full object-cover"
-                      loading="lazy"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-xs text-gray-500">No image</div>
-                  )}
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={toAbs(item.product?.thumbnail_url) || `data:image/svg+xml;utf8,${encodeURIComponent('<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'120\' height=\'120\'><rect width=\'100%\' height=\'100%\' fill=\'#f1f5f9\'/><text x=\'50%\' y=\'50%\' dominant-baseline=\'middle\' text-anchor=\'middle\' font-family=\'sans-serif\' font-size=\'12\' fill=\'#94a3b8\'>No image</text></svg>')}`}
+                    alt={item.product?.title || 'Product'}
+                    className="w-full h-full object-cover"
+                    loading="lazy"
+                  />
                 </div>
                 <div>
                   <h2 className="font-semibold">{item.product?.title}</h2>

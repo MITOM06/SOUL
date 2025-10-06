@@ -11,23 +11,11 @@ import { demoPodcasts } from "@/data/demoPodcasts";
 import api from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { normalizeRole } from "@/lib/role";
+import { toAbsoluteImgUrl as toAbs } from '@/lib/img'
 
 // Normalize thumbnail/file URLs to absolute URLs that the browser can load
 const API_BASE = (process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api').replace(/\/$/, '');
 const ORIGIN   = API_BASE.replace(/\/api$/, '');
-const toAbs = (u?: string | null) => {
-  if (!u) return '';
-  const s = String(u).trim();
-  if (!s) return '';
-  if (/^file:\/\//i.test(s) || /^[A-Za-z]:\\/.test(s)) return '';
-  if (/^https?:\/\//i.test(s)) return s;
-  if (s.startsWith('//')) {
-    const proto = (typeof window !== 'undefined' ? window.location.protocol : 'https:');
-    return `${proto}${s}`;
-  }
-  if (s.startsWith('/')) return `${ORIGIN}${s}`;
-  return `${ORIGIN}/${s.replace(/^\.?\//, '')}`;
-};
 
 const FALLBACK_IMG = `data:image/svg+xml;utf8,${encodeURIComponent(
   `<svg xmlns='http://www.w3.org/2000/svg' width='1200' height='600'>
@@ -250,6 +238,8 @@ export default function HotPage() {
     return () => ac.abort();
   }, []);
 
+  // (Search UI removed for Hot page per request)
+
   const hotBooksRaw = partitionByTag(books.length ? books : (demoBooks as any[]), "hot", [0,1,2,3,4,5,6,7,8,9]);
   const hotPodcastsRaw = partitionByTag(podcasts.length ? podcasts : (demoPodcasts as any[]), "hot", [0,1,2,3,4,5,6,7,8,9]);
   // Exclude Coming Soon from Hot rows to avoid duplication
@@ -268,6 +258,7 @@ export default function HotPage() {
       <div className="w-screen relative left-[50%] right-[50%] -ml-[50vw] -mr-[50vw]">
         <FullSlideCarousel items={carouselItems as any[]} />
       </div>
+      {/* Search band removed from Hot page */}
       <section className="space-y-12 mt-10">
         <section id="books" className="space-y-6">
           <SectionHeader title="Books" />
