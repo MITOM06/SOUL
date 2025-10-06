@@ -17,16 +17,9 @@ type Product = {
   category?: string | null;
 };
 
+import { toAbsoluteImgUrl as toAbs } from '@/lib/img'
 const API_BASE = (process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api').replace(/\/$/, '');
 const ORIGIN   = API_BASE.replace(/\/api$/, '');
-const toAbs = (u?: string|null) => {
-  if (!u) return '';
-  const s = u.trim();
-  if (/^file:\/\//i.test(s) || /^[A-Za-z]:\\/.test(s)) return '';
-  if (s.startsWith('http://') || s.startsWith('https://')) return s;
-  if (s.startsWith('/')) return `${ORIGIN}${s}`;
-  return s;
-};
 
 export default function AdminNotificationsPage() {
   const [tab, setTab] = useState<Tab>('inbox');
@@ -106,7 +99,7 @@ function AdminInbox() {
             {active.payload?.product && (
               <div className="mt-1 flex items-center gap-3 p-2 border rounded">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={active.payload.product.thumbnail_url || ''} alt="" className="h-16 w-12 object-cover rounded" />
+                <img src={toAbs(active.payload.product.thumbnail_url) || ''} alt="" className="h-16 w-12 object-cover rounded" />
                 <div className="text-sm">
                   <div className="font-medium">{active.payload.product.title}</div>
                   <div className="text-xs text-zinc-500">{active.payload.product.type} · {active.payload.product.category || '—'}</div>

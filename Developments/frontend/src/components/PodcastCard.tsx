@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import React from 'react'
 import { Podcast } from '@/types'
+import { toAbsoluteImgUrl } from '@/lib/img'
 
 // Minimal card for podcasts; supports square or wide variant for Home
 export default function PodcastCard({ podcast, variant = 'square', hidePrice = false, qs = '' }: { podcast: Podcast; variant?: 'square' | 'wide'; hidePrice?: boolean; qs?: string }) {
@@ -27,18 +28,14 @@ export default function PodcastCard({ podcast, variant = 'square', hidePrice = f
           </span>
         )}
         <div className={`w-full ${ratioClass} bg-zinc-100 overflow-hidden`}>
-          {podcast.cover ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={podcast.cover}
-              alt={podcast.title}
-              className="block w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
-              loading="lazy"
-              onError={(e)=>{ (e.currentTarget as HTMLImageElement).src = FALLBACK; }}
-            />
-          ) : (
-            <div className="cover-placeholder w-full h-full" />
-          )}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={toAbsoluteImgUrl(podcast.cover) || FALLBACK}
+            alt={podcast.title}
+            className="block w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
+            loading="lazy"
+            onError={(e)=>{ (e.currentTarget as HTMLImageElement).src = FALLBACK; }}
+          />
         </div>
       </article>
       <div className="px-1.5 pt-2">

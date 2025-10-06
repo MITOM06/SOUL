@@ -2,42 +2,12 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import { toAbsoluteImgUrl as toAbs } from '@/lib/img';
 
 type Cat = { category: string; count: number; thumbnail_url?: string | null };
 
 const API_BASE = (process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api').replace(/\/$/, '');
 const ORIGIN   = API_BASE.replace(/\/api$/, '');
-
-/**
- * Chuẩn hoá URL ảnh thành URL tuyệt đối có thể load được từ trình duyệt.
- * - Bỏ các path file:// hoặc ổ đĩa Windows
- * - Giữ nguyên http(s) tuyệt đối
- * - Hỗ trợ scheme-relative: //cdn.example.com/...
- * - Gắn ORIGIN cho path bắt đầu bằng "/" hoặc đường dẫn tương đối ("storage/...","./storage/...")
- */
-const toAbs = (u?: string | null) => {
-  if (!u) return '';
-
-  const s = u.trim();
-
-  // Không hỗ trợ path local dạng file:// hoặc C:\...
-  if (/^file:\/\//i.test(s) || /^[A-Za-z]:\\/.test(s)) return '';
-
-  // URL tuyệt đối
-  if (/^https?:\/\//i.test(s)) return s;
-
-  // Scheme-relative
-  if (s.startsWith('//')) {
-    const proto = (typeof window !== 'undefined' ? window.location.protocol : 'https:');
-    return `${proto}${s}`;
-  }
-
-  // Bắt đầu bằng "/" → gắn ORIGIN
-  if (s.startsWith('/')) return `${ORIGIN}${s}`;
-
-  // Đường dẫn tương đối ("storage/products/...", "./storage/...")
-  return `${ORIGIN}/${s.replace(/^\.?\//, '')}`;
-};
 
 const FALLBACK_IMG = `data:image/svg+xml;utf8,${encodeURIComponent(
   `<svg xmlns='http://www.w3.org/2000/svg' width='800' height='400'>

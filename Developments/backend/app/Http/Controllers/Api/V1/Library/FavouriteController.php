@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use App\Models\Favourite;
 use App\Models\Product;
 use App\Http\Requests\Library\FavouriteStoreRequest;
+use App\Support\Thumbs;
 
 /**
  * Endpoints cho người dùng thao tác Favourite.
@@ -46,7 +47,7 @@ class FavouriteController extends Controller
                 'title'         => $p->title,
                 'type'          => $p->type,
                 'slug'          => $p->slug,
-                'thumbnail_url' => $p->thumbnail_url ?? null,
+                'thumbnail_url' => Thumbs::ensureThumb($p->type, $p->thumbnail_url ?? null),
                 'price_cents'   => (int) ($p->price_cents ?? 0),
                 'metadata'      => $p->metadata,
                 'favourited_at' => optional($fav->created_at)->toISOString(),

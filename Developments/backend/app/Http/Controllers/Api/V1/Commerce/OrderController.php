@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1\Commerce;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\Order;
+use App\Support\Thumbs;
 
 class OrderController extends Controller
 {
@@ -22,6 +23,15 @@ class OrderController extends Controller
             ->where('user_id', $user->id)
             ->where('status', 'pending')
             ->first();
+
+        // Normalize thumbnails in nested product (if any)
+        if ($order) {
+            foreach ($order->items ?? [] as $it) {
+                if ($it->product) {
+                    $it->product->thumbnail_url = Thumbs::ensureThumb($it->product->type ?? null, $it->product->thumbnail_url ?? null);
+                }
+            }
+        }
 
         return response()->json([
             'success' => true,
@@ -93,7 +103,13 @@ class OrderController extends Controller
             ->where('id', $orderId)
             ->where('user_id', $request->user()?->id)
             ->firstOrFail();
-
+        if ($order) {
+            foreach ($order->items ?? [] as $it) {
+                if ($it->product) {
+                    $it->product->thumbnail_url = Thumbs::ensureThumb($it->product->type ?? null, $it->product->thumbnail_url ?? null);
+                }
+            }
+        }
         return response()->json(['success' => true, 'data' => $order]);
     }
 }

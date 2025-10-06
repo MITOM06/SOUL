@@ -168,11 +168,11 @@ export default function FavouritesPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {podcasts.map((p) => (
                 <div key={p.id} className="relative group">
-                  {/* PodcastCard wide style for better look like Continues */}
-                  <PodcastCard podcast={{ ...p, cover: p.thumbnail_url } as any} variant="wide" />
+                  {/* Hide price to avoid overlap with Remove */}
+                  <PodcastCard podcast={{ ...p, cover: p.thumbnail_url } as any} variant="wide" hidePrice />
                   <button
                     onClick={() => onRemove(p.id)}
-                    className="hidden group-hover:inline-flex absolute top-2 right-2 text-xs px-2 py-1 rounded bg-red-600 text-white"
+                    className="hidden group-hover:inline-flex absolute top-2 right-2 z-30 text-xs px-2 py-1 rounded bg-red-600 text-white shadow"
                   >
                     Remove
                   </button>

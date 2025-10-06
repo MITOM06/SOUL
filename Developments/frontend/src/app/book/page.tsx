@@ -6,6 +6,7 @@ import BookCard from '@/components/BookCard';
 import api from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { normalizeRole } from '@/lib/role';
+import { toAbsoluteImgUrl as toAbs } from '@/lib/img';
 
 type ProductType = 'ebook' | 'podcast';
 interface ProductApi {
@@ -20,15 +21,6 @@ interface ProductApi {
 
 const API_BASE = (process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api').replace(/\/$/, '');
 const ORIGIN   = API_BASE.replace(/\/api$/, '');
-
-const toAbs = (u?: string | null) => {
-  if (!u) return '';
-  const s = u.trim();
-  if (/^file:\/\//i.test(s) || /^[A-Za-z]:\\/.test(s)) return '';
-  if (s.startsWith('http://') || s.startsWith('https://')) return s;
-  if (s.startsWith('/')) return `${ORIGIN}${s}`;
-  return s;
-};
 const FALLBACK_IMG = `data:image/svg+xml;utf8,${encodeURIComponent(
   `<svg xmlns='http://www.w3.org/2000/svg' width='600' height='800'>
      <rect width='100%' height='100%' fill='#f1f5f9'/>

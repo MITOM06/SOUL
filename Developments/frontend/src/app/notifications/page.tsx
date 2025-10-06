@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { toAbsoluteImgUrl as toAbs } from '@/lib/img'
 import UserPanelLayout from "@/components/UserPanelLayout";
 import api, { notificationsAPI } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
@@ -80,7 +81,7 @@ export default function NotificationsPage() {
               {active.payload?.product && (
                 <div className="mt-1 flex items-center gap-3 p-2 border rounded">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={active.payload.product.thumbnail_url || ''} alt="" className="h-16 w-12 object-cover rounded" />
+                  <img src={toAbs(active.payload.product.thumbnail_url) || ''} alt="" className="h-16 w-12 object-cover rounded" />
                   <div className="text-sm">
                     <div className="font-medium">{active.payload.product.title}</div>
                     <div className="text-xs text-zinc-500">{active.payload.product.type} · {active.payload.product.category || '—'}</div>

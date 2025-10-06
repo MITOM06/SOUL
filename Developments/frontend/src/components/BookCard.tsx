@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import React from 'react'
 import { Book } from '@/types'
+import { toAbsoluteImgUrl } from '@/lib/img'
 
 // Image-only frame; caption sits below as a separate block
 export default function BookCard({ book, qs = '' }: { book: Book; qs?: string }) {
@@ -15,18 +16,14 @@ export default function BookCard({ book, qs = '' }: { book: Book; qs?: string })
     <Link href={`/book/${book.id}${qs || ''}`} className="group block">
       <article className="card overflow-hidden transition shadow-sm hover:shadow-md hover:-translate-y-0.5 duration-200">
         <div className="w-full aspect-[3/4] bg-zinc-100 overflow-hidden">
-          {book.cover ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={book.cover}
-              alt={book.title}
-              className="block w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
-              loading="lazy"
-              onError={(e)=>{ (e.currentTarget as HTMLImageElement).src = FALLBACK; }}
-            />
-          ) : (
-            <div className="cover-placeholder w-full h-full" />
-          )}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={toAbsoluteImgUrl(book.cover) || FALLBACK}
+            alt={book.title}
+            className="block w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
+            loading="lazy"
+            onError={(e)=>{ (e.currentTarget as HTMLImageElement).src = FALLBACK; }}
+          />
         </div>
       </article>
       <div className="px-1.5 pt-2">

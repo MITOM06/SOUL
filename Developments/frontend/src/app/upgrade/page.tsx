@@ -76,13 +76,23 @@ export default function UpgradePage() {
       <p className="text-zinc-600 max-w-3xl">
         Support our platform by subscribing to a paid plan. You can upgrade, downgrade or cancel at any time.
       </p>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {plans.map((plan) => {
+      {(() => {
+        // Hide lower-tier plans depending on current subscription
+        let visible: Plan[] = plans;
+        if (currentPlanKey === 'premium') {
+          visible = plans.filter(p => p.key !== 'basic');
+        } else if (currentPlanKey === 'vip') {
+          visible = plans.filter(p => p.key === 'vip');
+        }
+        const cols = visible.length >= 3 ? 'md:grid-cols-3' : (visible.length === 2 ? 'md:grid-cols-2' : 'md:grid-cols-1');
+        return (
+      <div className={`grid grid-cols-1 ${cols} gap-6`}>
+        {visible.map((plan) => {
           const isCurrent = plan.key === currentPlanKey;
           return (
             <div
               key={plan.key}
-              className={`relative rounded-2xl p-6 border shadow-sm bg-gradient-to-br ${plan.color} transition ${isCurrent ? 'opacity-60 pointer-events-none' : 'hover:shadow-md hover:-translate-y-0.5'}`}
+              className={`relative rounded-2xl p-6 border shadow-sm bg-gradient-to-br ${plan.color} transition ${isCurrent ? 'opacity-60' : 'hover:shadow-md hover:-translate-y-0.5'}`}
             >
               <div className="flex items-center justify-between">
                 <h2 className="text-2xl font-bold">{plan.name}</h2>
@@ -116,6 +126,8 @@ export default function UpgradePage() {
           );
         })}
       </div>
+        );
+      })()}
     </section>
   );
 }
