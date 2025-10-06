@@ -212,6 +212,24 @@ export default function BookDetail() {
   const [isReading, setIsReading] = useState<boolean>(false);
   const [lastSavedPage, setLastSavedPage] = useState<number>(0);
   const [savingPage, setSavingPage] = useState(false);
+  // Limited Preview (first N pages)
+  const PREVIEW_MAX_PAGES = 10;
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewBlob, setPreviewBlob] = useState<Blob | null>(null);
+  const [previewTitle, setPreviewTitle] = useState<string>('');
+  // Download helper
+  const downloadBlob = (blob: Blob, filename: string) => {
+    try {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1500);
+    } catch {}
+  };
 
   // Favorites
   const [favOn, setFavOn] = useState<boolean>(false);
@@ -470,7 +488,17 @@ export default function BookDetail() {
   const onRead = () => {
     const previewFile = files.find((f) => !!f.is_preview && f.file_type === 'pdf');
     if (previewFile) {
-      openPdfInline(p!.id, previewFile.id, `${p!.title} — Preview`);
+      // Load limited preview: only first PREVIEW_MAX_PAGES pages
+      (async () => {
+        try {
+          const res = await api.get(`/v1/catalog/products/${p!.id}/files/${previewFile.id}/download`, { responseType: 'blob' });
+          setPreviewBlob(res.data as Blob);
+          setPreviewTitle(`${p!.title} — Preview (first ${PREVIEW_MAX_PAGES} pages)`);
+          setPreviewOpen(true);
+        } catch {
+          alert('Unable to load preview.');
+        }
+      })();
       return;
     }
     if (owned && fullPdf) {
@@ -496,6 +524,34 @@ export default function BookDetail() {
       return;
     }
     openPdfInline(p!.id, fullPdf.id, p!.title);
+  };
+
+  const onDownloadFull = async () => {
+    if (!p) return;
+    if (!fullPdf) {
+      alert('This ebook has no full PDF uploaded yet. Please contact support.');
+      return;
+    }
+    // Require login for full downloads (backend enforces this even for free books)
+    if (!isLoggedIn) {
+      const next = encodeURIComponent(window.location.pathname);
+      window.location.href = `/auth/login?next=${next}`;
+      return;
+    }
+    // If not owned and not free, block
+    if (!(canView || priceCents === 0)) {
+      alert('Please purchase this ebook to download the full PDF.');
+      return;
+    }
+    try {
+      const res = await api.get(`/v1/catalog/products/${p.id}/files/${fullPdf.id}/download`, { responseType: 'blob' });
+      const ct = (res as any)?.headers?.['content-type'] || 'application/pdf';
+      const ext = /pdf/i.test(ct) ? 'pdf' : 'bin';
+      const safe = String(p.title || 'ebook').replace(/[^A-Za-z0-9_\-]+/g, '-').replace(/\-+/g, '-').replace(/^\-+|\-+$/g, '');
+      downloadBlob(res.data as Blob, `${safe || 'ebook'}.${ext}`);
+    } catch (e) {
+      alert('Failed to download file. Please try again.');
+    }
   };
 
   const { show } = toast;
@@ -706,6 +762,16 @@ export default function BookDetail() {
                         Read Preview
                       </button>
                     )}
+                    {/* Download full PDF (requires login; available for owned or free ebooks) */}
+                    {fullPdf && (
+                      <button
+                        onClick={onDownloadFull}
+                        className="h-10 px-4 inline-flex items-center gap-2 rounded-full border border-zinc-300 text-zinc-700 hover:bg-zinc-50"
+                        title="Download full PDF"
+                      >
+                        Download
+                      </button>
+                    )}
                     <button
                       onClick={toggleFav}
                       aria-pressed={favOn}
@@ -772,6 +838,14 @@ export default function BookDetail() {
                           className="mt-4 w-full rounded-xl bg-[color:var(--brand-500)] hover:bg-[color:var(--brand-600)] text-white font-semibold py-2.5"
                         >
                           Buy now
+                        </button>
+                      )}
+                      {(canView || priceCents === 0) && fullPdf && (
+                        <button
+                          onClick={onDownloadFull}
+                          className="mt-2 w-full rounded-xl border border-zinc-300 hover:bg-white/80 font-medium text-zinc-800 py-2.5"
+                        >
+                          Download PDF
                         </button>
                       )}
                     </div>
@@ -845,8 +919,156 @@ export default function BookDetail() {
         </div>
       )}
 
+      {/* Limited Preview overlay (first N pages) using pdf.js */}
+      {previewOpen && previewBlob && (
+        <LimitedPdfOverlay
+          blob={previewBlob}
+          title={previewTitle}
+          maxPages={PREVIEW_MAX_PAGES}
+          onClose={() => { setPreviewOpen(false); setPreviewBlob(null); }}
+          onBuy={onBuy}
+        />
+      )}
+
       {/* Toast */}
       <Toast open={toast.open} msg={toast.msg} onClose={toast.hide} />
     </>
+  );
+}
+
+// ========== Minimal pdf.js renderer for limited preview ==========
+function LimitedPdfOverlay({ blob, title, maxPages, onClose, onBuy }: { blob: Blob; title: string; maxPages: number; onClose: () => void; onBuy: () => void }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState<string | null>(null);
+  const [promptShown, setPromptShown] = useState(false);
+  const [showPrompt, setShowPrompt] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const ensurePdfJs = async () => {
+      const hasLib = (window as any).pdfjsLib;
+      if (!hasLib) {
+        await new Promise<void>((resolve, reject) => {
+          const s = document.createElement('script');
+          s.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.9.179/pdf.min.js';
+          s.async = true;
+          s.onload = () => resolve();
+          s.onerror = () => reject(new Error('Failed to load pdf.js'));
+          document.head.appendChild(s);
+        });
+        const worker = document.createElement('script');
+        worker.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.9.179/pdf.worker.min.js';
+        worker.async = true;
+        document.head.appendChild(worker);
+      }
+    };
+    const render = async () => {
+      try {
+        await ensurePdfJs();
+        if (cancelled) return;
+        const pdfjsLib = (window as any).pdfjsLib;
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.9.179/pdf.worker.min.js';
+
+        const buf = await blob.arrayBuffer();
+        const loadingTask = pdfjsLib.getDocument({ data: buf });
+        const pdf = await loadingTask.promise;
+        const total = pdf.numPages || 0;
+        const toRender = Math.min(maxPages, total || maxPages);
+
+        const wrap = containerRef.current!;
+        wrap.innerHTML = '';
+        for (let i = 1; i <= toRender; i++) {
+          const page = await pdf.getPage(i);
+          const viewport = page.getViewport({ scale: 1.2 });
+          const canvas = document.createElement('canvas');
+          canvas.width = viewport.width;
+          canvas.height = viewport.height;
+          canvas.style.width = '100%';
+          canvas.style.height = 'auto';
+          const ctx = canvas.getContext('2d');
+          if (!ctx) continue;
+          await page.render({ canvasContext: ctx, viewport }).promise;
+          const holder = document.createElement('div');
+          holder.className = 'mb-4';
+          const label = document.createElement('div');
+          label.className = 'text-xs text-zinc-400 mb-1 px-2';
+          label.textContent = `Page ${i} / ${total || toRender}`;
+          holder.appendChild(label);
+          holder.appendChild(canvas);
+          wrap.appendChild(holder);
+        }
+        setLoading(false);
+      } catch (e: any) {
+        if (!cancelled) { setErr(e?.message || 'Failed to render PDF'); setLoading(false); }
+      }
+    };
+    render();
+    return () => { cancelled = true; };
+  }, [blob, maxPages]);
+
+  // Detect scroll reaching near the end of preview to show purchase prompt
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const onScroll = () => {
+      const nearBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 24;
+      if (nearBottom && !promptShown) {
+        setPromptShown(true);
+        setShowPrompt(true);
+      }
+    };
+    el.addEventListener('scroll', onScroll, { passive: true });
+    return () => el.removeEventListener('scroll', onScroll);
+  }, [promptShown]);
+
+  return (
+    <div className="fixed inset-0 z-[1200] bg-black/90">
+      <div className="h-12 px-4 flex items-center justify-between text-white">
+        <div className="truncate pr-3">{title}</div>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-white/80">Preview limited to first {maxPages} pages</span>
+          <button onClick={onClose} className="px-3 py-1 rounded bg-white/10 hover:bg-white/20">Close</button>
+        </div>
+      </div>
+      <div ref={scrollRef} className="w-full h-[calc(100vh-48px)] overflow-auto bg-white relative">
+        {loading && !err && <div className="p-4 text-sm">Loading preview…</div>}
+        {err && <div className="p-4 text-sm text-red-600">{err}</div>}
+        <div ref={containerRef} className="max-w-4xl mx-auto p-3" />
+
+        {/* Centered purchase prompt when reaching the end of preview */}
+        {showPrompt && (
+          <div className="fixed inset-0 z-[1300] grid place-items-center pointer-events-none">
+            <div className="pointer-events-auto w-[min(560px,92vw)] rounded-2xl bg-white shadow-2xl ring-1 ring-black/10 p-6 text-center">
+              <div className="text-2xl font-extrabold text-zinc-900">Preview limit reached</div>
+              <p className="mt-2 text-zinc-700">
+                To continue reading beyond page {maxPages}, please purchase this ebook.
+              </p>
+              <div className="mt-4 flex items-center justify-center gap-2">
+                <button
+                  onClick={() => { setShowPrompt(false); onBuy(); }}
+                  className="px-5 py-2.5 rounded-xl bg-[color:var(--brand-500)] hover:bg-[color:var(--brand-600)] text-white font-semibold"
+                >
+                  Buy Now
+                </button>
+                <button
+                  onClick={() => setShowPrompt(false)}
+                  className="px-5 py-2.5 rounded-xl border border-zinc-300 hover:bg-white/80 font-medium text-zinc-800"
+                >
+                  Continue Preview
+                </button>
+                <button
+                  onClick={onClose}
+                  className="px-5 py-2.5 rounded-xl border border-zinc-300 hover:bg-white/80 font-medium text-zinc-800"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }

@@ -55,7 +55,7 @@ export default function CreateBookPage() {
     const files = ev.target.files;
     if (!files?.length) return;
     const toAdd: { file: File; is_preview: boolean }[] = [];
-    for (let i = 0; i < files.length; i++) toAdd.push({ file: files[i], is_preview: i === 0 });
+    for (let i = 0; i < files.length; i++) toAdd.push({ file: files[i], is_preview: false });
     setLocalQueue(prev => [...prev, ...toAdd]);
     ev.currentTarget.value = '';
   };
@@ -81,9 +81,10 @@ export default function CreateBookPage() {
       // required checks
       if (!form.title.trim()) { alert('Please enter title'); return; }
       if (!form.description?.trim()) { alert('Please enter description'); return; }
-      // validate price (allow commas, require non-negative)
+      // validate price (allow commas, require non-negative, max $10,000.00)
      const priceNum = Number.parseFloat((priceStr || '0').replace(/,/g, ''));
      if (isNaN(priceNum) || priceNum < 0) { alert('Please enter a valid price (e.g., 00.00)'); return; }
+     if (priceNum > 10000) { alert('Price must not exceed $10,000.00'); return; }
 
       if (!(categorySelect && categorySelect !== '__other__') && !categoryOther.trim()) { alert('Please select a category or enter Other'); return; }
       if (!coverFile) { alert('Please upload a cover image'); return; }

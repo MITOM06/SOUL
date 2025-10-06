@@ -278,7 +278,9 @@ export default function AdminOrderManage() {
                   >
                     <div className="flex items-center gap-3">
                       <img
-                        src={item.product?.thumbnail_url || "/placeholder.png"}
+                        src={(item.product?.thumbnail_url || '').startsWith('http') || (item.product?.thumbnail_url || '').startsWith('/storage/') || (item.product?.thumbnail_url || '').startsWith('/books/') || (item.product?.thumbnail_url || '').startsWith('/podcasts/')
+                          ? (item.product?.thumbnail_url as string)
+                          : (item.product?.thumbnail_url ? `${(process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api').replace(/\/$/,'').replace(/\/api$/,'')}/${String(item.product?.thumbnail_url).replace(/^\/?/, '')}` : '/placeholder.png')}
                         alt={item.product?.title}
                         className="w-12 h-12 object-cover rounded"
                       />

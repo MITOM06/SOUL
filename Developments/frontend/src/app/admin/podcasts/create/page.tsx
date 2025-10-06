@@ -57,8 +57,11 @@ export default function CreatePodcastPage() {
       if (!title.trim()) { alert('Please enter title'); return; }
       if (!desc.trim()) { alert('Please enter description'); return; }
       if (!priceStr || isNaN(Number(priceStr))) { alert('Please enter price (e.g., 00.00)'); return; }
+      const priceNum = Number.parseFloat((priceStr || '0').replace(/,/g, ''));
+      if (priceNum < 0) { alert('Please enter a valid non-negative price'); return; }
+      if (priceNum > 10000) { alert('Price must not exceed $10,000.00'); return; }
       if (!(catMode && catMode !== '__other__') && !catOther.trim()) { alert('Please select a category or enter Other'); return; }
-      if (!coverFile) { alert('Please upload a cover image'); return; }
+      // Thumbnail is optional: if not provided and YouTube is used, we'll set the YouTube thumbnail automatically
       const dollars = Math.max(0, Number.parseFloat((priceStr || '0').replace(/,/g, '')) || 0);
       const price_cents = Math.round(dollars * 100);
       const category = catMode === '__other__' ? (catOther.trim() || null) : (catMode || null);
@@ -90,6 +93,17 @@ export default function CreatePodcastPage() {
         await fetch(`${API}/v1/catalog/products/${newId}/youtube`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: ytUrl.trim() })
         });
+        // If no manual cover image provided, use YouTube thumbnail as product cover
+        if (!coverFile) {
+          const m = ytUrl.trim().match(/(?:youtu\.be\/|v=|embed\/|shorts\/)([A-Za-z0-9_-]{11})/);
+          const vid = m?.[1];
+          if (vid) {
+            const ytThumb = `https://img.youtube.com/vi/${vid}/hqdefault.jpg`;
+            await fetch(`${API}/v1/catalog/products/${newId}`, {
+              method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ thumbnail_url: ytThumb })
+            });
+          }
+        }
       } else if (videoMode === 'upload' && videoFile) {
         const fd = new FormData();
         fd.append('files[]', videoFile);
@@ -171,8 +185,8 @@ export default function CreatePodcastPage() {
               <input value={slug} onChange={e=>setSlug(e.target.value)} className="w-full border rounded px-3 py-2" placeholder="optional" />
             </div>
           </div>
-          <label className="block text-sm mt-3">Cover image <span className="text-red-500">*</span></label>
-          <input type="file" accept="image/*,.avif,.heic,.heif,.tif,.tiff" required onChange={(e)=>{
+          <label className="block text-sm mt-3">Cover image (optional)</label>
+          <input type="file" accept="image/*,.avif,.heic,.heif,.tif,.tiff" onChange={(e)=>{
             const f = e.target.files?.[0] || null;
             setCoverFile(f);
             if (f) setCoverPreview(URL.createObjectURL(f)); else setCoverPreview(null);

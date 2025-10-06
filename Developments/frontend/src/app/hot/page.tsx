@@ -245,10 +245,11 @@ export default function HotPage() {
   // Exclude Coming Soon from Hot rows to avoid duplication
   const hotBooks = hotBooksRaw.filter((b:any) => !(Array.isArray((b as any)?.tags) && (b as any).tags.includes('coming_soon')) && !String((b as any)?.category||'').toLowerCase().includes('coming'));
   const hotPodcasts = hotPodcastsRaw.filter((p:any) => !(Array.isArray((p as any)?.tags) && (p as any).tags.includes('coming_soon')) && !String((p as any)?.category||'').toLowerCase().includes('coming'));
-  const carouselItems = useMemo(() => [
-    ...hotBooks.slice(0,3).map((b) => ({ ...b, type: "book" as const })),
-    ...hotPodcasts.slice(0,3).map((p) => ({ ...p, type: "podcast" as const })),
-  ], [hotBooks, hotPodcasts]);
+  // Carousel shows only podcasts (no books)
+  const carouselItems = useMemo(
+    () => hotPodcasts.slice(0, 6).map((p) => ({ ...p, type: "podcast" as const })),
+    [hotPodcasts]
+  );
 
   const comingBooks = partitionByTag(books.length ? books : (demoBooks as any[]), "coming_soon", [10,11,12,13,14,15,16,17,18,19]);
   const comingPodcasts = partitionByTag(podcasts.length ? podcasts : (demoPodcasts as any[]), "coming_soon", [10,11,12,13,14,15,16,17,18,19]);

@@ -97,13 +97,16 @@ export default function AdminReportPage() {
   const validateDayRange = (a: string, b: string) => {
     const d1 = new Date(a + "T00:00:00");
     const d2 = new Date(b + "T00:00:00");
+    if (!(d1 < d2)) throw new Error("From date must be earlier than To date");
     const diff = Math.abs(+d2 - +d1) / 86400000 + 1;
     if (diff < 14 || diff > 92) throw new Error("Range must be 14–92 days");
   };
   const validateMonthRange = (a: string, b: string) => {
     const [ay, am] = a.split("-").map(Number);
     const [by, bm] = b.split("-").map(Number);
-    const diff = (by - ay) * 12 + (bm - am) + 1;
+    const cmp = (by - ay) * 12 + (bm - am);
+    if (!(cmp > 0)) throw new Error("From month must be earlier than To month");
+    const diff = cmp + 1; // inclusive months
     if (diff < 1 || diff > 6) throw new Error("Month range must be 1–6 months");
   };
 

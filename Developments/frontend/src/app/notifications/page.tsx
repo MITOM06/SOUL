@@ -19,6 +19,13 @@ type InboxItem = {
 };
 
 export default function NotificationsPage() {
+  const FALLBACK_THUMB = `data:image/svg+xml;utf8,${encodeURIComponent(
+    `<svg xmlns='http://www.w3.org/2000/svg' width='64' height='96'>
+       <rect width='100%' height='100%' rx='6' fill='#f1f5f9'/>
+       <text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle'
+         font-family='system-ui, -apple-system, Segoe UI, Roboto, sans-serif' font-size='10' fill='#9ca3af'>No image</text>
+     </svg>`
+  )}`;
   const { user } = useAuth();
   const role = normalizeRole(user);
   const [items, setItems] = useState<InboxItem[]>([]);
@@ -52,6 +59,27 @@ export default function NotificationsPage() {
     return () => ac.abort();
   }, [user, role]);
 
+  // If active payload has product but missing thumbnail_url, fetch product detail to hydrate thumbnail
+  useEffect(() => {
+    const ac = new AbortController();
+    (async () => {
+      const prod: any = (active as any)?.payload?.product;
+      const pid = prod?.id;
+      const hasThumb = !!(prod && prod.thumbnail_url);
+      if (!pid || hasThumb) return;
+      try {
+        const r = await api.get(`/v1/catalog/products/${pid}`, { signal: ac.signal as any });
+        const thumb = r?.data?.data?.product?.thumbnail_url || null;
+        if (!thumb) return;
+        setItems(prev => prev.map(it => it.id === activeId ? ({
+          ...it,
+          payload: { ...(it as any).payload, product: { ...(prod || {}), thumbnail_url: thumb } }
+        }) : it));
+      } catch {}
+    })();
+    return () => ac.abort();
+  }, [activeId, active?.payload?.product?.id, active?.payload?.product?.thumbnail_url]);
+
   return (
     <UserPanelLayout>
       <div className="grid md:grid-cols-[300px_minmax(0,1fr)] min-h-[60vh] rounded-2xl border overflow-hidden">
@@ -78,10 +106,21 @@ export default function NotificationsPage() {
             <>
               <div className="text-lg font-semibold">{active.title}</div>
               <div className="text-xs text-zinc-500">{new Date(active.created_at).toLocaleString()}</div>
+              {/* Sender info */}
+              <div className="text-xs text-zinc-600">
+                From: {(() => {
+                  const s = active?.payload?.sender || {};
+                  const name = s.name || s.display_name || '';
+                  const email = s.email || '';
+                  if (name || email) return `${name}${name && email ? ' · ' : ''}${email}`;
+                  if (active?.from_user_id) return `User #${active.from_user_id}`;
+                  return 'System';
+                })()}
+              </div>
               {active.payload?.product && (
                 <div className="mt-1 flex items-center gap-3 p-2 border rounded">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={toAbs(active.payload.product.thumbnail_url) || ''} alt="" className="h-16 w-12 object-cover rounded" />
+                  <img src={toAbs(active.payload.product.thumbnail_url) || FALLBACK_THUMB} alt="" className="h-16 w-12 object-cover rounded" />
                   <div className="text-sm">
                     <div className="font-medium">{active.payload.product.title}</div>
                     <div className="text-xs text-zinc-500">{active.payload.product.type} · {active.payload.product.category || '—'}</div>

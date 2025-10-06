@@ -240,7 +240,7 @@ export default function AdminProductsV2() {
     const toAdd: { file: File; is_preview: boolean }[] = [];
     for (let i = 0; i < files.length; i++) {
       const f = files[i];
-      toAdd.push({ file: f, is_preview: localQueue.length === 0 }); // mặc định file đầu là preview
+      toAdd.push({ file: f, is_preview: false });
     }
     setLocalQueue(prev => [...prev, ...toAdd]);
     ev.currentTarget.value = '';
