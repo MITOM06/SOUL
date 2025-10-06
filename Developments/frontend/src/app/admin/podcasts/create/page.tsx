@@ -31,8 +31,8 @@ export default function CreatePodcastPage() {
   const [coverPreview, setCoverPreview] = useState<string | null>(null);
   const [active, setActive] = useState(true);
   const [ytUrl, setYtUrl] = useState('');
-  const [videoMode, setVideoMode] = useState<'youtube'|'upload'>('youtube');
-  const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [videoMode, setVideoMode] = useState<'youtube'|'url'>('youtube');
+  const [videoUrl, setVideoUrl] = useState('');
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -90,6 +90,15 @@ export default function CreatePodcastPage() {
         }
       }
       if (videoMode === 'youtube' && ytUrl.trim()) {
+        // Validate YouTube before attaching
+        const vr = await fetch(`${API}/v1/youtube/lookup?url=` + encodeURIComponent(ytUrl.trim()));
+        const vj = await vr.json();
+        if (!vj?.success) {
+          await fetch(`${API}/v1/catalog/products/${newId}`, { method: 'DELETE', credentials: 'include' });
+          alert(vj?.message || 'Create failed: invalid YouTube URL or no playable content');
+          setLoading(false);
+          return;
+        }
         await fetch(`${API}/v1/catalog/products/${newId}/youtube`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: ytUrl.trim() })
         });
@@ -104,13 +113,17 @@ export default function CreatePodcastPage() {
             });
           }
         }
-      } else if (videoMode === 'upload' && videoFile) {
-        const fd = new FormData();
-        fd.append('files[]', videoFile);
-        const up = await fetch(`${API}/v1/catalog/products/${newId}/files`, { method: 'POST', body: fd, credentials: 'include' });
+      } else if (videoMode === 'url' && videoUrl.trim()) {
+        // Attach remote media URL; if fails, delete product and report
+        const up = await fetch(`${API}/v1/catalog/products/${newId}/files-url`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+          body: JSON.stringify({ url: videoUrl.trim() })
+        });
         if (!up.ok) {
           const t = await up.text();
-          alert('Video upload failed: ' + t);
+          await fetch(`${API}/v1/catalog/products/${newId}`, { method: 'DELETE', credentials: 'include' });
+          alert('Create failed: invalid media URL or not accessible.\n' + t);
+          setLoading(false);
           return;
         }
       }
@@ -210,14 +223,26 @@ export default function CreatePodcastPage() {
                 Link YouTube
               </label>
               <label className="inline-flex items-center gap-2">
-                <input type="radio" name="videoMode" value="upload" checked={videoMode==='upload'} onChange={()=>setVideoMode('upload')} />
-                Upload video
+                <input type="radio" name="videoMode" value="url" checked={videoMode==='url'} onChange={()=>setVideoMode('url')} />
+                Link URL (OneDrive/Direct)
               </label>
             </div>
             {videoMode === 'youtube' ? (
-              <input value={ytUrl ?? ''} onChange={e=>setYtUrl(e.target.value)} placeholder="Paste YouTube URL (optional)" className="w-full border rounded px-3 py-2" />
+              <input
+                key="yt-input"
+                value={ytUrl ?? ''}
+                onChange={e=>setYtUrl(e.target.value)}
+                placeholder="Paste YouTube URL"
+                className="w-full border rounded px-3 py-2"
+              />
             ) : (
-              <input type="file" accept="video/mp4,audio/mp3,audio/m4a" onChange={(e)=>setVideoFile(e.target.files?.[0] || null)} className="w-full border rounded px-3 py-2" />
+              <input
+                key="url-input"
+                value={videoUrl}
+                onChange={e=>setVideoUrl(e.target.value)}
+                placeholder="Paste direct media URL (mp4, webm, mp3...). For OneDrive, use a direct file link."
+                className="w-full border rounded px-3 py-2"
+              />
             )}
           </div>
 

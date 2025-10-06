@@ -418,6 +418,12 @@ export default function PodcastDetailPage() {
   const isAdmin = role === 'admin';
   const isCustomer = isLoggedIn && !isAdmin;
 
+  // Redirect helper: send unauthenticated users to login with return URL
+  const goLogin = () => {
+    const next = encodeURIComponent(window.location.pathname + window.location.search);
+    window.location.href = `/auth/login?next=${next}`;
+  };
+
   const id = useMemo(() => {
     const raw = (params as any)?.id;
     const s = Array.isArray(raw) ? raw[0] : raw;
@@ -668,7 +674,19 @@ export default function PodcastDetailPage() {
                 {p.title}
               </h1>
               {p.description && (
-                <p className="mt-2 text-zinc-700 whitespace-pre-wrap">{String(p.description)}</p>
+                isLoggedIn ? (
+                  <p className="mt-2 text-zinc-700 whitespace-pre-wrap">{String(p.description)}</p>
+                ) : (
+                  <div className="mt-2 text-zinc-700">
+                    <span className="text-sm">Please log in to read the podcast review.</span>
+                    <button
+                      onClick={goLogin}
+                      className="ml-3 inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold px-3 py-1.5 rounded-lg shadow"
+                    >
+                      Log in
+                    </button>
+                  </div>
+                )
               )}
 
               <div className="mt-5 flex items-center gap-3">
@@ -857,18 +875,30 @@ export default function PodcastDetailPage() {
                       className="w-16 h-16 object-cover rounded-md"
                       onError={(e)=>{ (e.currentTarget as HTMLImageElement).src = FALLBACK_IMG; }}
                     />
-                    <button
-                      disabled
-                      aria-disabled="true"
-                      className="px-4 py-2 rounded bg-zinc-300 text-white opacity-60 cursor-not-allowed"
-                      title="Locked — purchase to listen"
-                    >
-                      Play
-                    </button>
+                    {isLoggedIn ? (
+                      <button
+                        disabled
+                        aria-disabled="true"
+                        className="px-4 py-2 rounded bg-zinc-300 text-white opacity-60 cursor-not-allowed"
+                        title="Locked — purchase to listen"
+                      >
+                        Play
+                      </button>
+                    ) : (
+                      <button
+                        onClick={goLogin}
+                        className="px-4 py-2 rounded bg-emerald-600 text-white hover:bg-emerald-700"
+                        title="Log in to listen"
+                      >
+                        Log in to listen
+                      </button>
+                    )}
                     <div className="text-sm text-zinc-500">00:00 / --:--</div>
                   </div>
                   <div className="mt-3 text-sm text-zinc-600">
-                    Please purchase to listen to the full podcast.
+                    {isLoggedIn
+                      ? 'Please purchase to listen to the full podcast.'
+                      : 'Please log in to listen (even for free podcasts).'}
                   </div>
                 </div>
               )}

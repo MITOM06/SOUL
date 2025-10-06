@@ -513,10 +513,15 @@ export default function BookDetail() {
     alert('No preview available.');
   };
   const onReadFull = () => {
-    if (!owned) return;
+    // Require login for reading full content (including free books)
     if (!isLoggedIn) {
+      alert('Please log in to read the full book.');
       const next = encodeURIComponent(window.location.pathname);
       window.location.href = `/auth/login?next=${next}`;
+      return;
+    }
+    if (!owned) {
+      alert('Please purchase this ebook to read the full content.');
       return;
     }
     if (!fullPdf) {

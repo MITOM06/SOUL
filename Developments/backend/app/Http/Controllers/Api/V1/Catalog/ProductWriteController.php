@@ -177,13 +177,19 @@ class ProductWriteController extends Controller
         }
 
         $ebookMimes   = 'pdf,txt,doc,docx';
-        $podcastMimes = 'mp3,m4a,wav,mp4';
+        // Broaden supported media for podcasts: common audio + video containers
+        $podcastMimes = 'mp3,m4a,aac,ogg,oga,flac,wav,'
+                      . 'mp4,m4v,mov,webm,mkv,avi,wmv,mpeg,mpg,3gp,ts';
         $mimes = $product->type === 'podcast' ? $podcastMimes : $ebookMimes;
 
+        // Increase upload size limit for podcasts (KB).
+        // Keep docs at 50MB, podcasts at ~1GB (1048576 KB)
+        $maxKb = $product->type === 'podcast' ? 1048576 : 51200;
+
         $rules = [
-            'file'        => 'nullable|file|mimes:'.$mimes.'|max:51200', // 50MB
+            'file'        => 'nullable|file|mimes:'.$mimes.'|max:'.$maxKb,
             'files'       => 'nullable|array',
-            'files.*'     => 'file|mimes:'.$mimes.'|max:51200',
+            'files.*'     => 'file|mimes:'.$mimes.'|max:'.$maxKb,
             'is_preview'  => 'nullable|boolean',
             'previews'    => 'nullable|array',
             'previews.*'  => 'boolean',
@@ -198,8 +204,8 @@ class ProductWriteController extends Controller
 
         $saveOne = function($file, $isPreview) use ($id, $now, &$added) {
             $ext     = strtolower($file->getClientOriginalExtension() ?: $file->extension());
-            $isAudio = in_array($ext, ['mp3','m4a','wav']);
-            $isVideo = in_array($ext, ['mp4']);
+            $isAudio = in_array($ext, ['mp3','m4a','aac','ogg','oga','flac','wav']);
+            $isVideo = in_array($ext, ['mp4','m4v','mov','webm','mkv','avi','wmv','mpeg','mpg','3gp','ts']);
             $isDoc   = in_array($ext, ['pdf','txt','doc','docx']);
             $fileType= $isAudio ? 'audio' : ($isVideo ? 'video' : ($isDoc ? $ext : 'file'));
 
@@ -241,6 +247,135 @@ class ProductWriteController extends Controller
         }
 
         return response()->json(['success'=>true,'message'=>'Files uploaded','data'=>['files'=>$added]]);
+    }
+
+    /**
+     * POST /api/v1/catalog/products/{id}/files-url
+     * Gắn URL media (video/audio) ở bên ngoài vào product_files, không tải file về.
+     * - Chỉ áp dụng cho product type 'podcast'.
+     * - Nếu URL là YouTube, xác thực qua oEmbed rồi lưu kiểu 'youtube'.
+     * - Nếu URL không phải YouTube: kiểm tra HEAD/GET để xác nhận Content-Type là video/* hoặc audio/*.
+     */
+    public function attachUrl(Request $r, int $id)
+    {
+        $product = DB::table('products')->where('id',$id)->first();
+        if (!$product) return response()->json(['success'=>false,'message'=>'Product not found'],404);
+        if ($product->type !== 'podcast') {
+            return response()->json(['success'=>false,'message'=>'Only podcasts can attach media URLs'], 422);
+        }
+
+        $v = Validator::make($r->all(), [
+            'url'        => 'required|string|max:1000',
+            'is_preview' => 'nullable|boolean',
+            'file_type'  => 'nullable|in:video,audio,youtube',
+        ]);
+        if ($v->fails()) {
+            return response()->json(['success'=>false,'message'=>$v->errors()->first()], 422);
+        }
+
+        $url = trim((string)$r->input('url'));
+        $isPreview = (bool)$r->boolean('is_preview', false);
+
+        // YouTube URL → xác thực bằng oEmbed rồi lưu như attachYoutube nhưng cho phép set is_preview
+        if (preg_match('~(?:youtu\.be/|v=|embed/|shorts/)([A-Za-z0-9_-]{11})~', $url, $m)) {
+            $vid   = $m[1];
+            $watch = "https://www.youtube.com/watch?v={$vid}";
+            $embed = "https://www.youtube.com/embed/{$vid}";
+            $thumb = "https://img.youtube.com/vi/{$vid}/hqdefault.jpg";
+
+            try {
+                $o = Http::timeout(10)->get('https://www.youtube.com/oembed', [ 'url' => $watch, 'format' => 'json' ]);
+                if (!$o->ok()) {
+                    return response()->json(['success'=>false,'message'=>'YouTube URL is not accessible or invalid'], 422);
+                }
+                $title = $o->json('title');
+            } catch (\Throwable $e) {
+                return response()->json(['success'=>false,'message'=>'YouTube validation failed'], 422);
+            }
+
+            $now = now();
+            DB::table('product_files')->insert([
+                'product_id'     => $id,
+                'file_type'      => 'youtube',
+                'file_url'       => $watch,
+                'filesize_bytes' => null,
+                'is_preview'     => $isPreview ? 1 : 0,
+                'meta'           => json_encode([
+                    'provider'       => 'youtube',
+                    'video_id'       => $vid,
+                    'embed_url'      => $embed,
+                    'thumbnail_url'  => $thumb,
+                    'title'          => $title,
+                ]),
+                'created_at'     => $now,
+                'updated_at'     => $now,
+            ]);
+
+            if (empty($product->thumbnail_url)) {
+                DB::table('products')->where('id', $id)->update([
+                    'thumbnail_url' => $thumb,
+                    'updated_at'    => now(),
+                ]);
+            }
+
+            return response()->json(['success'=>true,'message'=>'YouTube attached']);
+        }
+
+        // Non-YouTube: xác thực nội dung là video/audio
+        $ctype = null; $clen = null; $ok = false;
+        try {
+            // Prefer HEAD; fallback to GET small range
+            $head = Http::timeout(12)->head($url);
+            if ($head->ok()) {
+                $ctype = $head->header('Content-Type');
+                $clen  = $head->header('Content-Length');
+                $ok = true;
+            } else {
+                $get = Http::timeout(12)->withHeaders(['Range' => 'bytes=0-0'])->get($url);
+                if ($get->ok() || $get->status() === 206) {
+                    $ctype = $get->header('Content-Type');
+                    $clen  = $get->header('Content-Length');
+                    $ok = true;
+                }
+            }
+        } catch (\Throwable $e) {
+            $ok = false;
+        }
+        if (!$ok) {
+            return response()->json(['success'=>false,'message'=>'Remote URL not accessible'], 422);
+        }
+
+        $path = parse_url($url, PHP_URL_PATH) ?: '';
+        $ext  = strtolower(pathinfo((string)$path, PATHINFO_EXTENSION));
+        $looksVideo = (is_string($ctype) && stripos($ctype, 'video/') === 0) || in_array($ext, ['mp4','m4v','mov','webm','mkv','avi','wmv','mpeg','mpg','3gp','ts']);
+        $looksAudio = (is_string($ctype) && stripos($ctype, 'audio/') === 0) || in_array($ext, ['mp3','m4a','aac','ogg','oga','flac','wav']);
+
+        if (!$looksVideo && !$looksAudio) {
+            return response()->json(['success'=>false,'message'=>'URL does not appear to be a video/audio stream'], 422);
+        }
+
+        $fileType = $looksVideo ? 'video' : 'audio';
+        $size = null;
+        if (is_string($clen) && ctype_digit($clen)) {
+            $size = (int)$clen;
+        }
+
+        $now = now();
+        DB::table('product_files')->insert([
+            'product_id'     => $id,
+            'file_type'      => $fileType,
+            'file_url'       => $url,
+            'filesize_bytes' => $size,
+            'is_preview'     => $isPreview ? 1 : 0,
+            'meta'           => json_encode([
+                'content_type' => $ctype,
+                'source'       => 'remote_url',
+            ]),
+            'created_at'     => $now,
+            'updated_at'     => $now,
+        ]);
+
+        return response()->json(['success'=>true,'message'=>'Remote media attached']);
     }
 
     /**
@@ -453,14 +588,20 @@ class ProductWriteController extends Controller
         $embed = "https://www.youtube.com/embed/{$vid}";
         $thumb = "https://img.youtube.com/vi/{$vid}/hqdefault.jpg";
 
+        // Require oEmbed to succeed (video exists/public)
         $title = null;
         try {
-            $o = Http::get('https://www.youtube.com/oembed', [
+            $o = Http::timeout(10)->get('https://www.youtube.com/oembed', [
                 'url'    => $watch,
                 'format' => 'json',
             ]);
-            if ($o->ok()) $title = $o->json('title');
-        } catch (\Throwable $e) { /* ignore */ }
+            if (!$o->ok()) {
+                return response()->json(['success'=>false,'message'=>'YouTube URL is not accessible or invalid'], 422);
+            }
+            $title = $o->json('title');
+        } catch (\Throwable $e) {
+            return response()->json(['success'=>false,'message'=>'YouTube validation failed'], 422);
+        }
 
         $now = now();
         DB::table('product_files')->insert([

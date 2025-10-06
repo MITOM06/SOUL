@@ -184,6 +184,7 @@ Route::prefix('v1')->group(function () {
     Route::put('catalog/products/{id}',               [ProductWriteController::class, 'update']);
     Route::delete('catalog/products/{id}',            [ProductWriteController::class, 'destroy']);
     Route::post('catalog/products/{id}/files',        [ProductWriteController::class, 'uploadFiles']);
+    Route::post('catalog/products/{id}/files-url',    [ProductWriteController::class, 'attachUrl']);
     Route::post('catalog/products/{id}/thumbnail',    [ProductWriteController::class, 'uploadThumbnail']);
     Route::post('catalog/products/{id}/youtube',      [ProductWriteController::class, 'attachYoutube']);
     Route::get('catalog/products/{product}/files/{file}/download', [ProductWriteController::class, 'downloadFile']);
