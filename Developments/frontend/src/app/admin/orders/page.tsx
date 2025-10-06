@@ -70,7 +70,7 @@ export default function AdminOrderManage() {
 
   // Xoá toàn bộ Order
   const deleteOrder = async (orderId: number) => {
-    if (!confirm("Bạn có chắc muốn xoá Order này?")) return;
+    if (!confirm("Are you sure you want to delete this order?")) return;
     try {
       await adminOrdersAPI.delete(orderId);
       fetchOrders();
@@ -82,7 +82,7 @@ export default function AdminOrderManage() {
 
   // Xoá 1 sản phẩm trong Order
   const deleteOrderItem = async (itemId: number) => {
-    if (!confirm("Bạn có chắc muốn xoá sản phẩm này khỏi Order?")) return;
+    if (!confirm("Are you sure you want to remove this item from the order?")) return;
     try {
       await adminOrderItemsAPI.delete(itemId);
       fetchOrders();

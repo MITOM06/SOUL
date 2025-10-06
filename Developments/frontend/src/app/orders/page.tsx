@@ -135,7 +135,9 @@ export default function OrdersPage() {
 
               {/* Right: Price + Delete */}
               <div className="text-right">
-                <p className="font-medium">{item.unit_price_cents} VND</p>
+                <p className="font-medium">
+                  {new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format((item.unit_price_cents||0)/100)}
+                </p>
                 <button
                   onClick={() => deleteItem(item.id)}
                   disabled={actionLoading}
@@ -152,10 +154,10 @@ export default function OrdersPage() {
         <div className="mt-6 flex justify-between items-center border-t pt-4">
           <p className="text-lg font-semibold">Total Price: {new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(total/100)}</p>
           <button
-            onClick={() => router.push(`/checkout?order_id=${order.id}`)} // 👉 chuyển sang trang checkout
+            onClick={() => router.push(`/checkout?order_id=${order.id}`)}
             className="px-5 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
           >
-            Buy Product
+            Proceed to Checkout
           </button>
         </div>
       </div>

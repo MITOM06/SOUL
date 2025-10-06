@@ -138,7 +138,7 @@ export default function AdminProductsV2() {
       });
       const j = await r.json();
       if (!j?.success) {
-        alert(j?.message || 'Lỗi tạo sản phẩm');
+        alert(j?.message || 'Create failed');
         return;
       }
       const newId = Number(j?.data?.id);
@@ -149,7 +149,7 @@ export default function AdminProductsV2() {
         if (!up.ok) return;
       }
 
-      alert('Đã tạo sản phẩm');
+      alert('Product created');
       resetForm();
       await load();
     } finally {
@@ -161,7 +161,7 @@ export default function AdminProductsV2() {
   const startEdit = async (id: number) => {
     const r = await fetch(`${API}/v1/catalog/products/${id}`, { credentials: 'include' });
     const j = await r.json();
-    if (!j?.success) { alert('Không tải được sản phẩm'); return; }
+    if (!j?.success) { alert('Failed to load product'); return; }
     const p = j.data.product as ProductListItem;
 
     setForm({
@@ -501,7 +501,7 @@ export default function AdminProductsV2() {
                           Preview
                         </label>
                         <button className="text-sm px-2 py-1 border rounded" onClick={() => removeLocalItem(i)}>
-                          Xoá
+                          Remove
                         </button>
                       </div>
                     </div>
@@ -521,7 +521,7 @@ export default function AdminProductsV2() {
                   disabled={saving || uploadingLocal}
                   className="px-4 py-2 rounded bg-blue-600 text-white disabled:opacity-60"
                 >
-                  {saving || uploadingLocal ? 'Đang tạo…' : 'Tạo'}
+                  {saving || uploadingLocal ? 'Creating…' : 'Create'}
                 </button>
               ) : (
                 <button
@@ -529,11 +529,11 @@ export default function AdminProductsV2() {
                   disabled={saving || uploadingLocal || !editingId}
                   className="px-4 py-2 rounded bg-green-600 text-white disabled:opacity-60"
                 >
-                  {saving || uploadingLocal ? 'Đang lưu…' : 'Lưu'}
+                  {saving || uploadingLocal ? 'Saving…' : 'Save'}
                 </button>
               )}
               {mode === 'edit' && (
-                <button onClick={resetForm} className="px-4 py-2 rounded bg-gray-200">Hủy</button>
+                <button onClick={resetForm} className="px-4 py-2 rounded bg-gray-200">Cancel</button>
               )}
             </div>
           </div>
@@ -541,8 +541,8 @@ export default function AdminProductsV2() {
 
         {/* RIGHT: List */}
         <div className="border rounded-xl p-4">
-          <h2 className="font-semibold mb-3">Danh sách</h2>
-          {loading ? <div>Đang tải…</div> : (
+          <h2 className="font-semibold mb-3">List</h2>
+          {loading ? <div>Loading…</div> : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {items.map(p => (
                 <div key={p.id} className="border rounded p-3">
@@ -550,9 +550,9 @@ export default function AdminProductsV2() {
                   <div className="text-sm text-gray-500">{p.type} · {p.category || '—'}</div>
                   <div className="text-sm">{p.price_cents ? new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format((p.price_cents||0)/100) : 'Free'}</div>
                   <div className="mt-2 flex gap-2">
-                    <a href={`/book/${p.id}`} className="px-2 py-1 rounded bg-gray-100">Xem</a>
-                    <button onClick={() => startEdit(p.id)} className="px-2 py-1 rounded bg-yellow-500 text-white">Sửa</button>
-                    <button onClick={() => del(p.id)} className="px-2 py-1 rounded bg-red-600 text-white">Xoá</button>
+                    <a href={`/book/${p.id}`} className="px-2 py-1 rounded bg-gray-100">View</a>
+                    <button onClick={() => startEdit(p.id)} className="px-2 py-1 rounded bg-yellow-500 text-white">Edit</button>
+                    <button onClick={() => del(p.id)} className="px-2 py-1 rounded bg-red-600 text-white">Delete</button>
                   </div>
                 </div>
               ))}

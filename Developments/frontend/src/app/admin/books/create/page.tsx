@@ -120,7 +120,7 @@ export default function CreateBookPage() {
       }
       const up = await uploadLocalFiles(id);
       if (!up.ok) return;
-      alert('🎉 Chúc mừng! Tạo sách thành công.');
+      alert('🎉 Book created successfully.');
       router.push('/admin/books');
     } finally {
       setSaving(false);

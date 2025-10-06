@@ -131,13 +131,13 @@ export default function AdminPodcasts() {
       }
       await load();
       resetForm();
-      alert('Đã tạo podcast');
+      alert('Podcast created');
     } else {
       const r = await fetch(`${API}/v1/catalog/products/${editingId}`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
       });
       const j = await r.json();
-      if (!j?.success) return alert(j?.message || 'Cập nhật thất bại');
+      if (!j?.success) return alert(j?.message || 'Update failed');
 
       if (ytMeta) {
         await fetch(`${API}/v1/catalog/products/${editingId}/youtube`, {
@@ -147,7 +147,7 @@ export default function AdminPodcasts() {
         });
       }
       await load();
-      alert('Đã lưu');
+      alert('Saved');
     }
   };
 
@@ -164,7 +164,7 @@ export default function AdminPodcasts() {
     if (!ytUrl.trim()) return;
     const r = await fetch(`${API}/v1/youtube/lookup?url=` + encodeURIComponent(ytUrl.trim()));
     const j = await r.json();
-    if (!j?.success) return alert(j?.message || 'Không nhận diện được YouTube URL');
+    if (!j?.success) return alert(j?.message || 'Unrecognized YouTube URL');
     setYtMeta(j.data);
     // auto-fill tiêu đề + bìa (có thể sửa lại)
     if (!title) setTitle(j.data.title || title);

@@ -88,9 +88,8 @@ export default function AdminPaymentsPage() {
             onChange={(e) => setStatus(e.target.value)}
             className="border rounded-lg px-3 py-2"
           >
-            {/* Chỉ hiển thị 2 loại trạng thái: Khởi tạo & Thành công */}
-            <option value="initiated">Khởi tạo</option>
-            <option value="success">Thành công</option>
+            <option value="initiated">Initiated</option>
+            <option value="success">Success</option>
           </select>
 
           {/* Provider filter */}

@@ -12,7 +12,7 @@ export default function ContactPage() {
     e.preventDefault();
     // Require login to send message
     if (!user) {
-      alert("Vui lòng đăng nhập để gửi tin nhắn.");
+      alert("Please sign in to send a message.");
       const next = encodeURIComponent(window.location.pathname + window.location.search);
       window.location.href = `/auth/login?next=${next}`;
       return;

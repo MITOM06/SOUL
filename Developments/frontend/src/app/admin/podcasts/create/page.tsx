@@ -100,7 +100,7 @@ export default function CreatePodcastPage() {
           return;
         }
       }
-      alert('🎉 Chúc mừng! Tạo podcast thành công.');
+      alert('🎉 Podcast created successfully.');
       router.push('/admin/podcasts');
     } finally {
       setLoading(false);
