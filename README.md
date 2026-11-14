@@ -1,5 +1,8 @@
 # SOUL — Stories Online, Unified Library
 
+> 🎓 **Academic project** — semester II project at FPT Aptech (2025), built by a team of three
+> students and supervised by Lê Thanh Nhân. Not a commercial product.
+
 A digital library for **e-books and podcasts** with subscriptions: readers browse and buy titles,
 read in the browser, listen to podcasts, and pick up where they left off. An admin console runs
 the catalogue, members, orders, payments and reports.
